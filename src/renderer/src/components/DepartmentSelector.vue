@@ -76,6 +76,8 @@ const selectedDepartmentInfo = computed(() => {
 const fetchDepartments = async () => {
   if (!props.vendorName) return
 
+  console.log('尝试获取事业部列表，供应商名称:', props.vendorName)
+
   // 重置状态
   loading.value = true
   error.value = ''
@@ -84,10 +86,14 @@ const fetchDepartments = async () => {
   try {
     // 获取事业部列表
     const response = await getDepartmentsByVendor(props.vendorName)
+    console.log('获取到事业部数据:', response)
     departments.value = response || []
 
     if (departments.value.length === 0) {
       error.value = '该供应商下未找到事业部数据'
+      console.error('未找到事业部数据')
+    } else {
+      console.log('成功加载事业部数据，数量:', departments.value.length)
     }
   } catch (err) {
     console.error('获取事业部失败:', err)

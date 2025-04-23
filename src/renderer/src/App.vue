@@ -10,8 +10,9 @@ const selectedVendor = ref('')
 const selectedDepartment = ref(null)
 
 // 处理供应商选择
-const handleVendorSelected = (vendorName) => {
-  selectedVendor.value = vendorName
+const handleVendorSelected = (vendor) => {
+  console.log('选择的供应商:', vendor)
+  selectedVendor.value = vendor.name
   selectedDepartment.value = null
 }
 

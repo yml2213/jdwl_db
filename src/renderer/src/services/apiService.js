@@ -113,8 +113,11 @@ export async function getVendorList() {
  * @returns {Promise<Array>} 事业部列表数组
  */
 export async function getDepartmentsByVendor(vendorName) {
+  console.log('开始获取事业部列表, 供应商名称:', vendorName)
   const url = `${BASE_URL}/dept/queryDeptList.do?rand=${Math.random()}`
   const csrfToken = await getCsrfToken()
+
+  console.log('获取事业部列表, csrfToken:', csrfToken ? '已获取' : '未获取')
 
   // 构建请求数据
   const data = qs.stringify({
@@ -126,37 +129,66 @@ export async function getDepartmentsByVendor(vendorName) {
       '[{"name":"sEcho","value":3},{"name":"iColumns","value":7},{"name":"sColumns","value":",,,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":1},{"name":"bSortable_1","value":false},{"name":"mDataProp_2","value":"deptNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"deptName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"sellerNo"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"sellerName"},{"name":"bSortable_5","value":true},{"name":"mDataProp_6","value":"statusStr"},{"name":"bSortable_6","value":true},{"name":"iSortCol_0","value":2},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
   })
 
-  const response = await fetchApi(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      Origin: BASE_URL,
-      Referer: `${BASE_URL}/goToMainIframe.do`,
-      'X-Requested-With': 'XMLHttpRequest'
-    },
-    body: data
-  })
-
-  // 处理响应数据，提取事业部列表
-  if (response && response.aaData) {
-    // 过滤名称包含供应商名称的事业部
-    const filteredDepts = response.aaData.filter((dept) => {
-      return dept.deptName.includes(vendorName) || dept.sellerName.includes(vendorName)
+  try {
+    console.log('发送事业部列表请求')
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
     })
 
-    // 转换为更简单的数据结构
-    return filteredDepts.map((dept) => ({
-      id: dept.id,
-      name: dept.deptName,
-      deptNo: dept.deptNo,
-      sellerName: dept.sellerName,
-      sellerNo: dept.sellerNo,
-      status: dept.statusStr,
-      createTime: dept.createTimeStr
-    }))
-  }
+    console.log('事业部列表响应:', response ? '获取成功' : '未获取数据')
 
-  return []
+    // 处理响应数据，提取事业部列表
+    if (response && response.aaData) {
+      console.log('获取到事业部总数量:', response.aaData.length)
+
+      // 过滤名称包含供应商名称的事业部
+      const filteredDepts = response.aaData.filter((dept) => {
+        const deptMatch = dept.deptName && dept.deptName.includes(vendorName)
+        const sellerMatch = dept.sellerName && dept.sellerName.includes(vendorName)
+        return deptMatch || sellerMatch
+      })
+
+      console.log('过滤后的事业部数量:', filteredDepts.length)
+
+      if (filteredDepts.length === 0 && response.aaData.length > 0) {
+        console.log('过滤条件太严格，无法找到匹配的事业部，返回所有事业部')
+        // 如果过滤后没有事业部但API返回了事业部，则返回所有事业部
+        return response.aaData.map((dept) => ({
+          id: dept.id,
+          name: dept.deptName,
+          deptNo: dept.deptNo,
+          sellerName: dept.sellerName,
+          sellerNo: dept.sellerNo,
+          status: dept.statusStr,
+          createTime: dept.createTimeStr
+        }))
+      }
+
+      // 转换为更简单的数据结构
+      return filteredDepts.map((dept) => ({
+        id: dept.id,
+        name: dept.deptName,
+        deptNo: dept.deptNo,
+        sellerName: dept.sellerName,
+        sellerNo: dept.sellerNo,
+        status: dept.statusStr,
+        createTime: dept.createTimeStr
+      }))
+    } else {
+      console.error('响应数据格式不正确:', response)
+      return []
+    }
+  } catch (error) {
+    console.error('获取事业部列表失败:', error)
+    throw error
+  }
 }
 
 /**
