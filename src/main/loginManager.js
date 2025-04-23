@@ -180,8 +180,8 @@ function createLoginWindow(mainWindow, icon) {
   }
 
   loginWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 800,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),

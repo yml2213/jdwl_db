@@ -1,9 +1,6 @@
 <script setup>
-import Versions from './components/Versions.vue'
-import AccountManager from './components/AccountManager.vue'
 import { onMounted } from 'vue'
-
-const ipcHandle = () => window.electron.ipcRenderer.send('ping')
+import AccountManager from './components/AccountManager.vue'
 
 // 监听登录成功事件
 onMounted(() => {
@@ -18,97 +15,140 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container">
-    <div class="header">
-      <img alt="logo" class="logo" src="./assets/electron.svg" />
-      <div class="creator">Powered by electron-vite</div>
-    </div>
-
-    <div class="content">
-      <div class="text">
-        Build an Electron app with
-        <span class="vue">Vue</span>
-      </div>
-      <p class="tip">Please try pressing <code>F12</code> to open the devTool</p>
-
-      <!-- 账号管理组件 -->
-      <AccountManager />
-
-      <div class="actions">
-        <div class="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">Documentation</a>
-        </div>
-        <div class="action">
-          <a target="_blank" rel="noreferrer" @click="ipcHandle">Send IPC</a>
+  <div class="app-container">
+    <!-- 顶部导航栏 -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="app-title">订单下载系统</h1>
+        <div class="nav-links">
+          <a href="#" class="nav-link active">首页</a>
+          <a href="#" class="nav-link">功能测试</a>
         </div>
       </div>
-      <Versions />
-    </div>
+
+      <div class="header-right">
+        <AccountManager />
+      </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <div class="tabs">
+        <div class="tab active">入仓打标</div>
+        <div class="tab">清库下标</div>
+        <div class="tab">退货入库</div>
+      </div>
+
+      <div class="content-panel">
+        <h2 class="panel-title">欢迎使用订单下载系统</h2>
+        <p class="panel-text">请先登录京东账号后使用功能</p>
+      </div>
+    </main>
   </div>
 </template>
 
 <style>
-.container {
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.app-container {
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
+}
+
+/* 顶部导航栏 */
+.header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  text-align: center;
+  background-color: #2196f3;
+  color: white;
+  padding: 0 20px;
+  height: 60px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.app-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin-right: 30px;
+}
+
+.nav-links {
+  display: flex;
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  padding: 0 15px;
+  line-height: 60px;
+  font-size: 14px;
+}
+
+.nav-link.active,
+.nav-link:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
   padding: 20px;
 }
 
-.header {
-  margin-bottom: 30px;
-}
-
-.logo {
-  width: 80px;
-  margin-bottom: 10px;
-}
-
-.creator {
-  font-size: 14px;
-  color: #666;
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #e0e0e0;
   margin-bottom: 20px;
 }
 
-.content {
-  max-width: 600px;
-  width: 100%;
-}
-
-.text {
-  font-size: 20px;
-  margin-bottom: 24px;
-}
-
-.vue {
-  color: #42b883;
-  font-weight: bold;
-}
-
-.tip {
-  margin: 20px 0;
+.tab {
+  padding: 10px 20px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
   color: #666;
 }
 
-.actions {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin: 30px 0;
+.tab.active {
+  color: #2196f3;
+  border-bottom-color: #2196f3;
 }
 
-.action a {
-  display: inline-block;
-  padding: 10px 20px;
+.content-panel {
+  background-color: white;
   border-radius: 4px;
-  background-color: #f0f0f0;
-  color: #333;
-  text-decoration: none;
-  transition: background-color 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  text-align: center;
 }
 
-.action a:hover {
-  background-color: #e0e0e0;
+.panel-title {
+  font-size: 24px;
+  margin-bottom: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.panel-text {
+  color: #666;
+  font-size: 16px;
 }
 </style>
