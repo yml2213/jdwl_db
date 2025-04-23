@@ -1,8 +1,25 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
-const api = {}
+const api = {
+  // 打开登录窗口
+  openLoginWindow: () => {
+    ipcRenderer.send('open-login-window')
+  },
+  // 检查登录状态
+  checkLoginStatus: () => {
+    return ipcRenderer.invoke('check-login-status')
+  },
+  // 清除登录Cookie
+  clearCookies: () => {
+    ipcRenderer.send('clear-cookies')
+  },
+  // 获取存储的Cookie
+  getCookies: () => {
+    return ipcRenderer.invoke('get-cookies')
+  }
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise

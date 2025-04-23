@@ -2,10 +2,14 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { createLoginWindow, loadCookies, clearCookies, isLoggedIn } from './loginManager'
+
+// 主窗口引用
+let mainWindow = null
 
 function createWindow() {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
@@ -51,6 +55,26 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  // 打开登录窗口
+  ipcMain.on('open-login-window', () => {
+    createLoginWindow(mainWindow, icon)
+  })
+
+  // 检查登录状态
+  ipcMain.handle('check-login-status', async () => {
+    return await isLoggedIn()
+  })
+
+  // 获取Cookies
+  ipcMain.handle('get-cookies', async () => {
+    return await loadCookies()
+  })
+
+  // 清除Cookies
+  ipcMain.on('clear-cookies', async () => {
+    await clearCookies(mainWindow)
+  })
 
   createWindow()
 
