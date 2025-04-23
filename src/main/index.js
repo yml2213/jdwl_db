@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { createLoginWindow, loadCookies, clearCookies, isLoggedIn } from './loginManager'
+import { sendRequest } from './requestHandler'
 
 // 主窗口引用
 let mainWindow = null
@@ -74,6 +75,20 @@ app.whenReady().then(() => {
   // 清除Cookies
   ipcMain.on('clear-cookies', async () => {
     await clearCookies(mainWindow)
+  })
+
+  // 处理网络请求
+  ipcMain.handle('send-request', async (event, url, options) => {
+    try {
+      return await sendRequest(url, options)
+    } catch (error) {
+      // 将错误转换为可序列化的对象
+      return Promise.reject({
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      })
+    }
   })
 
   createWindow()

@@ -18,6 +18,11 @@ const api = {
   // 获取存储的Cookie
   getCookies: () => {
     return ipcRenderer.invoke('get-cookies')
+  },
+
+  // 网络请求相关
+  sendRequest: (url, options) => {
+    return ipcRenderer.invoke('send-request', url, options)
   }
 }
 

@@ -1,6 +1,24 @@
 <script setup>
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import AccountManager from './components/AccountManager.vue'
+import VendorSelector from './components/VendorSelector.vue'
+import DepartmentSelector from './components/DepartmentSelector.vue'
+
+// 选择的供应商
+const selectedVendor = ref('')
+// 选择的事业部
+const selectedDepartment = ref(null)
+
+// 处理供应商选择
+const handleVendorSelected = (vendorName) => {
+  selectedVendor.value = vendorName
+  selectedDepartment.value = null
+}
+
+// 处理事业部选择
+const handleDepartmentSelected = (department) => {
+  selectedDepartment.value = department
+}
 
 // 监听登录成功事件
 onMounted(() => {
@@ -10,6 +28,9 @@ onMounted(() => {
 
   window.electron.ipcRenderer.on('cookies-cleared', () => {
     alert('已退出登录')
+    // 清空选择的供应商和事业部
+    selectedVendor.value = ''
+    selectedDepartment.value = null
   })
 })
 </script>
@@ -39,9 +60,26 @@ onMounted(() => {
         <div class="tab">退货入库</div>
       </div>
 
-      <div class="content-panel">
-        <h2 class="panel-title">欢迎使用订单下载系统</h2>
-        <p class="panel-text">请先登录京东账号后使用功能</p>
+      <div class="content-area">
+        <!-- 数据选择区域 -->
+        <div class="selectors-container">
+          <VendorSelector @vendor-selected="handleVendorSelected" />
+          <DepartmentSelector
+            :vendor-name="selectedVendor"
+            @department-selected="handleDepartmentSelected"
+          />
+
+          <!-- 选择结果展示 -->
+          <div v-if="selectedDepartment" class="selection-summary">
+            <h3>当前选择</h3>
+            <p>
+              供应商: <strong>{{ selectedVendor }}</strong>
+            </p>
+            <p>
+              事业部: <strong>{{ selectedDepartment.name }}</strong>
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -132,23 +170,39 @@ body {
   border-bottom-color: #2196f3;
 }
 
-.content-panel {
+/* 新增样式 */
+.content-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.selectors-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.selection-summary {
   background-color: white;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  text-align: center;
+  padding: 20px;
+  margin-top: 20px;
 }
 
-.panel-title {
-  font-size: 24px;
-  margin-bottom: 15px;
-  font-weight: 500;
-  color: #333;
-}
-
-.panel-text {
-  color: #666;
+.selection-summary h3 {
   font-size: 16px;
+  margin-bottom: 15px;
+  color: #333;
+  font-weight: 500;
+}
+
+.selection-summary p {
+  margin-bottom: 10px;
+  color: #666;
+}
+
+.selection-summary strong {
+  color: #2196f3;
 }
 </style>
