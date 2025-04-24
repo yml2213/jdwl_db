@@ -45,6 +45,83 @@ async function fetchApi(url, options = {}) {
 }
 
 /**
+ * 获取店铺列表
+ * @param {string} deptId - 事业部ID
+ * @returns {Promise<Array>} 店铺列表数组
+ */
+export async function getShopList(deptId) {
+  if (!deptId) {
+    console.error('获取店铺列表失败: 未提供事业部ID')
+    return []
+  }
+
+  console.log('开始获取店铺列表, 事业部ID:', deptId)
+  const url = `${BASE_URL}/shop/queryShopList.do`
+  const csrfToken = await getCsrfToken()
+
+  console.log('获取店铺列表, csrfToken:', csrfToken ? '已获取' : '未获取')
+
+  // 构建请求数据
+  const data = qs.stringify({
+    csrfToken: csrfToken,
+    shopNo: '',
+    deptId: deptId,
+    type: '',
+    spSource: '',
+    bizType: '',
+    isvShopNo: '',
+    sourceChannel: '',
+    status: '1', // 启用状态
+    iDisplayStart: '0',
+    iDisplayLength: '50', // 获取更多店铺
+    remark: '',
+    shopName: '',
+    jdDeliverStatus: '',
+    originSend: '',
+    aoData: '0,50'
+  })
+
+  try {
+    console.log('发送店铺列表请求')
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    console.log('店铺列表响应:', response ? '获取成功' : '未获取数据')
+
+    // 处理响应数据，提取店铺列表
+    if (response && response.aaData) {
+      console.log('获取到店铺数量:', response.aaData.length)
+
+      // 转换为更简单的数据结构
+      return response.aaData.map((shop) => ({
+        id: shop.id,
+        shopNo: shop.shopNo,
+        shopName: shop.shopName,
+        spShopNo: shop.spShopNo,
+        status: shop.statusName,
+        bizTypeName: shop.bizTypeName,
+        typeName: shop.typeName,
+        spSourceName: shop.spSourceName
+      }))
+    } else {
+      console.error('响应数据格式不正确:', response)
+      return []
+    }
+  } catch (error) {
+    console.error('获取店铺列表失败:', error)
+    return []
+  }
+}
+
+/**
  * 获取供应商列表
  * @returns {Promise<Array>} 供应商列表数组
  */

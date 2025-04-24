@@ -1,8 +1,16 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import AccountManager from './components/AccountManager.vue'
 import { isLoggedIn } from './utils/cookieHelper'
-import { clearSelections } from './utils/storageHelper'
+import {
+  clearSelections,
+  getSelectedDepartment,
+  saveSelectedShop,
+  getSelectedShop,
+  saveShopsList,
+  getShopsList
+} from './utils/storageHelper'
+import { getShopList } from './services/apiService'
 
 // 用户是否已登录
 const isUserLoggedIn = ref(false)
@@ -11,6 +19,9 @@ const isUserLoggedIn = ref(false)
 const checkLoginStatus = async () => {
   const loggedIn = await isLoggedIn()
   isUserLoggedIn.value = loggedIn
+  if (loggedIn) {
+    loadShops()
+  }
 }
 
 // 处理退出登录
@@ -40,7 +51,93 @@ const form = ref({
   enablePurchase: false,
   purchaseQuantity: 1,
   selectedStore: '',
-  selectedWarehouse: '商家自送仓'
+  selectedWarehouse: '商家自送仓',
+  autoStart: false,
+  enableAutoUpload: false
+})
+
+// 店铺列表
+const shopsList = ref([])
+// 是否正在加载店铺列表
+const isLoadingShops = ref(false)
+// 店铺加载错误信息
+const shopLoadError = ref('')
+
+// 加载店铺列表
+const loadShops = async () => {
+  // 尝试从本地存储获取店铺列表
+  const cachedShops = getShopsList()
+  if (cachedShops && cachedShops.length > 0) {
+    shopsList.value = cachedShops
+
+    // 设置默认选中的店铺（如果有缓存的选择）
+    const selectedShop = getSelectedShop()
+    if (selectedShop) {
+      form.value.selectedStore = selectedShop.shopNo
+    } else if (shopsList.value.length > 0) {
+      form.value.selectedStore = shopsList.value[0].shopNo
+    }
+
+    return
+  }
+
+  // 从服务器获取店铺列表
+  isLoadingShops.value = true
+  shopLoadError.value = ''
+
+  try {
+    // 获取当前选择的事业部ID
+    const department = getSelectedDepartment()
+    if (!department || !department.deptNo) {
+      shopLoadError.value = '未选择事业部，无法获取店铺列表'
+      isLoadingShops.value = false
+      return
+    }
+
+    // 使用事业部ID获取店铺列表
+    const deptId = department.deptNo.replace('CBU', '')
+    const shops = await getShopList(deptId)
+
+    if (shops && shops.length > 0) {
+      shopsList.value = shops
+      saveShopsList(shops)
+
+      // 默认选中第一个店铺
+      form.value.selectedStore = shops[0].shopNo
+      saveSelectedShop(shops[0])
+    } else {
+      shopLoadError.value = '未找到任何店铺'
+    }
+  } catch (error) {
+    console.error('加载店铺失败:', error)
+    shopLoadError.value = `加载店铺失败: ${error.message || '未知错误'}`
+  } finally {
+    isLoadingShops.value = false
+  }
+}
+
+// 处理店铺选择变化
+const handleStoreChange = (shopNo) => {
+  if (!shopNo) return
+
+  const selectedShop = shopsList.value.find((shop) => shop.shopNo === shopNo)
+  if (selectedShop) {
+    saveSelectedShop(selectedShop)
+  }
+}
+
+// 监听店铺选择变化
+watch(
+  () => form.value.selectedStore,
+  (newVal) => {
+    handleStoreChange(newVal)
+  }
+)
+
+// 当前选中的店铺信息
+const currentShopInfo = computed(() => {
+  if (!form.value.selectedStore || !shopsList.value.length) return null
+  return shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
 })
 
 // 任务列表
@@ -53,9 +150,16 @@ const addTask = () => {
     return
   }
 
+  if (!form.value.selectedStore) {
+    alert('请选择店铺')
+    return
+  }
+
+  const shopInfo = currentShopInfo.value
+
   taskList.value.push({
     sku: form.value.sku,
-    店铺: '测试店铺',
+    店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
     创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     状态: '等待中'
   })
@@ -70,6 +174,12 @@ const handleImport = () => {
     alert('请输入SKU')
     return
   }
+
+  if (!form.value.selectedStore) {
+    alert('请选择店铺')
+    return
+  }
+
   addTask()
 }
 
@@ -235,9 +345,20 @@ onMounted(() => {
             <div class="form-group">
               <label class="form-label">选择店铺</label>
               <div class="select-wrapper">
-                <select v-model="form.selectedStore" class="form-select">
-                  <option value="">请选择店铺</option>
+                <select v-model="form.selectedStore" class="form-select" :disabled="isLoadingShops">
+                  <option value="" disabled>请选择店铺</option>
+                  <option v-for="shop in shopsList" :key="shop.shopNo" :value="shop.shopNo">
+                    {{ shop.shopName }}
+                  </option>
                 </select>
+                <div v-if="isLoadingShops" class="loading-indicator">加载中...</div>
+                <div v-if="shopLoadError" class="error-message">{{ shopLoadError }}</div>
+                <div v-if="currentShopInfo" class="shop-info">
+                  <small>店铺编号: {{ currentShopInfo.shopNo }}</small>
+                  <small
+                    >类型: {{ currentShopInfo.typeName }} - {{ currentShopInfo.bizTypeName }}</small
+                  >
+                </div>
               </div>
             </div>
 
@@ -471,6 +592,26 @@ body {
 
 .select-wrapper {
   position: relative;
+}
+
+.loading-indicator {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
+}
+
+.error-message {
+  font-size: 12px;
+  color: #f56c6c;
+  margin-top: 5px;
+}
+
+.shop-info {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
 }
 
 .input-group {
