@@ -19,6 +19,70 @@ const handleLogout = () => {
   clearSelections()
 }
 
+// 当前活动标签
+const activeTab = ref('入仓打标')
+
+// 表单数据
+const form = ref({
+  quickSelect: '',
+  sku: '',
+  waitTime: 5,
+  options: {
+    importStore: true,
+    useStore: true,
+    importProps: false,
+    useMainData: false,
+    useWarehouse: false,
+    useJdEffect: false,
+    importTitle: false,
+    useBatchManage: false
+  },
+  enablePurchase: false,
+  purchaseQuantity: 1,
+  selectedStore: '',
+  selectedWarehouse: '商家自送仓'
+})
+
+// 任务列表
+const taskList = ref([])
+
+// 添加任务方法
+const addTask = () => {
+  if (!form.value.sku) {
+    alert('请输入SKU')
+    return
+  }
+
+  taskList.value.push({
+    sku: form.value.sku,
+    店铺: '测试店铺',
+    创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    状态: '等待中'
+  })
+
+  // 清空SKU输入
+  form.value.sku = ''
+}
+
+// 导入方法
+const handleImport = () => {
+  if (!form.value.sku) {
+    alert('请输入SKU')
+    return
+  }
+  addTask()
+}
+
+// 执行任务
+const executeTask = () => {
+  alert('开始执行任务')
+}
+
+// 清空任务列表
+const clearTasks = () => {
+  taskList.value = []
+}
+
 // 组件挂载时检查登录状态
 onMounted(() => {
   checkLoginStatus()
@@ -42,7 +106,7 @@ onMounted(() => {
     <!-- 顶部导航栏 -->
     <header class="header">
       <div class="header-left">
-        <h1 class="app-title">订单下载系统</h1>
+        <h1 class="app-title">订单下载系统 - 云打标工具</h1>
         <div class="nav-links">
           <a href="#" class="nav-link active">首页</a>
           <a href="#" class="nav-link">功能测试</a>
@@ -56,22 +120,203 @@ onMounted(() => {
 
     <!-- 主内容区 -->
     <main class="main-content">
-      <div class="tabs">
-        <div class="tab active">入仓打标</div>
-        <div class="tab">清库下标</div>
-        <div class="tab">退货入库</div>
+      <!-- 登录提示 -->
+      <div v-if="!isUserLoggedIn" class="login-prompt">
+        <p>请先登录京东账号</p>
       </div>
 
-      <div class="content-area">
-        <!-- 登录提示 -->
-        <div v-if="!isUserLoggedIn" class="login-prompt">
-          <p>请先登录京东账号</p>
+      <!-- 已登录内容 -->
+      <div v-else class="logged-in-content">
+        <!-- 标签页 -->
+        <div class="tabs">
+          <div
+            v-for="tab in ['入仓打标', '清库下标', '退货入库']"
+            :key="tab"
+            :class="['tab', { active: activeTab === tab }]"
+            @click="activeTab = tab"
+          >
+            {{ tab }}
+          </div>
         </div>
 
-        <!-- 首页内容 - 目前为空 -->
-        <div v-else class="empty-content">
-          <p>欢迎使用订单下载系统</p>
-          <p class="sub-text">更多功能正在开发中...</p>
+        <!-- 主要内容区域 -->
+        <div class="content-wrapper">
+          <!-- 左侧操作区域 -->
+          <div class="operation-area">
+            <div class="form-group">
+              <label class="form-label">快捷选择</label>
+              <div class="select-wrapper">
+                <select v-model="form.quickSelect" class="form-select">
+                  <option value="">请选择快捷方式</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">输入SKU</label>
+              <div class="input-group">
+                <input
+                  v-model="form.sku"
+                  placeholder="请输入sku或导入sku"
+                  class="form-input"
+                  @keyup.enter="handleImport"
+                />
+                <button class="btn btn-primary" @click="handleImport">导入</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">等待时间</label>
+              <div class="input-number-group">
+                <button class="btn-dec" @click="form.waitTime > 1 ? form.waitTime-- : 1">-</button>
+                <input type="number" v-model="form.waitTime" min="1" class="form-input-number" />
+                <button class="btn-inc" @click="form.waitTime++">+</button>
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">功能选项</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.importStore" />
+                  <span>导入店铺商品</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.useStore" />
+                  <span>启用店铺商品</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.importProps" />
+                  <span>导入物流属性</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.useMainData" />
+                  <span>启用商品主数据</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.useWarehouse" />
+                  <span>启用库存商品分配</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.useJdEffect" />
+                  <span>启用京配打标生效</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.importTitle" />
+                  <span>导入商品简称</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.options.useBatchManage" />
+                  <span>启用批次管理</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">采购入库</label>
+              <div class="purchase-input-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="form.enablePurchase" />
+                  <span>启用采购入库</span>
+                </label>
+                <div class="number-input">
+                  <input
+                    type="number"
+                    v-model="form.purchaseQuantity"
+                    min="1"
+                    :disabled="!form.enablePurchase"
+                    class="form-input-number"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">选择店铺</label>
+              <div class="select-wrapper">
+                <select v-model="form.selectedStore" class="form-select">
+                  <option value="">请选择店铺</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">选择仓库</label>
+              <div class="select-wrapper">
+                <select v-model="form.selectedWarehouse" class="form-select">
+                  <option value="商家自送仓">商家自送仓</option>
+                  <option value="前置站">前置站</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-default">保存快捷</button>
+              <button class="btn btn-success" @click="addTask">添加任务</button>
+            </div>
+          </div>
+
+          <!-- 右侧任务列表区域 -->
+          <div class="task-area">
+            <div class="task-header">
+              <div class="task-title">任务列表</div>
+              <div class="task-actions">
+                <label class="checkbox-label timing-checkbox">
+                  <input type="checkbox" v-model="form.autoStart" />
+                  <span>定时</span>
+                </label>
+                <button class="btn btn-primary" @click="executeTask">打开网页</button>
+                <button class="btn btn-success" @click="executeTask">执行任务</button>
+                <button class="btn btn-danger" @click="clearTasks">清空列表</button>
+              </div>
+            </div>
+
+            <div class="task-table-container">
+              <table class="task-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px"><input type="checkbox" /></th>
+                    <th>SKU</th>
+                    <th>店铺</th>
+                    <th>创建时间</th>
+                    <th>状态</th>
+                    <th>结果</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(task, index) in taskList" :key="index">
+                    <td><input type="checkbox" /></td>
+                    <td>{{ task.sku }}</td>
+                    <td>{{ task.店铺 }}</td>
+                    <td>{{ task.创建时间 }}</td>
+                    <td>
+                      <span class="status-tag">{{ task.状态 }}</span>
+                    </td>
+                    <td>
+                      <span v-if="task.状态 === '等待中'">等待执行...</span>
+                    </td>
+                    <td>
+                      <button class="btn btn-small btn-danger" @click="taskList.splice(index, 1)">
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="taskList.length === 0">
+                    <td colspan="7" class="no-data">No Data</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="task-footer">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="form.enableAutoUpload" />
+                <span>启用自动验收与纸单上架</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -83,14 +328,15 @@ onMounted(() => {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
-    'Helvetica Neue', sans-serif;
   background-color: #f5f5f5;
   color: #333;
+  font-size: 14px;
 }
 
 .app-container {
@@ -145,6 +391,27 @@ body {
   padding: 20px;
 }
 
+.login-prompt {
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  text-align: center;
+  max-width: 800px;
+  margin: 30px auto;
+}
+
+.login-prompt p {
+  color: #666;
+  font-size: 16px;
+}
+
+.logged-in-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 标签页 */
 .tabs {
   display: flex;
   border-bottom: 1px solid #e0e0e0;
@@ -163,45 +430,245 @@ body {
   border-bottom-color: #2196f3;
 }
 
-/* 新增样式 */
-.content-area {
+/* 主内容布局 */
+.content-wrapper {
+  display: flex;
+  gap: 20px;
+}
+
+/* 操作区域 */
+.operation-area {
+  flex: 0 0 400px;
+  background: #fff;
+  border-radius: 4px;
+  padding: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.form-select {
+  width: 100%;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 12px;
+  color: #606266;
+}
+
+.select-wrapper {
+  position: relative;
+}
+
+.input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.form-input {
+  flex: 1;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 12px;
+}
+
+.input-number-group {
+  display: flex;
+  align-items: center;
+}
+
+.form-input-number {
+  width: 80px;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.btn-dec,
+.btn-inc {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  background: #f5f7fa;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.btn-dec {
+  border-radius: 4px 0 0 4px;
+}
+
+.btn-inc {
+  border-radius: 0 4px 4px 0;
+}
+
+.unit {
+  margin-left: 8px;
+  color: #606266;
+}
+
+.checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  margin-right: 6px;
+}
+
+.purchase-input-group {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.number-input {
+  flex: 0 0 120px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 30px;
+}
+
+/* 任务区域 */
+.task-area {
+  flex: 1;
+  background: #fff;
+  border-radius: 4px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
-.login-prompt {
-  background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  text-align: center;
-  max-width: 800px;
-  margin: 30px auto;
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
-.login-prompt p {
-  color: #666;
+.task-title {
   font-size: 16px;
+  font-weight: bold;
 }
 
-.empty-content {
-  background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 50px;
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.timing-checkbox {
+  margin-right: 10px;
+}
+
+.task-table-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.task-table th,
+.task-table td {
+  border-bottom: 1px solid #ebeef5;
+  padding: 12px 0;
+  text-align: left;
+}
+
+.task-table th {
+  color: #909399;
+  font-weight: 500;
+  padding-bottom: 8px;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 2px;
+  background-color: #e1f5fe;
+  color: #039be5;
+}
+
+.no-data {
   text-align: center;
-  max-width: 800px;
-  margin: 50px auto;
+  color: #909399;
+  padding: 30px 0;
 }
 
-.empty-content p {
-  color: #333;
-  font-size: 18px;
-  margin-bottom: 10px;
+.task-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid #ebeef5;
 }
 
-.empty-content .sub-text {
-  color: #999;
+/* 按钮样式 */
+.btn {
+  height: 36px;
+  padding: 0 16px;
   font-size: 14px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn-primary {
+  background-color: #2196f3;
+  color: white;
+}
+
+.btn-success {
+  background-color: #4caf50;
+  color: white;
+}
+
+.btn-danger {
+  background-color: #f44336;
+  color: white;
+}
+
+.btn-default {
+  background-color: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  color: #606266;
+}
+
+.btn:hover {
+  opacity: 0.9;
 }
 </style>
