@@ -179,6 +179,7 @@ const handleVendorSelected = (vendor) => {
 // 处理事业部选择
 const handleDepartmentSelected = (department) => {
   console.log('选择的事业部:', department)
+  console.log('事业部 sellerId:', department.sellerId)
   saveSelectedDepartment(department)
 
   // 更新界面显示

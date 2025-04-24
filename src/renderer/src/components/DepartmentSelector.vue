@@ -115,6 +115,7 @@ watch(selectedDepartment, (newValue) => {
         id: newValue,
         name: dept.name,
         deptNo: dept.deptNo,
+        sellerId: dept.sellerId,
         sellerName: dept.sellerName,
         sellerNo: dept.sellerNo
       })

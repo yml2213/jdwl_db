@@ -5,12 +5,16 @@ import { isLoggedIn } from './utils/cookieHelper'
 import {
   clearSelections,
   getSelectedDepartment,
+  getSelectedVendor,
   saveSelectedShop,
   getSelectedShop,
   saveShopsList,
   getShopsList
 } from './utils/storageHelper'
 import { getShopList } from './services/apiService'
+
+// 开发模式标志
+const isDev = ref(process.env.NODE_ENV === 'development')
 
 // 用户是否已登录
 const isUserLoggedIn = ref(false)
@@ -62,6 +66,19 @@ const shopsList = ref([])
 const isLoadingShops = ref(false)
 // 店铺加载错误信息
 const shopLoadError = ref('')
+
+// 当前的供应商和事业部信息（用于开发模式展示）
+const currentVendor = computed(() => getSelectedVendor())
+const currentDepartment = computed(() => getSelectedDepartment())
+const currentShop = computed(() => getSelectedShop())
+
+// 调试信息面板是否显示
+const showDebugPanel = ref(false)
+
+// 切换调试面板显示状态
+const toggleDebugPanel = () => {
+  showDebugPanel.value = !showDebugPanel.value
+}
 
 // 加载店铺列表
 const loadShops = async () => {
@@ -225,8 +242,42 @@ onMounted(() => {
 
       <div class="header-right">
         <AccountManager />
+        <!-- 开发模式下的调试按钮 -->
+        <button v-if="isDev" @click="toggleDebugPanel" class="debug-toggle">
+          {{ showDebugPanel ? '隐藏调试' : '显示调试' }}
+        </button>
       </div>
     </header>
+
+    <!-- 开发模式调试面板 -->
+    <div v-if="isDev && showDebugPanel" class="debug-panel">
+      <h3>当前用户数据 (localStorage)</h3>
+      <div class="debug-section">
+        <h4>供应商信息</h4>
+        <pre v-if="currentVendor">{{ JSON.stringify(currentVendor, null, 2) }}</pre>
+        <div v-else class="empty-data">未选择供应商</div>
+      </div>
+      <div class="debug-section">
+        <h4>事业部信息</h4>
+        <pre v-if="currentDepartment">{{ JSON.stringify(currentDepartment, null, 2) }}</pre>
+        <div v-else class="empty-data">未选择事业部</div>
+      </div>
+      <div class="debug-section">
+        <h4>店铺信息</h4>
+        <pre v-if="currentShop">{{ JSON.stringify(currentShop, null, 2) }}</pre>
+        <div v-else class="empty-data">未选择店铺</div>
+      </div>
+      <div class="debug-section">
+        <h4>店铺列表</h4>
+        <div class="shop-list-stats">共 {{ shopsList.length }} 个店铺</div>
+        <div class="shop-list-sample" v-if="shopsList.length > 0">
+          <div>第一个: {{ shopsList[0]?.shopName }}</div>
+          <div v-if="shopsList.length > 1">
+            最后一个: {{ shopsList[shopsList.length - 1]?.shopName }}
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 主内容区 -->
     <main class="main-content">
@@ -813,5 +864,71 @@ body {
 
 .btn:hover {
   opacity: 0.9;
+}
+
+/* 调试面板样式 */
+.debug-toggle {
+  background-color: #673ab7;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.debug-panel {
+  background-color: #263238;
+  color: #eee;
+  padding: 15px;
+  border-bottom: 1px solid #37474f;
+  overflow-x: auto;
+}
+
+.debug-panel h3 {
+  margin-bottom: 10px;
+  color: #8bc34a;
+  font-size: 16px;
+}
+
+.debug-section {
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #37474f;
+  border-radius: 4px;
+}
+
+.debug-section h4 {
+  margin-bottom: 8px;
+  color: #ffeb3b;
+  font-size: 14px;
+}
+
+.debug-panel pre {
+  background-color: #1c2731;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #8bc34a;
+}
+
+.empty-data {
+  color: #ff9800;
+  font-style: italic;
+}
+
+.shop-list-stats {
+  margin-bottom: 5px;
+  color: #03a9f4;
+}
+
+.shop-list-sample {
+  background-color: #1c2731;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #8bc34a;
 }
 </style>
