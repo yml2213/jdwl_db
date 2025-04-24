@@ -525,3 +525,267 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style>
+/* 主内容布局 */
+.content-wrapper {
+  display: flex;
+  padding: 0;
+  height: calc(100vh - 120px);
+}
+
+/* 操作区域 */
+.operation-area {
+  flex: 0 0 380px;
+  background: #fff;
+  padding: 20px;
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.form-select {
+  width: 100%;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 12px;
+  color: #606266;
+}
+
+.select-wrapper {
+  position: relative;
+}
+
+.loading-indicator {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
+}
+
+.error-message {
+  font-size: 12px;
+  color: #f56c6c;
+  margin-top: 5px;
+}
+
+.shop-info,
+.warehouse-info {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.form-input {
+  flex: 1;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 12px;
+}
+
+.input-number-group {
+  display: flex;
+  align-items: center;
+}
+
+.form-input-number {
+  width: 80px;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.btn-dec,
+.btn-inc {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  background: #f5f7fa;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.btn-dec {
+  border-radius: 4px 0 0 4px;
+}
+
+.btn-inc {
+  border-radius: 0 4px 4px 0;
+}
+
+.unit {
+  margin-left: 8px;
+  color: #606266;
+}
+
+.checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  margin-right: 6px;
+}
+
+.purchase-input-group {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.number-input {
+  flex: 0 0 120px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 30px;
+}
+
+/* 任务区域 */
+.task-area {
+  flex: 1;
+  background: #fff;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.task-title {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.timing-checkbox {
+  margin-right: 5px;
+}
+
+.task-table-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.task-table th,
+.task-table td {
+  border-bottom: 1px solid #ebeef5;
+  padding: 12px 0;
+  text-align: left;
+}
+
+.task-table th {
+  color: #909399;
+  font-weight: 500;
+  padding-bottom: 8px;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 2px;
+  background-color: #e1f5fe;
+  color: #039be5;
+}
+
+.no-data {
+  text-align: center;
+  color: #909399;
+  padding: 30px 0;
+}
+
+.task-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid #ebeef5;
+}
+
+/* 按钮样式 */
+.btn {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn-primary {
+  background-color: #2196f3;
+  color: white;
+}
+
+.btn-success {
+  background-color: #4caf50;
+  color: white;
+}
+
+.btn-danger {
+  background-color: #f44336;
+  color: white;
+}
+
+.btn-default {
+  background-color: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  color: #606266;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+</style>
