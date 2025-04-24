@@ -9,7 +9,9 @@ const STORAGE_KEYS = {
   DEPARTMENT: 'selected_department',
   HAS_SELECTED: 'has_selected',
   SHOP: 'selected_shop',
-  SHOPS_LIST: 'shops_list'
+  SHOPS_LIST: 'shops_list',
+  WAREHOUSE: 'selected_warehouse',
+  WAREHOUSES_LIST: 'warehouses_list'
 }
 
 /**
@@ -40,12 +42,30 @@ export function saveSelectedShop(shop) {
 }
 
 /**
+ * 保存选择的仓库
+ * @param {Object} warehouse 仓库对象
+ */
+export function saveSelectedWarehouse(warehouse) {
+  if (!warehouse) return
+  localStorage.setItem(STORAGE_KEYS.WAREHOUSE, JSON.stringify(warehouse))
+}
+
+/**
  * 保存店铺列表到本地存储
  * @param {Array} shops 店铺列表
  */
 export function saveShopsList(shops) {
   if (!shops || !Array.isArray(shops)) return
   localStorage.setItem(STORAGE_KEYS.SHOPS_LIST, JSON.stringify(shops))
+}
+
+/**
+ * 保存仓库列表到本地存储
+ * @param {Array} warehouses 仓库列表
+ */
+export function saveWarehousesList(warehouses) {
+  if (!warehouses || !Array.isArray(warehouses)) return
+  localStorage.setItem(STORAGE_KEYS.WAREHOUSES_LIST, JSON.stringify(warehouses))
 }
 
 /**
@@ -59,6 +79,21 @@ export function getShopsList() {
     return JSON.parse(data)
   } catch (e) {
     console.error('解析存储的店铺列表数据失败', e)
+    return []
+  }
+}
+
+/**
+ * 获取仓库列表
+ * @returns {Array} 仓库列表，如果不存在则返回空数组
+ */
+export function getWarehousesList() {
+  const data = localStorage.getItem(STORAGE_KEYS.WAREHOUSES_LIST)
+  if (!data) return []
+  try {
+    return JSON.parse(data)
+  } catch (e) {
+    console.error('解析存储的仓库列表数据失败', e)
     return []
   }
 }
@@ -116,6 +151,21 @@ export function getSelectedShop() {
 }
 
 /**
+ * 获取保存的仓库
+ * @returns {Object|null} 仓库对象，如果不存在则返回null
+ */
+export function getSelectedWarehouse() {
+  const data = localStorage.getItem(STORAGE_KEYS.WAREHOUSE)
+  if (!data) return null
+  try {
+    return JSON.parse(data)
+  } catch (e) {
+    console.error('解析存储的仓库数据失败', e)
+    return null
+  }
+}
+
+/**
  * 检查用户是否已经选择过供应商和事业部
  * @returns {boolean} 是否已选择
  */
@@ -132,4 +182,6 @@ export function clearSelections() {
   localStorage.removeItem(STORAGE_KEYS.HAS_SELECTED)
   localStorage.removeItem(STORAGE_KEYS.SHOP)
   localStorage.removeItem(STORAGE_KEYS.SHOPS_LIST)
+  localStorage.removeItem(STORAGE_KEYS.WAREHOUSE)
+  localStorage.removeItem(STORAGE_KEYS.WAREHOUSES_LIST)
 }

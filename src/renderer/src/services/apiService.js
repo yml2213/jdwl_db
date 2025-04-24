@@ -284,3 +284,77 @@ export async function testApiConnection() {
     return false
   }
 }
+
+/**
+ * 获取仓库列表
+ * @param {string} sellerId - 供应商ID
+ * @param {string} deptId - 事业部ID
+ * @returns {Promise<Array>} 仓库列表数组
+ */
+export async function getWarehouseList(sellerId, deptId) {
+  if (!sellerId || !deptId) {
+    console.error('获取仓库列表失败: 未提供供应商ID或事业部ID')
+    return []
+  }
+
+  console.log('开始获取仓库列表, 供应商ID:', sellerId, '事业部ID:', deptId)
+  const url = `${BASE_URL}/warehouseOpen/queryWarehouseOpenList.do?rand=${Math.random()}`
+  const csrfToken = await getCsrfToken()
+
+  console.log('获取仓库列表, csrfToken:', csrfToken ? '已获取' : '未获取')
+
+  // 构建请求数据
+  const data = qs.stringify({
+    csrfToken: csrfToken,
+    sellerId: sellerId,
+    deptId: deptId,
+    warehouseNo: '',
+    warehouseName: '',
+    warehouseType: '',
+    isSalesReturn: '',
+    effectTimeStart: '',
+    effectTimeEnd: '',
+    aoData:
+      '[{"name":"sEcho","value":5},{"name":"iColumns","value":10},{"name":"sColumns","value":",,,,,,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":"deptName"},{"name":"bSortable_1","value":true},{"name":"mDataProp_2","value":"warehouseNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"warehouseName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"warehouseTypeStr"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"isSalesReturn"},{"name":"bSortable_5","value":true},{"name":"mDataProp_6","value":"effectTime"},{"name":"bSortable_6","value":true},{"name":"mDataProp_7","value":"effectOperateUser"},{"name":"bSortable_7","value":true},{"name":"mDataProp_8","value":"updateTime"},{"name":"bSortable_8","value":true},{"name":"mDataProp_9","value":"updateUser"},{"name":"bSortable_9","value":true},{"name":"iSortCol_0","value":6},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
+  })
+
+  try {
+    console.log('发送仓库列表请求')
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    console.log('仓库列表响应:', response ? '获取成功' : '未获取数据')
+
+    // 处理响应数据，提取仓库列表
+    if (response && response.aaData) {
+      console.log('获取到仓库数量:', response.aaData.length)
+
+      // 转换为更简单的数据结构
+      return response.aaData.map((warehouse) => ({
+        id: warehouse.warehouseId,
+        warehouseId: warehouse.warehouseId,
+        warehouseNo: warehouse.warehouseNo,
+        warehouseName: warehouse.warehouseName,
+        warehouseType: warehouse.warehouseType,
+        warehouseTypeStr: warehouse.warehouseTypeStr,
+        deptName: warehouse.deptName,
+        effectTime: warehouse.effectTime,
+        updateTime: warehouse.updateTime
+      }))
+    } else {
+      console.error('响应数据格式不正确:', response)
+      return []
+    }
+  } catch (error) {
+    console.error('获取仓库列表失败:', error)
+    return []
+  }
+}

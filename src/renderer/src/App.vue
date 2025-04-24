@@ -9,9 +9,13 @@ import {
   saveSelectedShop,
   getSelectedShop,
   saveShopsList,
-  getShopsList
+  getShopsList,
+  saveSelectedWarehouse,
+  getSelectedWarehouse,
+  saveWarehousesList,
+  getWarehousesList
 } from './utils/storageHelper'
-import { getShopList } from './services/apiService'
+import { getShopList, getWarehouseList } from './services/apiService'
 
 // 开发模式标志
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -25,6 +29,7 @@ const checkLoginStatus = async () => {
   isUserLoggedIn.value = loggedIn
   if (loggedIn) {
     loadShops()
+    loadWarehouses()
   }
 }
 
@@ -55,7 +60,7 @@ const form = ref({
   enablePurchase: false,
   purchaseQuantity: 1,
   selectedStore: '',
-  selectedWarehouse: '商家自送仓',
+  selectedWarehouse: '',
   autoStart: false,
   enableAutoUpload: false
 })
@@ -67,10 +72,18 @@ const isLoadingShops = ref(false)
 // 店铺加载错误信息
 const shopLoadError = ref('')
 
+// 仓库列表
+const warehousesList = ref([])
+// 是否正在加载仓库列表
+const isLoadingWarehouses = ref(false)
+// 仓库加载错误信息
+const warehouseLoadError = ref('')
+
 // 当前的供应商和事业部信息（用于开发模式展示）
 const currentVendor = computed(() => getSelectedVendor())
 const currentDepartment = computed(() => getSelectedDepartment())
 const currentShop = computed(() => getSelectedShop())
+const currentWarehouse = computed(() => getSelectedWarehouse())
 
 // 调试信息面板是否显示
 const showDebugPanel = ref(false)
@@ -133,6 +146,64 @@ const loadShops = async () => {
   }
 }
 
+// 加载仓库列表
+const loadWarehouses = async () => {
+  // 尝试从本地存储获取仓库列表
+  const cachedWarehouses = getWarehousesList()
+  if (cachedWarehouses && cachedWarehouses.length > 0) {
+    warehousesList.value = cachedWarehouses
+
+    // 设置默认选中的仓库（如果有缓存的选择）
+    const selectedWarehouse = getSelectedWarehouse()
+    if (selectedWarehouse) {
+      form.value.selectedWarehouse = selectedWarehouse.warehouseNo
+    } else if (warehousesList.value.length > 0) {
+      form.value.selectedWarehouse = warehousesList.value[0].warehouseNo
+    }
+
+    return
+  }
+
+  // 从服务器获取仓库列表
+  isLoadingWarehouses.value = true
+  warehouseLoadError.value = ''
+
+  try {
+    // 获取当前选择的供应商和事业部ID
+    const vendor = getSelectedVendor()
+    const department = getSelectedDepartment()
+
+    if (!vendor || !vendor.id || !department || !department.sellerId || !department.deptNo) {
+      warehouseLoadError.value = '未选择供应商或事业部，无法获取仓库列表'
+      isLoadingWarehouses.value = false
+      return
+    }
+
+    // 获取sellerId和deptId
+    const sellerId = department.sellerId
+    const deptId = department.deptNo.replace('CBU', '')
+
+    // 使用sellerId和deptId获取仓库列表
+    const warehouses = await getWarehouseList(sellerId, deptId)
+
+    if (warehouses && warehouses.length > 0) {
+      warehousesList.value = warehouses
+      saveWarehousesList(warehouses)
+
+      // 默认选中第一个仓库
+      form.value.selectedWarehouse = warehouses[0].warehouseNo
+      saveSelectedWarehouse(warehouses[0])
+    } else {
+      warehouseLoadError.value = '未找到任何仓库'
+    }
+  } catch (error) {
+    console.error('加载仓库失败:', error)
+    warehouseLoadError.value = `加载仓库失败: ${error.message || '未知错误'}`
+  } finally {
+    isLoadingWarehouses.value = false
+  }
+}
+
 // 处理店铺选择变化
 const handleStoreChange = (shopNo) => {
   if (!shopNo) return
@@ -140,6 +211,18 @@ const handleStoreChange = (shopNo) => {
   const selectedShop = shopsList.value.find((shop) => shop.shopNo === shopNo)
   if (selectedShop) {
     saveSelectedShop(selectedShop)
+  }
+}
+
+// 处理仓库选择变化
+const handleWarehouseChange = (warehouseNo) => {
+  if (!warehouseNo) return
+
+  const selectedWarehouse = warehousesList.value.find(
+    (warehouse) => warehouse.warehouseNo === warehouseNo
+  )
+  if (selectedWarehouse) {
+    saveSelectedWarehouse(selectedWarehouse)
   }
 }
 
@@ -151,10 +234,26 @@ watch(
   }
 )
 
+// 监听仓库选择变化
+watch(
+  () => form.value.selectedWarehouse,
+  (newVal) => {
+    handleWarehouseChange(newVal)
+  }
+)
+
 // 当前选中的店铺信息
 const currentShopInfo = computed(() => {
   if (!form.value.selectedStore || !shopsList.value.length) return null
   return shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
+})
+
+// 当前选中的仓库信息
+const currentWarehouseInfo = computed(() => {
+  if (!form.value.selectedWarehouse || !warehousesList.value.length) return null
+  return warehousesList.value.find(
+    (warehouse) => warehouse.warehouseNo === form.value.selectedWarehouse
+  )
 })
 
 // 任务列表
@@ -172,11 +271,18 @@ const addTask = () => {
     return
   }
 
+  if (!form.value.selectedWarehouse) {
+    alert('请选择仓库')
+    return
+  }
+
   const shopInfo = currentShopInfo.value
+  const warehouseInfo = currentWarehouseInfo.value
 
   taskList.value.push({
     sku: form.value.sku,
     店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
+    仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
     创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     状态: '等待中'
   })
@@ -194,6 +300,11 @@ const handleImport = () => {
 
   if (!form.value.selectedStore) {
     alert('请选择店铺')
+    return
+  }
+
+  if (!form.value.selectedWarehouse) {
+    alert('请选择仓库')
     return
   }
 
@@ -268,12 +379,27 @@ onMounted(() => {
         <div v-else class="empty-data">未选择店铺</div>
       </div>
       <div class="debug-section">
+        <h4>仓库信息</h4>
+        <pre v-if="currentWarehouse">{{ JSON.stringify(currentWarehouse, null, 2) }}</pre>
+        <div v-else class="empty-data">未选择仓库</div>
+      </div>
+      <div class="debug-section">
         <h4>店铺列表</h4>
         <div class="shop-list-stats">共 {{ shopsList.length }} 个店铺</div>
         <div class="shop-list-sample" v-if="shopsList.length > 0">
           <div>第一个: {{ shopsList[0]?.shopName }}</div>
           <div v-if="shopsList.length > 1">
             最后一个: {{ shopsList[shopsList.length - 1]?.shopName }}
+          </div>
+        </div>
+      </div>
+      <div class="debug-section">
+        <h4>仓库列表</h4>
+        <div class="warehouse-list-stats">共 {{ warehousesList.length }} 个仓库</div>
+        <div class="warehouse-list-sample" v-if="warehousesList.length > 0">
+          <div>第一个: {{ warehousesList[0]?.warehouseName }}</div>
+          <div v-if="warehousesList.length > 1">
+            最后一个: {{ warehousesList[warehousesList.length - 1]?.warehouseName }}
           </div>
         </div>
       </div>
@@ -416,10 +542,26 @@ onMounted(() => {
             <div class="form-group">
               <label class="form-label">选择仓库</label>
               <div class="select-wrapper">
-                <select v-model="form.selectedWarehouse" class="form-select">
-                  <option value="商家自送仓">商家自送仓</option>
-                  <option value="前置站">前置站</option>
+                <select
+                  v-model="form.selectedWarehouse"
+                  class="form-select"
+                  :disabled="isLoadingWarehouses"
+                >
+                  <option value="" disabled>请选择仓库</option>
+                  <option
+                    v-for="warehouse in warehousesList"
+                    :key="warehouse.warehouseNo"
+                    :value="warehouse.warehouseNo"
+                  >
+                    {{ warehouse.warehouseName }}
+                  </option>
                 </select>
+                <div v-if="isLoadingWarehouses" class="loading-indicator">加载中...</div>
+                <div v-if="warehouseLoadError" class="error-message">{{ warehouseLoadError }}</div>
+                <div v-if="currentWarehouseInfo" class="warehouse-info">
+                  <small>仓库编号: {{ currentWarehouseInfo.warehouseNo }}</small>
+                  <small>类型: {{ currentWarehouseInfo.warehouseTypeStr }}</small>
+                </div>
               </div>
             </div>
 
@@ -451,6 +593,7 @@ onMounted(() => {
                     <th style="width: 40px"><input type="checkbox" /></th>
                     <th>SKU</th>
                     <th>店铺</th>
+                    <th>仓库</th>
                     <th>创建时间</th>
                     <th>状态</th>
                     <th>结果</th>
@@ -462,6 +605,7 @@ onMounted(() => {
                     <td><input type="checkbox" /></td>
                     <td>{{ task.sku }}</td>
                     <td>{{ task.店铺 }}</td>
+                    <td>{{ task.仓库 }}</td>
                     <td>{{ task.创建时间 }}</td>
                     <td>
                       <span class="status-tag">{{ task.状态 }}</span>
@@ -476,7 +620,7 @@ onMounted(() => {
                     </td>
                   </tr>
                   <tr v-if="taskList.length === 0">
-                    <td colspan="7" class="no-data">No Data</td>
+                    <td colspan="8" class="no-data">No Data</td>
                   </tr>
                 </tbody>
               </table>
@@ -657,7 +801,8 @@ body {
   margin-top: 5px;
 }
 
-.shop-info {
+.shop-info,
+.warehouse-info {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
@@ -919,12 +1064,14 @@ body {
   font-style: italic;
 }
 
-.shop-list-stats {
+.shop-list-stats,
+.warehouse-list-stats {
   margin-bottom: 5px;
   color: #03a9f4;
 }
 
-.shop-list-sample {
+.shop-list-sample,
+.warehouse-list-sample {
   background-color: #1c2731;
   padding: 8px;
   border-radius: 4px;
