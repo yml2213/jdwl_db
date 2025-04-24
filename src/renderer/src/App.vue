@@ -70,10 +70,6 @@ onMounted(() => {
     <header class="header">
       <div class="header-left">
         <h1 class="app-title">订单下载系统 - 云打标工具</h1>
-        <div class="nav-links">
-          <a href="#" class="nav-link active">首页</a>
-          <a href="#" class="nav-link">功能测试</a>
-        </div>
       </div>
 
       <div class="header-right">
@@ -191,25 +187,6 @@ body {
 .app-title {
   font-size: 18px;
   font-weight: 500;
-  margin-right: 30px;
-}
-
-.nav-links {
-  display: flex;
-}
-
-.nav-link {
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
-  padding: 0 15px;
-  line-height: 60px;
-  font-size: 14px;
-}
-
-.nav-link.active,
-.nav-link:hover {
-  color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* 主内容区 */
