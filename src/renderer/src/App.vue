@@ -388,7 +388,7 @@ body {
 /* 主内容区 */
 .main-content {
   flex: 1;
-  padding: 20px;
+  padding: 0;
 }
 
 .login-prompt {
@@ -415,7 +415,9 @@ body {
 .tabs {
   display: flex;
   border-bottom: 1px solid #e0e0e0;
-  margin-bottom: 20px;
+  margin-bottom: 0;
+  padding: 0 10px;
+  background-color: #f5f5f5;
 }
 
 .tab {
@@ -428,21 +430,23 @@ body {
 .tab.active {
   color: #2196f3;
   border-bottom-color: #2196f3;
+  background-color: #fff;
 }
 
 /* 主内容布局 */
 .content-wrapper {
   display: flex;
-  gap: 20px;
+  padding: 0;
+  height: calc(100vh - 120px);
 }
 
 /* 操作区域 */
 .operation-area {
-  flex: 0 0 400px;
+  flex: 0 0 380px;
   background: #fff;
-  border-radius: 4px;
   padding: 20px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
 }
 
 .form-group {
@@ -556,11 +560,9 @@ body {
 .task-area {
   flex: 1;
   background: #fff;
-  border-radius: 4px;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
 .task-header {
@@ -578,11 +580,11 @@ body {
 .task-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
 .timing-checkbox {
-  margin-right: 10px;
+  margin-right: 5px;
 }
 
 .task-table-container {
