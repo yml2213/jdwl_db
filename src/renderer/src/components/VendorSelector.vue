@@ -40,8 +40,7 @@
           已选择供应商: <strong>{{ getVendorName(selectedVendor) }}</strong>
         </p>
         <p v-if="selectedVendorInfo" class="vendor-info">
-          供应商编号: {{ selectedVendorInfo.supplierNo }} | 状态:
-          {{ selectedVendorInfo.status === '1' ? '正常' : '异常' }}
+          供应商编号: {{ selectedVendorInfo.supplierNo }}
         </p>
       </div>
     </div>
