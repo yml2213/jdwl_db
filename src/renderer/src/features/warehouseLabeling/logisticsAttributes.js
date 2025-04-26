@@ -99,11 +99,8 @@ export function useLogisticsAttributes(taskList, currentShopInfo) {
         logisticsImport.value.success = true
         logisticsImport.value.progress = '暂存成功，等待批量处理'
 
-        // 显示提示并关闭对话框
-        alert('物流属性设置已暂存，请在任务列表中查看')
-        setTimeout(() => {
-          logisticsImport.value.showDialog = false
-        }, 1000)
+        // 直接关闭对话框，不显示提示
+        logisticsImport.value.showDialog = false
         return
       }
 

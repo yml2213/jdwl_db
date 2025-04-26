@@ -12,7 +12,7 @@
       </label>
       <label class="checkbox-label">
         <input type="checkbox" v-model="options.importProps" @change="handleImportPropsChange" />
-        <span>导入物流属性</span>
+        <span>导入物流属性(参数)</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" v-model="options.useMainData" />

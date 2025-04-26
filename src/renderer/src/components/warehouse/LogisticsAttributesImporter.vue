@@ -183,15 +183,8 @@ const submitTemplate = (tempSave = false) => {
     return
   }
 
-  const message = tempSave
-    ? `确定要将${props.skuList.length}个SKU的物流属性数据暂存到任务列表吗？`
-    : `确定要提交${props.skuList.length}个SKU的物流属性数据吗？每批处理将等待${props.waitTime}分钟。`
-
-  if (confirm(message)) {
-    if (!tempSave) {
-      isUploading.value = true
-    }
-
+  // 如果是暂存，则直接提交不显示确认弹窗
+  if (tempSave) {
     // 触发提交事件
     emit('submit', {
       skuList: props.skuList,
@@ -199,6 +192,21 @@ const submitTemplate = (tempSave = false) => {
       dimensions: dimensions.value,
       waitTime: props.waitTime,
       tempSave: tempSave // 添加暂存标志
+    })
+    return
+  }
+
+  // 只有非暂存操作才需要确认
+  const message = `确定要提交${props.skuList.length}个SKU的物流属性数据吗？每批处理将等待${props.waitTime}分钟。`
+  if (confirm(message)) {
+    isUploading.value = true
+    // 触发提交事件
+    emit('submit', {
+      skuList: props.skuList,
+      template: generatedTemplate.value,
+      dimensions: dimensions.value,
+      waitTime: props.waitTime,
+      tempSave: false
     })
   }
 }
