@@ -459,6 +459,64 @@ const executeOneTask = async (index) => {
     task.结果 = error.message || '执行出错'
   }
 }
+
+// 下载测试Excel文件
+const downloadTestExcel = async () => {
+  if (!form.value.sku) {
+    alert('请先输入SKU')
+    return
+  }
+
+  // 分割多行输入，处理每个SKU
+  const skuList = form.value.sku.split('\n').filter((sku) => sku.trim() !== '')
+
+  if (skuList.length === 0) {
+    alert('请输入有效的SKU')
+    return
+  }
+
+  try {
+    // 创建Excel文件
+    const headers = [
+      'POP店铺商品编号（SKU编码）',
+      '商家商品标识',
+      '商品条码',
+      '是否代销（0-否，1-是）',
+      '供应商CMG编码'
+    ]
+    const data = skuList.map((sku) => [sku, sku, sku, '0', 'CMS4418047112894'])
+
+    // 添加headers作为第一行
+    data.unshift(headers)
+
+    // 使用window.api来创建Excel文件
+    const excelOptions = {
+      fileName: 'PopGoodsImportTemplate.xls',
+      sheetName: 'POP商品导入',
+      data: data
+    }
+
+    const excelBlob = await window.api.createExcelFile(excelOptions)
+    console.log('Excel文件已创建')
+
+    // 创建下载链接
+    const url = URL.createObjectURL(new Blob([excelBlob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'PopGoodsImportTemplate.xls')
+    document.body.appendChild(link)
+    link.click()
+
+    // 清理
+    URL.revokeObjectURL(url)
+    document.body.removeChild(link)
+
+    console.log('Excel文件下载成功')
+  } catch (error) {
+    console.error('创建Excel文件失败:', error)
+    alert(`创建Excel文件失败: ${error.message || '未知错误'}`)
+  }
+}
 </script>
 
 <template>
@@ -486,6 +544,7 @@ const executeOneTask = async (index) => {
         </div>
         <div class="import-actions">
           <button class="btn btn-primary" @click="handleBatchImport">导入并执行</button>
+          <button class="btn btn-default" @click="downloadTestExcel">下载Excel</button>
           <small class="import-tip">每行一个SKU，直接导入并自动执行任务</small>
         </div>
       </div>
@@ -697,7 +756,6 @@ const executeOneTask = async (index) => {
   flex: 0 0 380px;
   background: #fff;
   padding: 20px;
-  border-right: 1px solid #e0e0e0;
   overflow-y: auto;
 }
 
@@ -708,17 +766,42 @@ const executeOneTask = async (index) => {
 .form-label {
   display: block;
   margin-bottom: 8px;
-  color: #606266;
   font-weight: 500;
 }
 
+.form-input,
 .form-select {
   width: 100%;
-  height: 36px;
+  padding: 8px 10px;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
-  padding: 0 12px;
-  color: #606266;
+  outline: none;
+}
+
+.form-input:focus,
+.form-select:focus {
+  border-color: #2196f3;
+}
+
+.sku-textarea {
+  resize: vertical;
+  min-height: 120px;
+  padding: 12px;
+  font-family: monospace;
+}
+
+.import-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.import-tip {
+  color: #909399;
+  margin-top: 5px;
+  flex-basis: 100%;
 }
 
 .select-wrapper {
@@ -757,14 +840,6 @@ const executeOneTask = async (index) => {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   padding: 0 12px;
-}
-
-.sku-textarea {
-  height: auto;
-  min-height: 120px;
-  padding: 12px;
-  font-family: monospace;
-  resize: vertical;
 }
 
 .input-number-group {
