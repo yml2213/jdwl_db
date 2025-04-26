@@ -21,6 +21,7 @@ import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
 // 导入拆分的组件
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
+import LogisticsAttributesImporter from './warehouse/LogisticsAttributesImporter.vue'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -74,6 +75,15 @@ const form = ref({
     currentBatch: 0,
     totalBatches: 0,
     progress: '初始化...'
+  },
+  logisticsImport: {
+    showDialog: false,
+    uploading: false,
+    success: false,
+    error: '',
+    progress: '',
+    currentBatch: 0,
+    totalBatches: 0
   }
 })
 
@@ -483,6 +493,84 @@ const handleDeleteTask = (index) => {
   taskList.value.splice(index, 1)
 }
 
+// 打开物流属性导入对话框
+const openLogisticsImporter = () => {
+  // 检查是否输入了SKU
+  const skuText = form.value.sku.trim()
+  if (!skuText) {
+    alert('请先输入SKU')
+    return
+  }
+
+  // 解析SKU列表
+  const skuList = skuText.split(/\r?\n/).filter((line) => line.trim())
+  if (skuList.length === 0) {
+    alert('请至少输入一个有效的SKU')
+    return
+  }
+
+  // 检查是否选择了事业部
+  const department = getSelectedDepartment()
+  if (!department) {
+    alert('请先选择事业部')
+    return
+  }
+
+  // 设置对话框状态并显示
+  form.value.logisticsImport.showDialog = true
+}
+
+// 关闭物流属性导入对话框
+const closeLogisticsImporter = () => {
+  form.value.logisticsImport.showDialog = false
+}
+
+// 提交物流属性数据
+const submitLogisticsData = async (data) => {
+  console.log('提交物流属性数据:', data)
+
+  try {
+    // 重置导入状态
+    form.value.logisticsImport.uploading = true
+    form.value.logisticsImport.success = false
+    form.value.logisticsImport.error = ''
+    form.value.logisticsImport.progress = '准备导入...'
+    form.value.logisticsImport.currentBatch = 0
+    form.value.logisticsImport.totalBatches = Math.ceil(data.skuList.length / 500)
+
+    // 添加任务
+    const task = {
+      id: Date.now().toString(),
+      type: 'importLogisticsProps',
+      label: '导入物流属性',
+      skuList: data.skuList,
+      waitTime: data.waitTime,
+      status: 'pending',
+      progress: '0%',
+      result: null
+    }
+
+    taskList.value.push(task)
+
+    // 执行任务
+    await executeOneTask(taskList.value.length - 1)
+
+    // 更新导入状态
+    form.value.logisticsImport.success = true
+    form.value.logisticsImport.uploading = false
+    form.value.logisticsImport.progress = '导入完成'
+
+    // 关闭对话框
+    setTimeout(() => {
+      form.value.logisticsImport.showDialog = false
+    }, 1500)
+  } catch (error) {
+    console.error('导入物流属性失败:', error)
+    form.value.logisticsImport.error = `导入失败: ${error.message || '未知错误'}`
+    form.value.logisticsImport.uploading = false
+  }
+}
+
 // 使用provide向子组件提供数据和方法
 provide('form', form)
 provide('taskList', taskList)
@@ -515,23 +603,36 @@ provide('handleExecuteOneTask', handleExecuteOneTask)
 provide('handleDeleteTask', handleDeleteTask)
 provide('enableDisabledProducts', enableDisabledProducts)
 provide('getStatusClass', getStatusClass)
+provide('openLogisticsImporter', openLogisticsImporter)
 </script>
 
 <template>
-  <div class="content-wrapper">
-    <!-- 左侧操作区域 -->
-    <OperationArea />
+  <div class="warehouse-labeling" v-if="props.isLoggedIn">
+    <div class="content-wrapper">
+      <!-- 左侧操作区域 -->
+      <operation-area />
 
-    <!-- 右侧任务列表区域 -->
-    <TaskArea
-      @execute="executeTask"
-      @clear="clearTasks"
-      @open-web="executeTask"
-      @execute-one="handleExecuteOneTask"
-      @delete-task="handleDeleteTask"
-      @enable-products="enableDisabledProducts"
+      <!-- 右侧任务列表区域 -->
+      <task-area
+        @execute="executeTask"
+        @clear="clearTasks"
+        @open-web="executeTask"
+        @execute-one="handleExecuteOneTask"
+        @delete-task="handleDeleteTask"
+        @enable-products="enableDisabledProducts"
+      />
+    </div>
+
+    <!-- 物流属性导入对话框 -->
+    <logistics-attributes-importer
+      v-if="form.logisticsImport.showDialog"
+      :skuList="form.sku.split(/\r?\n/).filter((line) => line.trim())"
+      :waitTime="form.waitTime"
+      @close="closeLogisticsImporter"
+      @submit="submitLogisticsData"
     />
   </div>
+  <div v-else class="login-required">请先登录</div>
 </template>
 
 <style scoped>

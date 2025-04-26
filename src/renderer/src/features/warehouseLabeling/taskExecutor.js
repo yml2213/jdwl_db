@@ -4,6 +4,7 @@
  */
 import enableStoreProductsFeature from './enableStoreProducts'
 import importStoreProductsFeature from './importStoreProducts'
+import importLogisticsPropsFeature from './importLogisticsProperties'
 import { enableShopProducts } from '../../services/apiService'
 import {
   extractTaskSkuList,
@@ -96,6 +97,33 @@ export async function executeOneTask(task, shopInfo, options) {
       } catch (importError) {
         functionResults.push(`导入店铺商品: 错误 - ${importError.message || '未知错误'}`)
         console.error('导入店铺商品失败:', importError)
+        hasFailures = true
+      }
+    }
+
+    // 导入物流属性功能 - 使用独立模块
+    if (options.importProps === true) {
+      try {
+        console.log('执行[导入物流属性]功能，SKU:', task.sku)
+
+        // 提取SKU
+        const skuList = extractTaskSkuList(task)
+        if (skuList.length === 0) {
+          throw new Error('没有有效的SKU')
+        }
+
+        // 使用导入物流属性功能模块
+        const importResult = await importLogisticsPropsFeature.execute(skuList)
+
+        if (importResult.success) {
+          functionResults.push(`导入物流属性: 成功 - 处理了${importResult.processedCount}个SKU`)
+        } else {
+          functionResults.push(`导入物流属性: 失败 - ${importResult.message}`)
+          hasFailures = true
+        }
+      } catch (importError) {
+        functionResults.push(`导入物流属性: 错误 - ${importError.message || '未知错误'}`)
+        console.error('导入物流属性失败:', importError)
         hasFailures = true
       }
     }
