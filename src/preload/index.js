@@ -22,7 +22,7 @@ const api = {
 
   // 网络请求相关
   sendRequest: (url, options) => {
-    return ipcRenderer.invoke('send-request', url, options)
+    return ipcRenderer.invoke('sendRequest', url, options)
   }
 }
 

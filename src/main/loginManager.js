@@ -254,4 +254,26 @@ async function isLoggedIn() {
   }
 }
 
-export { createLoginWindow, loadCookies, clearCookies, isLoggedIn, saveCookies, requiredCookies }
+/**
+ * 设置登录相关的IPC处理程序
+ * 此函数被index.js调用，用于集中设置所有登录相关的IPC处理
+ */
+function setupLoginHandlers() {
+  // 这里可以添加额外的登录相关IPC处理程序
+  console.log('设置登录处理程序')
+
+  // 示例：可以在这里添加其他登录相关的IPC处理程序
+  // ipcMain.on('custom-login-event', (event) => {
+  //   // 处理自定义登录事件
+  // })
+}
+
+export {
+  createLoginWindow,
+  loadCookies,
+  clearCookies,
+  isLoggedIn,
+  saveCookies,
+  requiredCookies,
+  setupLoginHandlers
+}

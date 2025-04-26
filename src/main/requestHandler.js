@@ -46,11 +46,26 @@ async function sendRequest(url, options = {}) {
       timeout: options.timeout || 30000
     }
 
+    // 处理URL查询参数
+    if (options.params) {
+      axiosOptions.params = options.params
+    }
+
+    // 处理响应类型
+    if (options.responseType) {
+      axiosOptions.responseType = options.responseType
+    }
+
     // 处理请求体
     if (options.body) {
-      if (typeof options.body === 'string') {
+      // 如果是FormData类型，直接传递
+      if (options.body instanceof FormData) {
+        axiosOptions.data = options.body
+        // 确保不手动设置Content-Type，让axios自动设置带边界的multipart/form-data
+        delete axiosOptions.headers['Content-Type']
+      } else if (typeof options.body === 'string') {
         try {
-          // 如果body是JSON字符串，解析它
+          // 尝试解析JSON字符串
           axiosOptions.data = JSON.parse(options.body)
         } catch {
           // 如果解析失败，使用原始字符串
@@ -64,8 +79,15 @@ async function sendRequest(url, options = {}) {
     // 使用axios发送请求
     const response = await axiosInstance(axiosOptions)
 
-    // axios自动解析了JSON
-    const result = response.data
+    // 根据响应类型决定如何处理响应
+    let result
+    if (options.responseType === 'blob') {
+      // 对于blob响应，直接返回blob对象
+      result = response.data
+    } else {
+      // 对于其他类型，返回axios解析后的数据
+      result = response.data
+    }
 
     // 记录成功响应
     await logRequest(`请求成功: ${url}, 状态: ${response.status}`)

@@ -12,7 +12,7 @@ import {
   getSelectedDepartment,
   getSelectedVendor
 } from '../utils/storageHelper'
-import { getShopList, getWarehouseList } from '../services/apiService'
+import { getShopList, getWarehouseList, batchProcessSKUs } from '../services/apiService'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -46,7 +46,14 @@ const form = ref({
   selectedStore: '',
   selectedWarehouse: '',
   autoStart: false,
-  enableAutoUpload: false
+  enableAutoUpload: false,
+  fileImport: {
+    file: null,
+    fileName: '',
+    importing: false,
+    importError: '',
+    importSuccess: false
+  }
 })
 
 // 任务列表
@@ -211,12 +218,23 @@ const addTask = () => {
   const shopInfo = currentShopInfo.value
   const warehouseInfo = currentWarehouseInfo.value
 
-  taskList.value.push({
-    sku: form.value.sku,
-    店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
-    仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
-    创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    状态: '等待中'
+  // 分割多行输入，处理每个SKU
+  const skuList = form.value.sku.split('\n').filter((sku) => sku.trim() !== '')
+
+  if (skuList.length === 0) {
+    alert('请输入有效的SKU')
+    return
+  }
+
+  // 批量添加任务
+  skuList.forEach((sku) => {
+    taskList.value.push({
+      sku: sku.trim(),
+      店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
+      仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
+      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      状态: '等待中'
+    })
   })
 
   // 清空SKU输入
@@ -224,30 +242,60 @@ const addTask = () => {
 
   // 通知父组件
   emit('add-task')
+
+  return skuList.length
 }
 
-// 导入方法
-const handleImport = () => {
-  if (!form.value.sku) {
-    alert('请输入SKU')
+// 执行任务
+const executeTask = async () => {
+  // 过滤出所有等待中的任务
+  const waitingTasks = taskList.value.filter((task) => task.状态 === '等待中')
+  if (waitingTasks.length === 0) {
+    alert('没有等待中的任务')
     return
   }
 
-  if (!form.value.selectedStore) {
+  // 获取店铺信息
+  const shopInfo = currentShopInfo.value
+
+  if (!shopInfo) {
     alert('请选择店铺')
     return
   }
 
-  if (!form.value.selectedWarehouse) {
-    alert('请选择仓库')
-    return
+  // 将所有等待中的任务标记为执行中
+  waitingTasks.forEach((task) => {
+    task.状态 = '执行中'
+  })
+
+  // 获取所有等待中任务的SKU列表
+  const skuList = waitingTasks.map((task) => task.sku)
+
+  try {
+    // 调用批量处理API
+    const result = await batchProcessSKUs(skuList, shopInfo)
+
+    // 更新任务状态
+    if (result.success) {
+      waitingTasks.forEach((task) => {
+        task.状态 = '成功'
+        task.结果 = result.message || '成功导入'
+      })
+    } else {
+      waitingTasks.forEach((task) => {
+        task.状态 = '失败'
+        task.结果 = result.message || '导入失败'
+      })
+    }
+  } catch (error) {
+    console.error('批量执行任务失败:', error)
+    waitingTasks.forEach((task) => {
+      task.状态 = '失败'
+      task.结果 = error.message || '执行出错'
+    })
   }
 
-  addTask()
-}
-
-// 执行任务
-const executeTask = () => {
+  // 通知父组件
   emit('execute-task')
 }
 
@@ -316,6 +364,83 @@ onMounted(() => {
     loadWarehouses()
   }
 })
+
+// 批量导入并执行
+const handleBatchImport = () => {
+  if (!form.value.sku) {
+    alert('请输入SKU')
+    return
+  }
+
+  if (!form.value.selectedStore) {
+    alert('请选择店铺')
+    return
+  }
+
+  if (!form.value.selectedWarehouse) {
+    alert('请选择仓库')
+    return
+  }
+
+  // 添加任务并获取添加的任务数量
+  const addedTasksCount = addTask()
+
+  if (addedTasksCount > 0) {
+    // 自动执行任务
+    executeTask()
+  }
+}
+
+// 获取状态类
+const getStatusClass = (status) => {
+  switch (status) {
+    case '等待中':
+      return 'status-tag waiting'
+    case '执行中':
+      return 'status-tag processing'
+    case '成功':
+      return 'status-tag success'
+    case '失败':
+      return 'status-tag failure'
+    default:
+      return 'status-tag'
+  }
+}
+
+// 执行单个任务
+const executeOneTask = async (index) => {
+  const task = taskList.value[index]
+  if (!task) return
+
+  // 获取店铺信息
+  const shopInfo = currentShopInfo.value
+
+  if (!shopInfo) {
+    alert('请选择店铺')
+    return
+  }
+
+  // 标记为执行中
+  task.状态 = '执行中'
+
+  try {
+    // 调用API处理单个SKU
+    const result = await batchProcessSKUs([task.sku], shopInfo)
+
+    // 更新任务状态
+    if (result.success) {
+      task.状态 = '成功'
+      task.结果 = result.message || '成功导入'
+    } else {
+      task.状态 = '失败'
+      task.结果 = result.message || '导入失败'
+    }
+  } catch (error) {
+    console.error('执行任务失败:', error)
+    task.状态 = '失败'
+    task.结果 = error.message || '执行出错'
+  }
+}
 </script>
 
 <template>
@@ -334,13 +459,16 @@ onMounted(() => {
       <div class="form-group">
         <label class="form-label">输入SKU</label>
         <div class="input-group">
-          <input
+          <textarea
             v-model="form.sku"
-            placeholder="请输入sku或导入sku"
-            class="form-input"
-            @keyup.enter="handleImport"
-          />
-          <button class="btn btn-primary" @click="handleImport">导入</button>
+            placeholder="请输入SKU（多个SKU请每行一个）"
+            class="form-input sku-textarea"
+            rows="5"
+          ></textarea>
+        </div>
+        <div class="import-actions">
+          <button class="btn btn-primary" @click="handleBatchImport">导入并执行</button>
+          <small class="import-tip">每行一个SKU，直接导入并自动执行任务</small>
         </div>
       </div>
 
@@ -471,7 +599,7 @@ onMounted(() => {
             <span>定时</span>
           </label>
           <button class="btn btn-primary" @click="executeTask">打开网页</button>
-          <button class="btn btn-success" @click="executeTask">执行任务</button>
+          <button class="btn btn-success" @click="executeTask">批量执行</button>
           <button class="btn btn-danger" @click="clearTasks">清空列表</button>
         </div>
       </div>
@@ -498,12 +626,24 @@ onMounted(() => {
               <td>{{ task.仓库 }}</td>
               <td>{{ task.创建时间 }}</td>
               <td>
-                <span class="status-tag">{{ task.状态 }}</span>
+                <span :class="['status-tag', getStatusClass(task.状态)]">{{ task.状态 }}</span>
               </td>
               <td>
                 <span v-if="task.状态 === '等待中'">等待执行...</span>
+                <span v-else-if="task.状态 === '执行中'">处理中...</span>
+                <span v-else-if="task.状态 === '成功'">{{ task.结果 || '成功' }}</span>
+                <span v-else-if="task.状态 === '失败'" class="error-text">{{
+                  task.结果 || '失败'
+                }}</span>
               </td>
               <td>
+                <button
+                  class="btn btn-small btn-primary"
+                  @click="executeOneTask(index)"
+                  v-if="task.状态 === '等待中' || task.状态 === '失败'"
+                >
+                  执行
+                </button>
                 <button class="btn btn-small btn-danger" @click="taskList.splice(index, 1)">
                   删除
                 </button>
@@ -599,6 +739,14 @@ onMounted(() => {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   padding: 0 12px;
+}
+
+.sku-textarea {
+  height: auto;
+  min-height: 120px;
+  padding: 12px;
+  font-family: monospace;
+  resize: vertical;
 }
 
 .input-number-group {
@@ -734,6 +882,43 @@ onMounted(() => {
   color: #039be5;
 }
 
+.status-tag.waiting {
+  background-color: #e8f5e9;
+  color: #43a047;
+}
+
+.status-tag.processing {
+  background-color: #fff8e1;
+  color: #ffa000;
+  animation: pulse 1.5s infinite;
+}
+
+.status-tag.success {
+  background-color: #e8f5e9;
+  color: #43a047;
+}
+
+.status-tag.failure {
+  background-color: #ffebee;
+  color: #e53935;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.error-text {
+  color: #e53935;
+}
+
 .no-data {
   text-align: center;
   color: #909399;
@@ -770,13 +955,13 @@ onMounted(() => {
 }
 
 .btn-success {
-  background-color: #4caf50;
-  color: white;
+  background-color: #52c41a;
+  border-color: #52c41a;
 }
 
 .btn-danger {
-  background-color: #f44336;
-  color: white;
+  background-color: #ff4d4f;
+  border-color: #ff4d4f;
 }
 
 .btn-default {
@@ -787,5 +972,89 @@ onMounted(() => {
 
 .btn:hover {
   opacity: 0.9;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #1890ff;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-link:hover {
+  color: #40a9ff;
+}
+
+/* 文件导入相关样式 */
+.file-import-container {
+  margin-bottom: 10px;
+}
+
+.file-input-group {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.file-input {
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  z-index: -1;
+}
+
+.file-label {
+  display: inline-block;
+  background-color: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-right: 10px;
+  cursor: pointer;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.file-label:hover {
+  background-color: #e9ecef;
+}
+
+.import-template {
+  margin: 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.import-template small {
+  color: #999;
+}
+
+.import-error {
+  color: #ff4d4f;
+  margin-top: 5px;
+}
+
+.import-success {
+  color: #52c41a;
+  margin-top: 5px;
+}
+
+.import-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.import-tip {
+  color: #999;
+  font-size: 12px;
 }
 </style>

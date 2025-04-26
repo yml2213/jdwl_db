@@ -2,7 +2,13 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { createLoginWindow, loadCookies, clearCookies, isLoggedIn } from './loginManager'
+import {
+  createLoginWindow,
+  loadCookies,
+  clearCookies,
+  isLoggedIn,
+  setupLoginHandlers
+} from './loginManager'
 import { sendRequest } from './requestHandler'
 
 // 主窗口引用
@@ -77,19 +83,8 @@ app.whenReady().then(() => {
     await clearCookies(mainWindow)
   })
 
-  // 处理网络请求
-  ipcMain.handle('send-request', async (event, url, options) => {
-    try {
-      return await sendRequest(url, options)
-    } catch (error) {
-      // 将错误转换为可序列化的对象
-      return Promise.reject({
-        message: error.message,
-        stack: error.stack,
-        code: error.code
-      })
-    }
-  })
+  // 设置IPC处理程序
+  setupIPCHandlers()
 
   createWindow()
 
@@ -111,3 +106,19 @@ app.on('window-all-closed', () => {
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
+
+// 设置IPC处理程序
+function setupIPCHandlers() {
+  // 处理HTTP请求
+  ipcMain.handle('sendRequest', async (event, url, options) => {
+    try {
+      return await sendRequest(url, options)
+    } catch (error) {
+      console.error('IPC请求处理错误:', error)
+      throw error
+    }
+  })
+
+  // 设置登录相关处理程序
+  setupLoginHandlers()
+}

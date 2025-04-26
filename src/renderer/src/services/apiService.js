@@ -358,3 +358,138 @@ export async function getWarehouseList(sellerId, deptId) {
     return []
   }
 }
+
+/**
+ * 上传商品Excel文件并导入商品
+ * @param {File} file - Excel文件对象
+ * @param {Object} storeInfo - 店铺信息
+ * @returns {Promise<Object>} 导入结果
+ */
+export async function importProductsFromExcel(file, storeInfo) {
+  console.log('开始导入商品Excel文件:', file.name)
+  const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${storeInfo.spShopNo || storeInfo.shopNo}&_r=${Math.random()}`
+  const csrfToken = await getCsrfToken()
+
+  const formData = new FormData()
+  formData.append('csrfToken', csrfToken)
+  formData.append('shopGoodsPopGoodsListFile', file)
+
+  try {
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        // 不设置Content-Type，让浏览器自动设置正确的multipart/form-data和边界
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: formData
+    })
+
+    console.log('Excel导入响应:', response)
+    return {
+      success: response && response.result,
+      message: response ? response.msg || '导入成功' : '导入失败',
+      data: response
+    }
+  } catch (error) {
+    console.error('导入商品Excel失败:', error)
+    return {
+      success: false,
+      message: `导入失败: ${error.message || '未知错误'}`,
+      error
+    }
+  }
+}
+
+/**
+ * 获取导入商品模板文件
+ * @returns {Promise<Blob>} 模板文件Blob对象
+ */
+export async function getProductImportTemplate() {
+  console.log('开始获取商品导入模板')
+  const url = `${BASE_URL}/product/downloadProductTemplate.do`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    const response = await fetchApi(url, {
+      method: 'GET',
+      headers: {
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      responseType: 'blob', // 指定响应类型为blob
+      params: { csrfToken } // 添加csrfToken作为URL参数
+    })
+
+    console.log('获取模板文件成功')
+    return response
+  } catch (error) {
+    console.error('获取导入模板失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 批量处理SKU，例如入库打标
+ * @param {Array<string>} skuList - SKU列表
+ * @param {Object} storeInfo - 店铺信息
+ * @returns {Promise<Object>} 处理结果
+ */
+export async function batchProcessSKUs(skuList, storeInfo) {
+  if (!skuList || !skuList.length) {
+    return { success: false, message: '未提供SKU列表' }
+  }
+
+  console.log(`开始批量处理${skuList.length}个SKU`)
+  const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${storeInfo.spShopNo || storeInfo.shopNo}&_r=${Math.random()}&=`
+
+  console.log('url', url)
+  console.log('storeInfo', storeInfo)
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 创建一个包含SKU列表的临时文件内容
+    const content = skuList.map((sku) => `${sku}\t${sku}\t${sku}\t0\tCMS4418047112894`).join('\n')
+    const headers =
+      'POP店铺商品编号（SKU编码）\t商家商品标识\t商品条码\t是否代销（0-否，1-是）\t供应商CMG编码'
+    const fileContent = headers + '\n' + content
+
+    // 创建文件对象
+    const blob = new Blob([fileContent], { type: 'application/vnd.ms-excel' })
+    const file = new File([blob], 'PopGoodsImportTemplate.xls', {
+      type: 'application/vnd.ms-excel'
+    })
+
+    // 调用文件导入API
+    const formData = new FormData()
+    formData.append('csrfToken', csrfToken)
+    formData.append('shopGoodsPopGoodsListFile', file)
+
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        // 不设置Content-Type，让浏览器自动设置正确的multipart/form-data和边界
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: formData
+    })
+
+    console.log('批量处理响应:', response)
+    return {
+      success: response && response.result,
+      message: response ? response.msg || '处理成功' : '处理失败',
+      data: response
+    }
+  } catch (error) {
+    console.error('批量处理SKU失败:', error)
+    return {
+      success: false,
+      message: `处理失败: ${error.message || '未知错误'}`,
+      error
+    }
+  }
+}
