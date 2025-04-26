@@ -546,6 +546,7 @@ const executeOneTask = async (index) => {
       try {
         console.log('执行[启用店铺商品]功能，单个SKU:', task.sku)
         console.log('选项状态 (useStore):', options.useStore)
+        console.log('选项状态 (importStore):', options.importStore)
 
         // 获取事业部信息
         const department = getSelectedDepartment()
@@ -578,6 +579,7 @@ const executeOneTask = async (index) => {
       try {
         console.log('执行[导入店铺商品]功能，单个SKU:', task.sku)
         console.log('选项状态 (importStore):', options.importStore)
+        console.log('选项状态 (useStore):', options.useStore)
 
         // 调用批量处理SKU的API
         const importResult = await batchProcessSKUs([task.sku], shopInfo)
@@ -1233,6 +1235,7 @@ const executeTask = async () => {
           try {
             console.log('执行[启用店铺商品]功能，SKU列表:', skuList)
             console.log('选项状态 (useStore):', options.useStore)
+            console.log('选项状态 (importStore):', options.importStore)
 
             // 获取事业部信息
             const department = getSelectedDepartment()
@@ -1264,6 +1267,7 @@ const executeTask = async () => {
           try {
             console.log('执行[导入店铺商品]功能，SKU列表:', skuList)
             console.log('选项状态 (importStore):', options.importStore)
+            console.log('选项状态 (useStore):', options.useStore)
 
             // 调用批量处理SKU的API
             const importResult = await batchProcessSKUs(skuList, shopInfo)
@@ -1439,7 +1443,30 @@ const executeTask = async () => {
     // 如果启用了"启用店铺商品"选项并找到了停用商品，则尝试启用它们
     if (form.value.options.useStore === true && allDisabledProducts.length > 0) {
       console.log(`找到${allDisabledProducts.length}个停用商品，准备启用它们`)
-      await enableDisabledProducts(allDisabledProducts)
+      try {
+        await enableDisabledProducts(allDisabledProducts)
+        console.log(`成功启用${allDisabledProducts.length}个停用商品`)
+
+        // 添加启用成功的消息到任务记录
+        taskList.value.push({
+          sku: `启用停用商品 (${allDisabledProducts.length}个)`,
+          店铺: currentShopInfo.value ? currentShopInfo.value.shopName : '未知店铺',
+          创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+          状态: '成功',
+          结果: `已启用${allDisabledProducts.length}个停用商品`
+        })
+      } catch (error) {
+        console.error('启用停用商品失败:', error)
+
+        // 添加启用失败的消息到任务记录
+        taskList.value.push({
+          sku: `启用停用商品 (${allDisabledProducts.length}个)`,
+          店铺: currentShopInfo.value ? currentShopInfo.value.shopName : '未知店铺',
+          创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+          状态: '失败',
+          结果: error.message || '启用商品时出错'
+        })
+      }
     }
 
     // 显示执行总结果
