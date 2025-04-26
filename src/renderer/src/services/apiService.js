@@ -644,3 +644,161 @@ async function serializeFormData(formData) {
     timeout: 120000
   }
 }
+
+/**
+ * 查询商品状态 - 检查是否有停用商品
+ * @param {Array<string>} skuList - 商品编号列表
+ * @param {Object} shopInfo - 店铺信息
+ * @param {Object} deptInfo - 事业部信息
+ * @returns {Promise<Array>} 停用商品列表
+ */
+export async function queryProductStatus(skuList, shopInfo, deptInfo) {
+  if (!skuList || skuList.length === 0) {
+    return { success: false, message: '未提供SKU列表', disabledItems: [] }
+  }
+
+  // 将SKU列表转换为英文逗号分隔的字符串
+  const skuString = skuList.join(',')
+
+  console.log(`开始查询${skuList.length}个SKU的状态`)
+  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 构建查询参数
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      ids: '',
+      shopId: '',
+      sellerId: deptInfo?.sellerId || '',
+      deptId: deptInfo?.id || '',
+      sellerNo: deptInfo?.sellerNo || '',
+      deptNo: deptInfo?.deptNo || '',
+      shopNo: shopInfo?.shopNo || '',
+      spSource: '',
+      shopGoodsName: '',
+      isCombination: '',
+      barcode: '',
+      jdDeliver: '',
+      sellerGoodsSigns: skuString,
+      spGoodsNos: '',
+      goodsNos: '',
+      isvGoodsNos: '',
+      status: '2', // 查询停用状态的商品
+      originSend: '',
+      aoData:
+        '[{"name":"sEcho","value":2},{"name":"iColumns","value":14},{"name":"sColumns","value":",,,,,,,,,,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":1000},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":1},{"name":"bSortable_1","value":false},{"name":"mDataProp_2","value":"shopGoodsName"},{"name":"bSortable_2","value":false},{"name":"mDataProp_3","value":"goodsNo"},{"name":"bSortable_3","value":false},{"name":"mDataProp_4","value":"spGoodsNo"},{"name":"bSortable_4","value":false},{"name":"mDataProp_5","value":"isvGoodsNo"},{"name":"bSortable_5","value":false},{"name":"mDataProp_6","value":"shopGoodsNo"},{"name":"bSortable_6","value":false},{"name":"mDataProp_7","value":"barcode"},{"name":"bSortable_7","value":false},{"name":"mDataProp_8","value":"shopName"},{"name":"bSortable_8","value":false},{"name":"mDataProp_9","value":"createTime"},{"name":"bSortable_9","value":false},{"name":"mDataProp_10","value":10},{"name":"bSortable_10","value":false},{"name":"mDataProp_11","value":"isCombination"},{"name":"bSortable_11","value":false},{"name":"mDataProp_12","value":"status"},{"name":"bSortable_12","value":false},{"name":"mDataProp_13","value":13},{"name":"bSortable_13","value":false},{"name":"iSortCol_0","value":9},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
+    })
+
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    console.log('商品状态查询响应:', response)
+
+    // 处理响应，提取停用商品列表
+    if (response && response.aaData) {
+      const disabledItems = response.aaData.map((item) => ({
+        id: item.id,
+        shopGoodsNo: item.shopGoodsNo,
+        sellerGoodsSign: item.sellerGoodsSign,
+        isvGoodsNo: item.isvGoodsNo,
+        spGoodsNo: item.spGoodsNo,
+        shopGoodsName: item.shopGoodsName,
+        status: item.status
+      }))
+
+      return {
+        success: true,
+        message: `查询到${disabledItems.length}个停用商品`,
+        disabledItems,
+        totalCount: response.iTotalRecords || disabledItems.length
+      }
+    } else {
+      return {
+        success: false,
+        message: '查询商品状态失败，未能解析响应数据',
+        disabledItems: []
+      }
+    }
+  } catch (error) {
+    console.error('查询商品状态失败:', error)
+    return {
+      success: false,
+      message: `查询商品状态失败: ${error.message || '未知错误'}`,
+      disabledItems: []
+    }
+  }
+}
+
+/**
+ * 启用店铺商品
+ * @param {Array} disabledItems - 停用商品列表
+ * @returns {Promise<Object>} 启用结果
+ */
+export async function enableShopProducts(disabledItems) {
+  if (!disabledItems || disabledItems.length === 0) {
+    return { success: false, message: '未提供需要启用的商品列表' }
+  }
+
+  console.log(`开始启用${disabledItems.length}个商品`)
+  const url = `${BASE_URL}/shopGoods/batchOnShopGoods.do`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 提取所有商品ID，转换为JSON字符串格式
+    const idsArray = disabledItems.map((item) => item.id)
+    const idsJsonString = JSON.stringify(idsArray)
+
+    // 构建请求数据
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      ids: idsJsonString
+    })
+
+    console.log('启用商品请求参数:', data)
+
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    console.log('启用商品响应:', response)
+
+    if (response && (response.result || response.resultCode === 1)) {
+      return {
+        success: true,
+        message: response.resultMessage || `成功启用${disabledItems.length}个商品`,
+        data: response
+      }
+    } else {
+      return {
+        success: false,
+        message: response?.resultMessage || response?.msg || '启用商品失败，未返回成功状态',
+        data: response
+      }
+    }
+  } catch (error) {
+    console.error('启用商品失败:', error)
+    return {
+      success: false,
+      message: `启用商品失败: ${error.message || '未知错误'}`,
+      error
+    }
+  }
+}

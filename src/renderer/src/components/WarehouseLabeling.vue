@@ -12,7 +12,13 @@ import {
   getSelectedDepartment,
   getSelectedVendor
 } from '../utils/storageHelper'
-import { getShopList, getWarehouseList, batchProcessSKUs } from '../services/apiService'
+import {
+  getShopList,
+  getWarehouseList,
+  batchProcessSKUs,
+  queryProductStatus,
+  enableShopProducts
+} from '../services/apiService'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 
@@ -56,7 +62,18 @@ const form = ref({
     importError: '',
     importSuccess: false
   },
-  uploadLogs: []
+  uploadLogs: [],
+  disabledProducts: {
+    items: [],
+    checking: false,
+    enabling: false,
+    checkError: '',
+    enableError: '',
+    checkSuccess: false,
+    enableSuccess: false,
+    currentBatch: 0,
+    totalBatches: 0
+  }
 })
 
 // 任务列表
@@ -454,6 +471,7 @@ const handleBatchImport = async () => {
     // 处理每一批
     let successCount = 0
     let failureCount = 0
+    const allDisabledProducts = [] // 用于存储所有批次中的停用商品
 
     // 循环处理每个批次
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -513,6 +531,22 @@ const handleBatchImport = async () => {
           taskList.value.push(batchTask)
           emit('add-task')
           successCount += batchSkus.length
+
+          // 如果启用了"启用店铺商品"选项，则检查商品状态并记录停用商品
+          if (form.value.options.useStore) {
+            try {
+              // 添加检查商品状态的任务
+              await checkProductStatus(
+                batchSkus,
+                batchIndex + 1,
+                batches.length,
+                allDisabledProducts
+              )
+            } catch (checkError) {
+              console.error(`检查商品状态失败: ${checkError.message}`, checkError)
+              logEntry.result += ` | 商品状态检查失败: ${checkError.message}`
+            }
+          }
         } else {
           // 更新日志状态
           logEntry.status = '失败'
@@ -622,6 +656,11 @@ const handleBatchImport = async () => {
       }
     }
 
+    // 如果启用了"启用店铺商品"选项并找到了停用商品，则尝试启用它们
+    if (form.value.options.useStore && allDisabledProducts.length > 0) {
+      await enableDisabledProducts(allDisabledProducts)
+    }
+
     // 显示执行总结果
     if (batches.length > 1) {
       // 多批次情况下的结果汇总
@@ -645,6 +684,189 @@ const handleBatchImport = async () => {
   } finally {
     // 移除状态指示器
     document.body.removeChild(statusDiv)
+  }
+}
+
+/**
+ * 检查批次中商品的状态，找出停用的商品
+ * @param {Array} batchSkus - 当前批次的SKU列表
+ * @param {Number} currentBatch - 当前批次索引
+ * @param {Number} totalBatches - 总批次数
+ * @param {Array} allDisabledProducts - 所有批次中的停用商品
+ */
+const checkProductStatus = async (batchSkus, currentBatch, totalBatches, allDisabledProducts) => {
+  if (!form.value.options.useStore) return
+
+  // 重置状态
+  form.value.disabledProducts.checking = true
+  form.value.disabledProducts.currentBatch = currentBatch
+  form.value.disabledProducts.totalBatches = totalBatches
+  form.value.disabledProducts.checkError = ''
+
+  console.log(`开始检查批次 ${currentBatch}/${totalBatches} 的商品状态`)
+
+  try {
+    // 获取事业部和店铺信息
+    const department = getSelectedDepartment()
+    const shopInfo = currentShopInfo.value
+
+    if (!department || !shopInfo) {
+      throw new Error('缺少事业部或店铺信息')
+    }
+
+    // 将SKU按1000个一组进行分割
+    const QUERY_BATCH_SIZE = 1000
+    const skuGroups = []
+
+    for (let i = 0; i < batchSkus.length; i += QUERY_BATCH_SIZE) {
+      skuGroups.push(batchSkus.slice(i, i + QUERY_BATCH_SIZE))
+    }
+
+    console.log(`将${batchSkus.length}个SKU分成${skuGroups.length}组进行状态查询`)
+
+    // 遍历每个SKU组，查询状态
+    for (let groupIndex = 0; groupIndex < skuGroups.length; groupIndex++) {
+      const skuGroup = skuGroups[groupIndex]
+      console.log(
+        `查询第${groupIndex + 1}/${skuGroups.length}组SKU状态，包含${skuGroup.length}个SKU`
+      )
+
+      // 调用API查询商品状态
+      const statusResult = await queryProductStatus(skuGroup, shopInfo, department)
+
+      if (statusResult.success && statusResult.disabledItems.length > 0) {
+        console.log(`发现${statusResult.disabledItems.length}个停用商品`)
+
+        // 将找到的停用商品添加到全局列表
+        allDisabledProducts.push(...statusResult.disabledItems)
+
+        // 更新UI状态
+        form.value.disabledProducts.items = allDisabledProducts
+        form.value.disabledProducts.checkSuccess = true
+      } else if (!statusResult.success) {
+        form.value.disabledProducts.checkError = statusResult.message
+        console.warn(`查询商品状态出错: ${statusResult.message}`)
+      }
+
+      // 如果不是最后一组，添加短暂延迟避免频繁请求
+      if (groupIndex < skuGroups.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+    }
+
+    console.log(
+      `批次${currentBatch}/${totalBatches}状态检查完成，累计发现${allDisabledProducts.length}个停用商品`
+    )
+  } catch (error) {
+    console.error('检查商品状态失败:', error)
+    form.value.disabledProducts.checkError = error.message || '检查商品状态时出错'
+    throw error
+  } finally {
+    // 如果这是最后一个批次，结束检查状态
+    if (currentBatch === totalBatches) {
+      form.value.disabledProducts.checking = false
+    }
+  }
+}
+
+/**
+ * 启用停用状态的商品
+ * @param {Array} disabledProducts - 停用商品列表
+ */
+const enableDisabledProducts = async (disabledProducts) => {
+  if (!disabledProducts || disabledProducts.length === 0) {
+    console.log('没有需要启用的商品')
+    return
+  }
+
+  form.value.disabledProducts.enabling = true
+  form.value.disabledProducts.enableError = ''
+
+  console.log(`开始启用${disabledProducts.length}个停用商品`)
+
+  try {
+    // 将商品分批启用，每批最多50个
+    const ENABLE_BATCH_SIZE = 50
+    const batches = []
+
+    for (let i = 0; i < disabledProducts.length; i += ENABLE_BATCH_SIZE) {
+      batches.push(disabledProducts.slice(i, i + ENABLE_BATCH_SIZE))
+    }
+
+    let enabledCount = 0
+    let failedCount = 0
+
+    // 循环处理每个批次
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      console.log(`启用批次${batchIndex + 1}/${batches.length}，包含${batch.length}个商品`)
+
+      try {
+        // 调用API启用商品
+        const enableResult = await enableShopProducts(batch)
+
+        if (enableResult.success) {
+          enabledCount += batch.length
+          console.log(
+            `成功启用${batch.length}个商品，总计: ${enabledCount}/${disabledProducts.length}`
+          )
+        } else {
+          failedCount += batch.length
+          console.warn(`启用失败：${enableResult.message}`)
+          form.value.disabledProducts.enableError = enableResult.message
+        }
+      } catch (error) {
+        failedCount += batch.length
+        console.error(`启用批次${batchIndex + 1}出错:`, error)
+        form.value.disabledProducts.enableError = error.message || '启用商品时出错'
+      }
+
+      // 如果不是最后一批，添加短暂延迟避免频繁请求
+      if (batchIndex < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+
+    // 更新状态
+    form.value.disabledProducts.enableSuccess = enabledCount > 0
+
+    // 添加一条启用商品的任务记录
+    if (enabledCount > 0) {
+      taskList.value.push({
+        sku: `启用商品操作 (${enabledCount}/${disabledProducts.length}个商品)`,
+        店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
+        仓库: currentWarehouseInfo.value
+          ? currentWarehouseInfo.value.warehouseName
+          : form.value.selectedWarehouse,
+        创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+        状态: failedCount > 0 ? '部分成功' : '成功',
+        结果:
+          failedCount > 0
+            ? `成功启用${enabledCount}个商品，${failedCount}个失败`
+            : `成功启用${enabledCount}个商品`
+      })
+
+      emit('add-task')
+    }
+
+    console.log(`启用商品操作完成，成功: ${enabledCount}，失败: ${failedCount}`)
+
+    // 如果有启用失败的商品，显示提示
+    if (failedCount > 0) {
+      alert(
+        `部分商品启用失败：成功启用${enabledCount}个，${failedCount}个失败。\n${form.value.disabledProducts.enableError}`
+      )
+    } else if (enabledCount > 0) {
+      alert(`成功启用所有${enabledCount}个停用商品。`)
+    }
+  } catch (error) {
+    console.error('启用商品失败:', error)
+    form.value.disabledProducts.enableError = error.message || '启用商品过程中出错'
+    alert(`启用商品失败: ${error.message || '未知错误'}`)
+  } finally {
+    form.value.disabledProducts.enabling = false
+    // 清空商品列表
+    form.value.disabledProducts.items = []
   }
 }
 
@@ -1101,6 +1323,16 @@ const switchTab = (tab) => {
             <div :class="['tab', { active: activeTab === 'logs' }]" @click="switchTab('logs')">
               提交日志
             </div>
+            <div
+              :class="['tab', { active: activeTab === 'products' }]"
+              @click="switchTab('products')"
+              v-if="form.disabledProducts.items.length > 0 || form.disabledProducts.checking"
+            >
+              停用商品
+              <span v-if="form.disabledProducts.items.length > 0" class="badge">{{
+                form.disabledProducts.items.length
+              }}</span>
+            </div>
           </div>
           <div class="tab-content">
             <div :class="['tab-pane', { active: activeTab === 'tasks' }]">
@@ -1184,6 +1416,62 @@ const switchTab = (tab) => {
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div :class="['tab-pane', { active: activeTab === 'products' }]">
+              <div v-if="form.disabledProducts.checking" class="status-checking">
+                <div class="spinner"></div>
+                <div>
+                  正在检查商品状态 (批次 {{ form.disabledProducts.currentBatch }}/{{
+                    form.disabledProducts.totalBatches
+                  }})...
+                </div>
+              </div>
+
+              <div v-if="form.disabledProducts.checkError" class="error-message">
+                {{ form.disabledProducts.checkError }}
+              </div>
+
+              <div v-if="form.disabledProducts.items.length > 0" class="disabled-products-actions">
+                <button
+                  class="btn btn-primary"
+                  @click="enableDisabledProducts(form.disabledProducts.items)"
+                  :disabled="form.disabledProducts.enabling"
+                >
+                  {{ form.disabledProducts.enabling ? '正在启用...' : '启用所有停用商品' }}
+                </button>
+                <span>共发现 {{ form.disabledProducts.items.length }} 个停用商品</span>
+              </div>
+
+              <table class="task-table" v-if="form.disabledProducts.items.length > 0">
+                <thead>
+                  <tr>
+                    <th style="width: 40px"><input type="checkbox" /></th>
+                    <th>商品编号</th>
+                    <th>商品名称</th>
+                    <th>系统编号</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, index) in form.disabledProducts.items" :key="index">
+                    <td><input type="checkbox" /></td>
+                    <td>{{ item.sellerGoodsSign || item.isvGoodsNo }}</td>
+                    <td>{{ item.shopGoodsName }}</td>
+                    <td>{{ item.shopGoodsNo }}</td>
+                    <td>
+                      <span class="status-tag failure">停用</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div v-else-if="!form.disabledProducts.checking" class="no-data">
+                没有发现停用商品
+              </div>
+
+              <div v-if="form.disabledProducts.enableError" class="error-message">
+                启用错误: {{ form.disabledProducts.enableError }}
+              </div>
             </div>
           </div>
         </div>
@@ -1744,5 +2032,49 @@ const switchTab = (tab) => {
 .status-countdown {
   color: #ff9800;
   font-weight: 500;
+}
+
+/* 停用商品相关样式 */
+.status-checking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #2196f3;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.error-message {
+  color: #f56c6c;
+  padding: 10px;
+  background-color: #fef0f0;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.disabled-products-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.badge {
+  background-color: #f56c6c;
+  color: white;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 12px;
+  margin-left: 5px;
 }
 </style>
