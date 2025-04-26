@@ -454,7 +454,7 @@ export async function batchProcessSKUs(skuList, storeInfo) {
   console.log(`开始批量处理${skuList.length}个SKU`)
   // 使用与原始请求完全相同的URL格式
   const spShopNo = storeInfo.spShopNo || storeInfo.shopNo || '18661988' // 默认值用于测试
-  const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}&=`
+  const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
 
   console.log('url', url)
   console.log('storeInfo', storeInfo)

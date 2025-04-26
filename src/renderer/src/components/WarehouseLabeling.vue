@@ -378,7 +378,7 @@ onMounted(() => {
 })
 
 // 批量导入并执行
-const handleBatchImport = () => {
+const handleBatchImport = async () => {
   if (!form.value.sku) {
     alert('请输入SKU')
     return
@@ -394,12 +394,181 @@ const handleBatchImport = () => {
     return
   }
 
-  // 添加任务并获取添加的任务数量
-  const addedTasksCount = addTask()
+  // 分割多行输入，处理每个SKU
+  const skuList = form.value.sku
+    .split('\n')
+    .filter((sku) => sku.trim() !== '')
+    .map((sku) => sku.trim())
 
-  if (addedTasksCount > 0) {
-    // 自动执行任务
-    executeTask()
+  if (skuList.length === 0) {
+    alert('请输入有效的SKU')
+    return
+  }
+
+  // 检查是否需要分批处理
+  const BATCH_SIZE = 2000 // 每批最大SKU数量
+  const batches = []
+
+  // 分批处理
+  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+    batches.push(skuList.slice(i, i + BATCH_SIZE))
+  }
+
+  console.log(`SKU总数: ${skuList.length}, 分成${batches.length}批处理`)
+
+  // 如果超过一个批次，先提示用户
+  if (batches.length > 1) {
+    const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}批提交。\n点击确定开始处理所有批次。`
+    if (!confirm(confirmMessage)) {
+      return
+    }
+  }
+
+  // 显示操作状态指示器
+  const statusDiv = document.createElement('div')
+  statusDiv.className = 'batch-processing-status'
+
+  if (batches.length > 1) {
+    statusDiv.innerHTML = `<div class="status-content">
+      <div class="status-spinner"></div>
+      <div class="status-text">正在处理批次: 0/${batches.length}</div>
+    </div>`
+  } else {
+    statusDiv.innerHTML = `<div class="status-content">
+      <div class="status-spinner"></div>
+      <div class="status-text">正在提交SKU数据，请稍候...</div>
+    </div>`
+  }
+
+  document.body.appendChild(statusDiv)
+
+  try {
+    // 处理每一批
+    let successCount = 0
+    let failureCount = 0
+
+    // 循环处理每个批次
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batchSkus = batches[batchIndex]
+      console.log(`处理批次 ${batchIndex + 1}/${batches.length}, 包含${batchSkus.length}个SKU`)
+
+      // 更新状态指示器
+      if (batches.length > 1) {
+        statusDiv.querySelector('.status-text').textContent =
+          `正在处理批次: ${batchIndex + 1}/${batches.length}`
+      }
+
+      try {
+        // 获取店铺信息
+        const shopInfo = currentShopInfo.value
+
+        if (!shopInfo) {
+          throw new Error('请选择店铺')
+        }
+
+        // 使用文件上传方式进行批处理
+        const result = await batchProcessSKUs(batchSkus, shopInfo)
+
+        // 为此批次添加一条汇总记录
+        const batchTask = {
+          sku:
+            batches.length > 1
+              ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
+              : `批量提交 (${batchSkus.length}个SKU)`,
+          店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
+          仓库: currentWarehouseInfo.value
+            ? currentWarehouseInfo.value.warehouseName
+            : form.value.selectedWarehouse,
+          创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+          状态: result.success ? '成功' : '失败',
+          结果: result.message || (result.success ? '成功导入' : '导入失败')
+        }
+
+        taskList.value.push(batchTask)
+        emit('add-task')
+
+        if (result.success) {
+          successCount += batchSkus.length
+        } else {
+          failureCount += batchSkus.length
+
+          // 如果是关键错误，考虑中断后续批次处理
+          if (
+            result.message &&
+            (result.message.includes('登录') ||
+              result.message.includes('权限') ||
+              result.message.includes('会话'))
+          ) {
+            throw new Error(result.message)
+          }
+        }
+
+        // 如果不是最后一批，添加一个短暂的延迟
+        if (batchIndex < batches.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+      } catch (error) {
+        console.error(`批次${batchIndex + 1}执行失败:`, error)
+
+        // 为此批次添加一条失败的汇总记录
+        taskList.value.push({
+          sku:
+            batches.length > 1
+              ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
+              : `批量提交 (${batchSkus.length}个SKU)`,
+          店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
+          仓库: currentWarehouseInfo.value
+            ? currentWarehouseInfo.value.warehouseName
+            : form.value.selectedWarehouse,
+          创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+          状态: '失败',
+          结果: error.message || '执行出错'
+        })
+
+        emit('add-task')
+        failureCount += batchSkus.length
+
+        // 如果是致命错误，中断后续批次处理
+        if (
+          error.message &&
+          (error.message.includes('登录') ||
+            error.message.includes('权限') ||
+            error.message.includes('会话'))
+        ) {
+          alert(`批次${batchIndex + 1}执行失败: ${error.message}。\n将停止后续批次处理。`)
+          break
+        } else if (batches.length > 1) {
+          // 多批次时才显示错误提示，单批次会在最后统一提示
+          alert(
+            `批次${batchIndex + 1}执行失败: ${error.message || '未知错误'}。\n将继续处理剩余批次。`
+          )
+        }
+      }
+    }
+
+    // 显示执行总结果
+    if (batches.length > 1) {
+      // 多批次情况下的结果汇总
+      if (failureCount > 0) {
+        if (successCount > 0) {
+          alert(`处理完成，部分成功：\n成功: ${successCount}个SKU\n失败: ${failureCount}个SKU`)
+        } else {
+          alert(`处理失败：所有${failureCount}个SKU均未成功提交`)
+        }
+      } else {
+        alert(`处理成功：全部${successCount}个SKU已成功提交`)
+      }
+    } else {
+      // 单批次情况下，根据结果显示消息
+      if (failureCount > 0) {
+        alert(`提交失败：${failureCount}个SKU未能成功提交`)
+      } else {
+        alert(`提交成功：${successCount}个SKU已成功提交`)
+      }
+    }
+  } finally {
+    // 移除状态指示器
+    document.body.removeChild(statusDiv)
   }
 }
 
@@ -469,7 +638,10 @@ const downloadTestExcel = async () => {
   }
 
   // 分割多行输入，处理每个SKU
-  const skuList = form.value.sku.split('\n').filter((sku) => sku.trim() !== '')
+  const skuList = form.value.sku
+    .split('\n')
+    .filter((sku) => sku.trim() !== '')
+    .map((sku) => sku.trim())
 
   if (skuList.length === 0) {
     alert('请输入有效的SKU')
@@ -485,58 +657,146 @@ const downloadTestExcel = async () => {
         : 'CMS4418047112894'
     console.log('获取供应商编码:', cmgCode)
 
-    // 字段名
-    const header = [
-      'POP店铺商品编号（SKU编码）',
-      '商家商品标识',
-      '商品条码',
-      '是否代销（0-否，1-是）',
-      '供应商CMG编码'
-    ]
+    // 检查是否需要分批处理
+    const BATCH_SIZE = 2000 // 每批最大SKU数量
+    const batches = []
 
-    // 实际表格内容
-    const data = skuList.map((sku) => [sku, sku, sku, '0', cmgCode])
-
-    // 合成数据（首行为 header）
-    const sheetData = [header, ...data]
-
-    // 生成 worksheet
-    const ws = XLSX.utils.aoa_to_sheet(sheetData)
-
-    // 创建 workbook 并追加 worksheet
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'POP商品导入')
-
-    // 生成Excel二进制数据
-    const excelBinaryData = XLSX.write(wb, { bookType: 'xls', type: 'binary' })
-
-    // 将二进制字符串转换为ArrayBuffer
-    const buf = new ArrayBuffer(excelBinaryData.length)
-    const view = new Uint8Array(buf)
-    for (let i = 0; i < excelBinaryData.length; i++) {
-      view[i] = excelBinaryData.charCodeAt(i) & 0xff
+    // 分批处理
+    for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+      batches.push(skuList.slice(i, i + BATCH_SIZE))
     }
 
-    // 创建Blob对象
-    const blob = new Blob([buf], { type: 'application/vnd.ms-excel' })
+    console.log(`SKU总数: ${skuList.length}, 分成${batches.length}批处理`)
 
-    // 创建下载链接
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'PopGoodsImportTemplate.xls')
-    document.body.appendChild(link)
-    link.click()
+    // 如果超过一个批次，先提示用户
+    if (batches.length > 1) {
+      const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}个Excel文件下载。\n点击确定开始下载所有文件。`
+      if (!confirm(confirmMessage)) {
+        return
+      }
+    }
 
-    // 清理
-    URL.revokeObjectURL(url)
-    document.body.removeChild(link)
+    // 创建所有批次的下载链接
+    const downloadLinks = []
 
-    console.log('Excel文件下载成功')
+    // 处理每一批
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batchSkus = batches[batchIndex]
+
+      // 字段名
+      const header = [
+        'POP店铺商品编号（SKU编码）',
+        '商家商品标识',
+        '商品条码',
+        '是否代销（0-否，1-是）',
+        '供应商CMG编码'
+      ]
+
+      // 实际表格内容
+      const data = batchSkus.map((sku) => [sku, sku, sku, '0', cmgCode])
+
+      // 合成数据（首行为 header）
+      const sheetData = [header, ...data]
+
+      // 生成 worksheet
+      const ws = XLSX.utils.aoa_to_sheet(sheetData)
+
+      // 创建 workbook 并追加 worksheet
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'POP商品导入')
+
+      // 生成Excel二进制数据
+      const excelBinaryData = XLSX.write(wb, { bookType: 'xls', type: 'binary' })
+
+      // 将二进制字符串转换为ArrayBuffer
+      const buf = new ArrayBuffer(excelBinaryData.length)
+      const view = new Uint8Array(buf)
+      for (let i = 0; i < excelBinaryData.length; i++) {
+        view[i] = excelBinaryData.charCodeAt(i) & 0xff
+      }
+
+      // 创建Blob对象
+      const blob = new Blob([buf], { type: 'application/vnd.ms-excel' })
+
+      // 创建下载链接
+      const url = URL.createObjectURL(blob)
+
+      // 如果有多批，为文件名添加批次编号
+      const fileName =
+        batches.length > 1
+          ? `PopGoodsImportTemplate_batch${batchIndex + 1}_of_${batches.length}.xls`
+          : 'PopGoodsImportTemplate.xls'
+
+      // 保存下载链接信息
+      downloadLinks.push({ url, fileName, batchIndex })
+    }
+
+    // 逐个触发下载
+    for (let i = 0; i < downloadLinks.length; i++) {
+      const { url, fileName, batchIndex } = downloadLinks[i]
+
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', fileName)
+      link.style.display = 'none'
+      document.body.appendChild(link)
+
+      // 触发点击
+      link.click()
+
+      // 等待一段时间再清理资源和触发下一个下载
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // 清理
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      console.log(`批次 ${batchIndex + 1}/${batches.length} Excel文件下载成功`)
+    }
+
+    if (batches.length > 1) {
+      alert(`已成功创建${batches.length}个Excel文件，请检查您的下载文件夹。`)
+    }
   } catch (error) {
     console.error('创建Excel文件失败:', error)
     alert(`创建Excel文件失败: ${error.message || '未知错误'}`)
   }
+}
+
+// 处理文件上传
+const handleFileUpload = (event) => {
+  const file = event.target.files[0]
+  if (file) {
+    form.value.fileImport.file = file
+    form.value.fileImport.fileName = file.name
+    form.value.fileImport.importing = true
+    form.value.fileImport.importError = ''
+    form.value.fileImport.importSuccess = false
+
+    // 读取文件内容
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target.result
+      form.value.sku = text
+      form.value.fileImport.importing = false
+      form.value.fileImport.importSuccess = true
+    }
+    reader.onerror = (e) => {
+      form.value.fileImport.importing = false
+      form.value.fileImport.importError = e.target.error.message
+    }
+    reader.readAsText(file)
+  }
+}
+
+// 清除文件输入
+const clearFileInput = () => {
+  form.value.fileImport.file = null
+  form.value.fileImport.fileName = ''
+  form.value.fileImport.importing = false
+  form.value.fileImport.importError = ''
+  form.value.fileImport.importSuccess = false
+  form.value.sku = ''
 }
 </script>
 
@@ -563,10 +823,30 @@ const downloadTestExcel = async () => {
             rows="5"
           ></textarea>
         </div>
+        <div class="file-upload-container">
+          <input
+            type="file"
+            id="skuFile"
+            ref="fileInput"
+            accept=".txt"
+            @change="handleFileUpload"
+            class="file-input"
+          />
+          <label for="skuFile" class="file-upload-label">
+            <span class="upload-icon">+</span>
+            <span>导入SKU文件</span>
+          </label>
+          <div v-if="form.fileImport.fileName" class="file-name">
+            已选择: {{ form.fileImport.fileName }}
+            <span class="file-remove" @click="clearFileInput">&times;</span>
+          </div>
+        </div>
         <div class="import-actions">
           <button class="btn btn-primary" @click="handleBatchImport">导入并执行</button>
           <button class="btn btn-default" @click="downloadTestExcel">下载Excel</button>
-          <small class="import-tip">每行一个SKU，直接导入并自动执行任务</small>
+          <small class="import-tip"
+            >每行一个SKU，直接导入并自动执行任务。文件超过2000个SKU会自动分批处理。</small
+          >
         </div>
       </div>
 
@@ -823,6 +1103,7 @@ const downloadTestExcel = async () => {
   color: #909399;
   margin-top: 5px;
   flex-basis: 100%;
+  font-size: 12px;
 }
 
 .select-wrapper {
@@ -1168,7 +1449,100 @@ const downloadTestExcel = async () => {
 }
 
 .import-tip {
-  color: #999;
+  color: #909399;
+  margin-top: 5px;
+  flex-basis: 100%;
   font-size: 12px;
+}
+
+.file-upload-container {
+  margin: 10px 0;
+  position: relative;
+}
+
+.file-upload-label {
+  display: inline-block;
+  background-color: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-right: 10px;
+  cursor: pointer;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.file-upload-label:hover {
+  background-color: #e9ecef;
+}
+
+.file-name {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.file-remove {
+  cursor: pointer;
+  color: #ff4d4f;
+}
+
+.upload-icon {
+  margin-right: 5px;
+}
+
+/* 批处理状态指示器样式 */
+.batch-processing-status {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.status-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.status-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #2196f3;
+  border-radius: 50%;
+  margin-bottom: 15px;
+  animation: spin 1s linear infinite;
+}
+
+.status-text {
+  font-size: 16px;
+  color: #333;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>
