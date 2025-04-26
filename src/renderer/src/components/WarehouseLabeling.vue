@@ -14,6 +14,7 @@ import {
 } from '../utils/storageHelper'
 import { getShopList, getWarehouseList, batchProcessSKUs } from '../services/apiService'
 import * as XLSX from 'xlsx'
+import JSZip from 'jszip'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -670,92 +671,121 @@ const downloadTestExcel = async () => {
 
     // 如果超过一个批次，先提示用户
     if (batches.length > 1) {
-      const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}个Excel文件下载。\n点击确定开始下载所有文件。`
+      const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}批。\n所有文件将打包为一个zip文件下载。`
       if (!confirm(confirmMessage)) {
         return
       }
     }
 
-    // 创建所有批次的下载链接
-    const downloadLinks = []
+    // 显示加载指示器
+    const statusDiv = document.createElement('div')
+    statusDiv.className = 'batch-processing-status'
+    statusDiv.innerHTML = `<div class="status-content">
+      <div class="status-spinner"></div>
+      <div class="status-text">正在生成Excel文件，请稍候...</div>
+    </div>`
+    document.body.appendChild(statusDiv)
 
-    // 处理每一批
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batchSkus = batches[batchIndex]
+    try {
+      // 创建一个JSZip实例
+      const zip = new JSZip()
 
-      // 字段名
-      const header = [
-        'POP店铺商品编号（SKU编码）',
-        '商家商品标识',
-        '商品条码',
-        '是否代销（0-否，1-是）',
-        '供应商CMG编码'
-      ]
+      // 处理每一批
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batchSkus = batches[batchIndex]
 
-      // 实际表格内容
-      const data = batchSkus.map((sku) => [sku, sku, sku, '0', cmgCode])
+        // 更新状态显示
+        if (batches.length > 1) {
+          statusDiv.querySelector('.status-text').textContent =
+            `正在生成Excel文件 ${batchIndex + 1}/${batches.length}...`
+        }
 
-      // 合成数据（首行为 header）
-      const sheetData = [header, ...data]
+        // 字段名
+        const header = [
+          'POP店铺商品编号（SKU编码）',
+          '商家商品标识',
+          '商品条码',
+          '是否代销（0-否，1-是）',
+          '供应商CMG编码'
+        ]
 
-      // 生成 worksheet
-      const ws = XLSX.utils.aoa_to_sheet(sheetData)
+        // 实际表格内容
+        const data = batchSkus.map((sku) => [sku, sku, sku, '0', cmgCode])
 
-      // 创建 workbook 并追加 worksheet
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'POP商品导入')
+        // 合成数据（首行为 header）
+        const sheetData = [header, ...data]
 
-      // 生成Excel二进制数据
-      const excelBinaryData = XLSX.write(wb, { bookType: 'xls', type: 'binary' })
+        // 生成 worksheet
+        const ws = XLSX.utils.aoa_to_sheet(sheetData)
 
-      // 将二进制字符串转换为ArrayBuffer
-      const buf = new ArrayBuffer(excelBinaryData.length)
-      const view = new Uint8Array(buf)
-      for (let i = 0; i < excelBinaryData.length; i++) {
-        view[i] = excelBinaryData.charCodeAt(i) & 0xff
+        // 创建 workbook 并追加 worksheet
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'POP商品导入')
+
+        // 生成Excel二进制数据
+        const excelBinaryData = XLSX.write(wb, { bookType: 'xls', type: 'binary' })
+
+        // 将二进制字符串转换为ArrayBuffer
+        const buf = new ArrayBuffer(excelBinaryData.length)
+        const view = new Uint8Array(buf)
+        for (let i = 0; i < excelBinaryData.length; i++) {
+          view[i] = excelBinaryData.charCodeAt(i) & 0xff
+        }
+
+        // 文件名
+        const fileName =
+          batches.length > 1
+            ? `PopGoodsImportTemplate_batch${batchIndex + 1}_of_${batches.length}.xls`
+            : 'PopGoodsImportTemplate.xls'
+
+        // 添加到zip
+        if (batches.length > 1) {
+          zip.file(fileName, buf)
+        } else {
+          // 单个文件直接下载
+          const blob = new Blob([buf], { type: 'application/vnd.ms-excel' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.setAttribute('download', fileName)
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+        }
+
+        // 添加短暂延迟以避免UI卡顿
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
-      // 创建Blob对象
-      const blob = new Blob([buf], { type: 'application/vnd.ms-excel' })
+      // 如果有多个批次，生成并下载zip文件
+      if (batches.length > 1) {
+        statusDiv.querySelector('.status-text').textContent = `正在打包文件，请稍候...`
 
-      // 创建下载链接
-      const url = URL.createObjectURL(blob)
+        // 生成zip文件
+        const zipContent = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        })
 
-      // 如果有多批，为文件名添加批次编号
-      const fileName =
-        batches.length > 1
-          ? `PopGoodsImportTemplate_batch${batchIndex + 1}_of_${batches.length}.xls`
-          : 'PopGoodsImportTemplate.xls'
+        // 下载zip文件
+        const zipUrl = URL.createObjectURL(zipContent)
+        const link = document.createElement('a')
+        link.href = zipUrl
+        link.setAttribute('download', `PopGoodsImportTemplate_${skuList.length}SKUs.zip`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(zipUrl)
 
-      // 保存下载链接信息
-      downloadLinks.push({ url, fileName, batchIndex })
-    }
-
-    // 逐个触发下载
-    for (let i = 0; i < downloadLinks.length; i++) {
-      const { url, fileName, batchIndex } = downloadLinks[i]
-
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', fileName)
-      link.style.display = 'none'
-      document.body.appendChild(link)
-
-      // 触发点击
-      link.click()
-
-      // 等待一段时间再清理资源和触发下一个下载
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // 清理
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-
-      console.log(`批次 ${batchIndex + 1}/${batches.length} Excel文件下载成功`)
-    }
-
-    if (batches.length > 1) {
-      alert(`已成功创建${batches.length}个Excel文件，请检查您的下载文件夹。`)
+        console.log(`已打包${batches.length}个Excel文件为zip下载`)
+      } else {
+        console.log('Excel文件下载成功')
+      }
+    } finally {
+      // 移除状态指示器
+      document.body.removeChild(statusDiv)
     }
   } catch (error) {
     console.error('创建Excel文件失败:', error)
