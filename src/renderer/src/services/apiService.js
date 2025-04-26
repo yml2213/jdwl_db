@@ -464,7 +464,7 @@ export async function getProductImportTemplate() {
 }
 
 /**
- * 批量处理SKU，例如入库打标
+ * 批量处理SKU列表，包括导入到店铺等操作
  * @param {Array<string>} skuList - SKU列表
  * @param {Object} storeInfo - 店铺信息
  * @returns {Promise<Object>} 处理结果
@@ -474,13 +474,18 @@ export async function batchProcessSKUs(skuList, storeInfo) {
     return { success: false, message: '未提供SKU列表' }
   }
 
-  console.log(`开始批量处理${skuList.length}个SKU`)
+  console.log(`============== batchProcessSKUs 函数被调用 ==============`)
+  console.log(`开始批量处理${skuList.length}个SKU`, skuList)
   // 使用与原始请求完全相同的URL格式
   const spShopNo = storeInfo.spShopNo || storeInfo.shopNo || '18661988' // 默认值用于测试
   const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
 
-  console.log('url', url)
-  console.log('storeInfo', storeInfo)
+  console.log('导入接口URL:', url)
+  console.log('店铺信息:', storeInfo)
+
+  // 打印调用栈，帮助排查调用来源
+  console.log('调用栈:', new Error().stack)
+
   const csrfToken = await getCsrfToken()
   console.log('csrfToken', csrfToken)
 
@@ -657,11 +662,20 @@ export async function queryProductStatus(skuList, shopInfo, deptInfo) {
     return { success: false, message: '未提供SKU列表', disabledItems: [] }
   }
 
+  console.log(`============== queryProductStatus 函数被调用 ==============`)
+  console.log('skuList', skuList)
+  console.log('shopInfo', shopInfo)
+  console.log('deptInfo', deptInfo)
+
+  // 打印调用栈，帮助排查调用来源
+  console.log('调用栈:', new Error().stack)
+
   // 将SKU列表转换为英文逗号分隔的字符串
   const skuString = skuList.join(',')
 
   console.log(`开始查询${skuList.length}个SKU的状态`)
   const baseUrl = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+  console.log('查询接口URL:', baseUrl)
   const csrfToken = await getCsrfToken()
 
   try {

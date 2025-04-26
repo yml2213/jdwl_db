@@ -140,6 +140,7 @@ async function sendRequest(url, options = {}) {
     const response = await axiosInstance(axiosOptions)
 
     console.log('响应状态:', response.status)
+    console.log('响应数据:', response.data)
 
     // 根据响应类型决定如何处理响应
     let result

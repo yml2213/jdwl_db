@@ -222,118 +222,6 @@ const loadWarehouses = async () => {
   }
 }
 
-// 添加任务方法
-const addTask = () => {
-  if (!form.value.sku) {
-    alert('请输入SKU')
-    return
-  }
-
-  if (!form.value.selectedStore) {
-    alert('请选择店铺')
-    return
-  }
-
-  if (!form.value.selectedWarehouse) {
-    alert('请选择仓库')
-    return
-  }
-
-  const shopInfo = currentShopInfo.value
-  const warehouseInfo = currentWarehouseInfo.value
-
-  // 分割多行输入，处理每个SKU
-  const skuList = form.value.sku.split('\n').filter((sku) => sku.trim() !== '')
-
-  if (skuList.length === 0) {
-    alert('请输入有效的SKU')
-    return
-  }
-
-  // 批量添加任务
-  skuList.forEach((sku) => {
-    taskList.value.push({
-      sku: sku.trim(),
-      店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
-      仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
-      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-      状态: '等待中'
-    })
-  })
-
-  // 清空SKU输入
-  form.value.sku = ''
-
-  // 通知父组件
-  emit('add-task')
-
-  return skuList.length
-}
-
-// 执行任务
-const executeTask = async () => {
-  // 过滤出所有等待中的任务
-  const waitingTasks = taskList.value.filter((task) => task.状态 === '等待中')
-  if (waitingTasks.length === 0) {
-    alert('没有等待中的任务')
-    return
-  }
-
-  // 获取店铺信息
-  const shopInfo = currentShopInfo.value
-
-  if (!shopInfo) {
-    alert('请选择店铺')
-    return
-  }
-
-  // 确保店铺信息包含spShopNo属性
-  if (!shopInfo.spShopNo) {
-    console.log('注意: 店铺信息中缺少spShopNo属性，将使用shopNo代替')
-    // 为防止服务器报错，添加一个兼容处理
-    if (shopInfo.shopNo) {
-      console.log('使用shopNo:', shopInfo.shopNo)
-    }
-  } else {
-    console.log('使用店铺spShopNo:', shopInfo.spShopNo)
-  }
-
-  // 将所有等待中的任务标记为执行中
-  waitingTasks.forEach((task) => {
-    task.状态 = '执行中'
-  })
-
-  // 获取所有等待中任务的SKU列表
-  const skuList = waitingTasks.map((task) => task.sku)
-
-  try {
-    // 调用批量处理API
-    const result = await batchProcessSKUs(skuList, shopInfo)
-
-    // 更新任务状态
-    if (result.success) {
-      waitingTasks.forEach((task) => {
-        task.状态 = '成功'
-        task.结果 = result.message || '成功导入'
-      })
-    } else {
-      waitingTasks.forEach((task) => {
-        task.状态 = '失败'
-        task.结果 = result.message || '导入失败'
-      })
-    }
-  } catch (error) {
-    console.error('批量执行任务失败:', error)
-    waitingTasks.forEach((task) => {
-      task.状态 = '失败'
-      task.结果 = error.message || '执行出错'
-    })
-  }
-
-  // 通知父组件
-  emit('execute-task')
-}
-
 // 清空任务列表
 const clearTasks = () => {
   taskList.value = []
@@ -399,294 +287,6 @@ onMounted(() => {
     loadWarehouses()
   }
 })
-
-// 批量导入并执行
-const handleBatchImport = async () => {
-  if (!form.value.sku) {
-    alert('请输入SKU')
-    return
-  }
-
-  if (!form.value.selectedStore) {
-    alert('请选择店铺')
-    return
-  }
-
-  if (!form.value.selectedWarehouse) {
-    alert('请选择仓库')
-    return
-  }
-
-  // 分割多行输入，处理每个SKU
-  const skuList = form.value.sku
-    .split('\n')
-    .filter((sku) => sku.trim() !== '')
-    .map((sku) => sku.trim())
-
-  if (skuList.length === 0) {
-    alert('请输入有效的SKU')
-    return
-  }
-
-  // 检查是否需要分批处理
-  const BATCH_SIZE = 2000 // 每批最大SKU数量
-  const batches = []
-
-  // 分批处理
-  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
-    batches.push(skuList.slice(i, i + BATCH_SIZE))
-  }
-
-  console.log(`SKU总数: ${skuList.length}, 分成${batches.length}批处理`)
-
-  // 如果超过一个批次，先提示用户
-  if (batches.length > 1) {
-    const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}批提交。
-每批次之间将间隔至少1分5秒。
-点击确定开始处理所有批次。`
-    if (!confirm(confirmMessage)) {
-      return
-    }
-  }
-
-  // 显示操作状态指示器
-  const statusDiv = document.createElement('div')
-  statusDiv.className = 'batch-processing-status'
-
-  if (batches.length > 1) {
-    statusDiv.innerHTML = `<div class="status-content">
-      <div class="status-spinner"></div>
-      <div class="status-text">正在处理批次: 0/${batches.length}</div>
-      <div class="status-countdown"></div>
-    </div>`
-  } else {
-    statusDiv.innerHTML = `<div class="status-content">
-      <div class="status-spinner"></div>
-      <div class="status-text">正在提交SKU数据，请稍候...</div>
-    </div>`
-  }
-
-  document.body.appendChild(statusDiv)
-
-  try {
-    // 处理每一批
-    let successCount = 0
-    let failureCount = 0
-    const allDisabledProducts = [] // 用于存储所有批次中的停用商品
-
-    // 循环处理每个批次
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batchSkus = batches[batchIndex]
-      const batchStartTime = new Date()
-      console.log(`处理批次 ${batchIndex + 1}/${batches.length}, 包含${batchSkus.length}个SKU`)
-
-      // 添加上传日志
-      const logEntry = {
-        time: batchStartTime.toLocaleString(),
-        batchNumber: batchIndex + 1,
-        totalBatches: batches.length,
-        skuCount: batchSkus.length,
-        status: '开始处理',
-        result: ''
-      }
-      form.value.uploadLogs.unshift(logEntry)
-
-      // 更新状态指示器
-      if (batches.length > 1) {
-        statusDiv.querySelector('.status-text').textContent =
-          `正在处理批次: ${batchIndex + 1}/${batches.length}`
-      }
-
-      try {
-        // 获取店铺信息
-        const shopInfo = currentShopInfo.value
-
-        if (!shopInfo) {
-          throw new Error('请选择店铺')
-        }
-
-        // 使用文件上传方式进行批处理
-        const result = await batchProcessSKUs(batchSkus, shopInfo)
-
-        // 更新任务状态
-        if (result.success) {
-          // 更新日志状态
-          logEntry.status = '成功'
-          logEntry.result = result.message || '成功导入'
-
-          // 为此批次添加一条汇总记录
-          const batchTask = {
-            sku:
-              batches.length > 1
-                ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
-                : `批量提交 (${batchSkus.length}个SKU)`,
-            店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
-            仓库: currentWarehouseInfo.value
-              ? currentWarehouseInfo.value.warehouseName
-              : form.value.selectedWarehouse,
-            创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-            状态: '成功',
-            结果: result.message || '成功导入'
-          }
-
-          taskList.value.push(batchTask)
-          emit('add-task')
-          successCount += batchSkus.length
-
-          // 如果启用了"启用店铺商品"选项，则检查商品状态并记录停用商品
-          if (form.value.options.useStore) {
-            try {
-              // 添加检查商品状态的任务
-              await checkProductStatus(
-                batchSkus,
-                batchIndex + 1,
-                batches.length,
-                allDisabledProducts
-              )
-            } catch (checkError) {
-              console.error(`检查商品状态失败: ${checkError.message}`, checkError)
-              logEntry.result += ` | 商品状态检查失败: ${checkError.message}`
-            }
-          }
-        } else {
-          // 更新日志状态
-          logEntry.status = '失败'
-          logEntry.result = result.message || '导入失败'
-
-          // 为此批次添加一条汇总记录
-          taskList.value.push({
-            sku:
-              batches.length > 1
-                ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
-                : `批量提交 (${batchSkus.length}个SKU)`,
-            店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
-            仓库: currentWarehouseInfo.value
-              ? currentWarehouseInfo.value.warehouseName
-              : form.value.selectedWarehouse,
-            创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-            状态: '失败',
-            结果: result.message || '导入失败'
-          })
-
-          failureCount += batchSkus.length
-
-          // 如果是关键错误，考虑中断后续批次处理
-          if (
-            result.message &&
-            (result.message.includes('登录') ||
-              result.message.includes('权限') ||
-              result.message.includes('会话'))
-          ) {
-            throw new Error(result.message)
-          }
-        }
-
-        // 如果不是最后一批，添加等待时间
-        if (batchIndex < batches.length - 1) {
-          const waitTimeMs = 65000 // 1分5秒 = 65秒
-
-          // 倒计时显示
-          const countdownElement = statusDiv.querySelector('.status-countdown')
-          if (countdownElement) {
-            countdownElement.style.marginTop = '10px'
-            countdownElement.style.fontSize = '14px'
-
-            // 启动倒计时
-            let remainingTime = waitTimeMs
-            const countdownInterval = setInterval(() => {
-              remainingTime -= 1000
-              if (remainingTime <= 0) {
-                clearInterval(countdownInterval)
-                countdownElement.textContent = '准备处理下一批...'
-              } else {
-                const seconds = Math.ceil(remainingTime / 1000)
-                countdownElement.textContent = `等待处理下一批: ${Math.floor(seconds / 60)}分${seconds % 60}秒`
-              }
-            }, 1000)
-
-            // 显示初始倒计时
-            countdownElement.textContent = `等待处理下一批: 1分5秒`
-
-            // 更新日志
-            logEntry.result += ' - 等待处理下一批'
-
-            // 等待指定时间
-            await new Promise((resolve) => setTimeout(resolve, waitTimeMs))
-          }
-        }
-      } catch (error) {
-        console.error(`批次${batchIndex + 1}执行失败:`, error)
-
-        // 更新日志状态
-        logEntry.status = '失败'
-        logEntry.result = error.message || '执行出错'
-
-        // 为此批次添加一条失败的汇总记录
-        taskList.value.push({
-          sku:
-            batches.length > 1
-              ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
-              : `批量提交 (${batchSkus.length}个SKU)`,
-          店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
-          仓库: currentWarehouseInfo.value
-            ? currentWarehouseInfo.value.warehouseName
-            : form.value.selectedWarehouse,
-          创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-          状态: '失败',
-          结果: error.message || '执行出错'
-        })
-
-        emit('add-task')
-        failureCount += batchSkus.length
-
-        // 如果是致命错误，中断后续批次处理
-        if (
-          error.message &&
-          (error.message.includes('登录') ||
-            error.message.includes('权限') ||
-            error.message.includes('会话'))
-        ) {
-          alert(`批次${batchIndex + 1}执行失败: ${error.message}。\n将停止后续批次处理。`)
-          break
-        } else if (batches.length > 1) {
-          // 多批次时才显示错误提示，单批次会在最后统一提示
-          alert(
-            `批次${batchIndex + 1}执行失败: ${error.message || '未知错误'}。\n将继续处理剩余批次。`
-          )
-        }
-      }
-    }
-
-    // 如果启用了"启用店铺商品"选项并找到了停用商品，则尝试启用它们
-    if (form.value.options.useStore && allDisabledProducts.length > 0) {
-      await enableDisabledProducts(allDisabledProducts)
-    }
-
-    // 显示执行总结果
-    if (batches.length > 1) {
-      // 多批次情况下的结果汇总
-      if (failureCount > 0) {
-        if (successCount > 0) {
-          alert(`处理完成，部分成功：\n成功: ${successCount}个SKU\n失败: ${failureCount}个SKU`)
-        } else {
-          alert(`处理失败：所有${failureCount}个SKU均未成功提交`)
-        }
-      } else {
-        alert(`处理成功：全部${successCount}个SKU已成功提交`)
-      }
-    } else {
-      // 单批次情况下，根据结果显示消息
-      if (failureCount > 0) {
-        alert(`提交失败：${failureCount}个SKU未能成功提交`)
-      } else {
-        alert(`提交成功：${successCount}个SKU已成功提交`)
-      }
-    }
-  } finally {
-    // 移除状态指示器
-    document.body.removeChild(statusDiv)
-  }
-}
 
 /**
  * 检查批次中商品的状态，找出停用的商品
@@ -922,17 +522,91 @@ const executeOneTask = async (index) => {
   // 标记为执行中
   task.状态 = '执行中'
 
+  // 获取任务中存储的选项
+  const options = task.选项
+    ? JSON.parse(JSON.stringify(task.选项))
+    : JSON.parse(JSON.stringify(form.value.options))
+  // 打印当前任务的选项设置，帮助调试
+  console.log('===== 执行单个任务的选项设置 =====')
+  Object.keys(options).forEach((key) => {
+    console.log(`${key}: ${options[key]}`)
+  })
+
   try {
-    // 调用API处理单个SKU
-    const result = await batchProcessSKUs([task.sku], shopInfo)
+    // 存储功能执行结果
+    const functionResults = []
+    let hasFailures = false
+
+    // =============================================
+    // 独立执行每个功能选项，互不干扰，严格按照选中的功能执行
+    // =============================================
+
+    // 启用店铺商品功能 - 独立执行，不受其他功能影响
+    if (options.useStore === true) {
+      try {
+        console.log('执行[启用店铺商品]功能，单个SKU:', task.sku)
+        console.log('选项状态 (useStore):', options.useStore)
+
+        // 获取事业部信息
+        const department = getSelectedDepartment()
+        if (!department) {
+          throw new Error('未选择事业部，无法检查商品状态')
+        }
+
+        // 调用商品状态检查API
+        const allDisabledProducts = []
+        await checkProductStatus([task.sku], 1, 1, allDisabledProducts)
+
+        functionResults.push(`启用店铺商品: 成功 - 已检查商品状态`)
+        console.log('商品状态检查完成')
+
+        // 如果找到了停用商品，尝试启用它们
+        if (allDisabledProducts.length > 0) {
+          console.log(`找到${allDisabledProducts.length}个停用商品，准备启用它们`)
+          await enableDisabledProducts(allDisabledProducts)
+          functionResults.push(`启用停用商品: 成功 - 已启用${allDisabledProducts.length}个商品`)
+        }
+      } catch (checkError) {
+        functionResults.push(`启用店铺商品: 失败 - ${checkError.message || '未知错误'}`)
+        console.error('启用店铺商品失败:', checkError)
+        hasFailures = true
+      }
+    }
+
+    // 导入店铺商品功能 - 独立执行
+    if (options.importStore === true) {
+      try {
+        console.log('执行[导入店铺商品]功能，单个SKU:', task.sku)
+        console.log('选项状态 (importStore):', options.importStore)
+
+        // 调用批量处理SKU的API
+        const importResult = await batchProcessSKUs([task.sku], shopInfo)
+
+        if (importResult.success) {
+          functionResults.push(`导入店铺商品: 成功`)
+          console.log('导入店铺商品成功:', importResult.message)
+        } else {
+          functionResults.push(`导入店铺商品: 失败 - ${importResult.message}`)
+          console.error('导入店铺商品失败:', importResult.message)
+          hasFailures = true
+        }
+      } catch (importError) {
+        functionResults.push(`导入店铺商品: 错误 - ${importError.message || '未知错误'}`)
+        console.error('导入店铺商品出错:', importError)
+        hasFailures = true
+      }
+    }
 
     // 更新任务状态
-    if (result.success) {
-      task.状态 = '成功'
-      task.结果 = result.message || '成功导入'
-    } else {
+    if (functionResults.length === 0) {
       task.状态 = '失败'
-      task.结果 = result.message || '导入失败'
+      task.结果 = '没有执行任何功能'
+    } else if (hasFailures) {
+      task.状态 = '部分成功'
+      task.结果 = functionResults.join('; ')
+    } else {
+      task.状态 = '成功'
+      task.结果 = functionResults.join('; ')
     }
   } catch (error) {
     console.error('执行任务失败:', error)
@@ -1131,17 +805,655 @@ const handleFileUpload = (event) => {
 
 // 清除文件输入
 const clearFileInput = () => {
-  form.value.fileImport.file = null
-  form.value.fileImport.fileName = ''
-  form.value.fileImport.importing = false
-  form.value.fileImport.importError = ''
-  form.value.fileImport.importSuccess = false
-  form.value.sku = ''
+  if (form.value.fileImport) {
+    form.value.fileImport.file = null
+    form.value.fileImport.fileName = ''
+    form.value.fileImport.importing = false
+    form.value.fileImport.importError = ''
+    form.value.fileImport.importSuccess = false
+    form.value.sku = ''
+  }
 }
 
 // 切换选项卡
 const switchTab = (tab) => {
   activeTab.value = tab
+}
+
+const selectedFile = ref(null)
+
+// 消息提示相关变量
+const loading = ref(false)
+const message = ref('')
+
+// 任务名称和功能选择
+const taskName = ref('')
+const selectedFeatures = ref([])
+
+// 文件输入引用
+const fileInput = ref(null)
+
+// 任务相关
+const tasks = ref([])
+
+// 消息提示函数
+const warningMessage = (msg) => {
+  alert(msg)
+}
+
+const successMessage = (msg) => {
+  alert(msg)
+}
+
+const errorMessage = (msg) => {
+  alert(msg)
+}
+
+// 读取Excel文件
+const readExcelFile = async (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = e.target.result
+        const workbook = XLSX.read(data, { type: 'array' })
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 })
+
+        // 跳过标题行，提取SKU数据
+        const skuList = jsonData
+          .slice(1)
+          .map((row) => row[0] || '')
+          .filter((sku) => sku.trim() !== '')
+        resolve(skuList)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    reader.onerror = (error) => reject(error)
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+// 创建产品对象
+const createProductObject = (productInfo, selectedFeatures) => {
+  return {
+    sku: productInfo.sku || '',
+    name: productInfo.name || '',
+    featuresApplied: selectedFeatures,
+    status: 'success'
+  }
+}
+
+// 更新任务产品列表
+const updateTaskProducts = (taskId, products) => {
+  const taskIndex = tasks.value.findIndex((task) => task.id === taskId)
+  if (taskIndex !== -1) {
+    tasks.value[taskIndex].products = [...tasks.value[taskIndex].products, ...products]
+  }
+}
+
+// 更新任务状态
+const updateTaskStatus = (taskId, status) => {
+  const taskIndex = tasks.value.findIndex((task) => task.id === taskId)
+  if (taskIndex !== -1) {
+    tasks.value[taskIndex].status = status
+  }
+}
+
+// 处理任务添加
+const handleAddTask = async () => {
+  if (!form.value.sku && !selectedFile.value) {
+    warningMessage('请输入SKU或选择文件')
+    return
+  }
+
+  if (!form.value.selectedStore) {
+    warningMessage('请选择店铺')
+    return
+  }
+
+  if (!form.value.selectedWarehouse) {
+    warningMessage('请选择仓库')
+    return
+  }
+
+  // 检查是否有功能选择
+  const hasFeatureSelected = Object.values(form.value.options).some((value) => value === true)
+  if (!hasFeatureSelected) {
+    warningMessage('请至少选择一个功能')
+    return
+  }
+
+  // 添加调试日志
+  console.log('===== 添加任务时的功能选项 =====')
+  Object.keys(form.value.options).forEach((key) => {
+    console.log(`${key}: ${form.value.options[key]}`)
+  })
+
+  if (selectedFile.value) {
+    // 如果有选择文件，则执行导入和处理逻辑
+    await handleBatchImport()
+    // 文件处理后，重置文件选择
+    selectedFile.value = null
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+  } else {
+    // 处理文本输入的SKUs
+    // 分割多行输入，处理每个SKU
+    const skuList = form.value.sku
+      .split('\n')
+      .filter((sku) => sku.trim() !== '')
+      .map((sku) => sku.trim())
+
+    if (skuList.length === 0) {
+      warningMessage('请输入有效的SKU')
+      return
+    }
+
+    const shopInfo = currentShopInfo.value
+    const warehouseInfo = currentWarehouseInfo.value
+
+    // 创建新任务
+    const taskData = {
+      id: Date.now().toString(),
+      name: `批量处理 (${skuList.length}个SKU)`,
+      features: Object.keys(form.value.options).filter((key) => form.value.options[key]),
+      status: 'pending',
+      createTime: new Date().toLocaleString(),
+      products: skuList.map((sku) => ({
+        sku: sku,
+        店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
+        仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
+        status: '等待中',
+        选项: { ...form.value.options },
+        采购: form.value.enablePurchase ? form.value.purchaseQuantity : 0
+      }))
+    }
+
+    // 添加到任务列表
+    tasks.value.push(taskData)
+
+    // 添加到任务界面显示列表
+    taskList.value.push({
+      sku: `批量任务 (${skuList.length}个SKU)`,
+      店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
+      仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
+      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      状态: '等待中',
+      选项: { ...form.value.options },
+      采购: form.value.enablePurchase ? form.value.purchaseQuantity : 0,
+      skuList: skuList
+    })
+
+    // 通知父组件
+    emit('add-task')
+
+    // 清空SKU输入
+    form.value.sku = ''
+
+    // 如果设置了自动开始，可以在这里处理自动执行
+    if (form.value.autoStart && typeof checkProductStatus === 'function') {
+      // 这里可以添加自动执行的逻辑
+      console.log('自动执行模式已启用，准备处理任务...')
+    }
+  }
+}
+
+// 处理文件选择
+const handleFileChange = (event) => {
+  const input = event.target
+  if (input.files && input.files.length > 0) {
+    selectedFile.value = input.files[0]
+    // 调用handleFileUpload处理文件上传状态
+    handleFileUpload(event)
+  }
+}
+
+// 给上传按钮添加清除功能
+const handleClearFile = () => {
+  selectedFile.value = null
+  clearFileInput()
+}
+
+// 处理批量导入
+const handleBatchImport = async () => {
+  if (!selectedFile.value) {
+    warningMessage('请先选择Excel文件')
+    return
+  }
+
+  if (!selectedFeatures.value.length) {
+    warningMessage('请选择至少一个功能')
+    return
+  }
+
+  if (!taskName.value) {
+    warningMessage('请输入任务名称')
+    return
+  }
+
+  loading.value = true
+  message.value = '正在读取Excel文件...'
+
+  try {
+    const fileData = await readExcelFile(selectedFile.value)
+
+    if (!fileData || fileData.length === 0) {
+      warningMessage('Excel文件为空或格式不正确')
+      loading.value = false
+      return
+    }
+
+    // 创建新任务
+    const newTask = {
+      id: Date.now().toString(),
+      name: taskName.value,
+      features: [...selectedFeatures.value],
+      status: 'processing',
+      createTime: new Date().toLocaleString(),
+      products: []
+    }
+
+    tasks.value.push(newTask)
+
+    // 批量处理商品
+    const batchSize = 100
+    const totalBatches = Math.ceil(fileData.length / batchSize)
+
+    message.value = `正在处理商品数据 (0/${fileData.length})...`
+
+    for (let i = 0; i < fileData.length; i += batchSize) {
+      const batch = fileData.slice(i, i + batchSize)
+      const currentBatch = Math.floor(i / batchSize) + 1
+
+      message.value = `正在处理第 ${currentBatch}/${totalBatches} 批商品 (${i}/${fileData.length})...`
+
+      const processedProducts = await Promise.all(
+        batch.map(async (sku) => {
+          try {
+            const productInfo = await window.api.fetchProductInfo(sku.toString().trim())
+            const product = createProductObject(productInfo, selectedFeatures.value)
+            return product
+          } catch (error) {
+            console.error(`处理SKU ${sku} 时出错:`, error)
+            return {
+              sku: sku.toString().trim(),
+              error: error.message || '未知错误',
+              status: 'error'
+            }
+          }
+        })
+      )
+
+      // 更新任务中的商品
+      updateTaskProducts(newTask.id, processedProducts)
+
+      // 更新进度
+      message.value = `已处理 ${Math.min(i + batchSize, fileData.length)}/${fileData.length} 个商品...`
+    }
+
+    // 完成处理
+    updateTaskStatus(newTask.id, 'completed')
+    successMessage(`成功处理 ${fileData.length} 个商品`)
+
+    // 重置表单
+    taskName.value = ''
+    selectedFeatures.value = []
+  } catch (error) {
+    console.error('批量导入出错:', error)
+    errorMessage(`批量导入出错: ${error.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+    message.value = ''
+  }
+}
+
+// 执行任务按钮点击处理
+const executeTask = async () => {
+  // 过滤出所有等待中的任务
+  const waitingTasks = taskList.value.filter((task) => task.状态 === '等待中')
+  if (waitingTasks.length === 0) {
+    warningMessage('没有等待中的任务')
+    return
+  }
+
+  // 显示操作状态指示器
+  const statusDiv = document.createElement('div')
+  statusDiv.className = 'batch-processing-status'
+  statusDiv.innerHTML = `<div class="status-content">
+    <div class="status-spinner"></div>
+    <div class="status-text">正在处理任务，请稍候...</div>
+    <div class="status-countdown"></div>
+  </div>`
+  document.body.appendChild(statusDiv)
+
+  try {
+    // 处理每一个任务
+    let successCount = 0
+    let failureCount = 0
+    const allDisabledProducts = [] // 用于存储所有任务中的停用商品
+
+    // 循环处理每个任务
+    for (let taskIndex = 0; taskIndex < waitingTasks.length; taskIndex++) {
+      const task = waitingTasks[taskIndex]
+
+      // 获取任务中存储的选项，如果没有则使用当前表单中的选项
+      // 确保使用深拷贝，避免任务间共享选项对象
+      const options = task.选项
+        ? JSON.parse(JSON.stringify(task.选项))
+        : JSON.parse(JSON.stringify(form.value.options))
+
+      // 打印当前任务的选项设置，帮助调试
+      console.log('===== 执行任务的选项设置 =====')
+      Object.keys(options).forEach((key) => {
+        console.log(`${key}: ${options[key]}`)
+      })
+      console.log('===== 任务信息 =====')
+      console.log('任务类型:', task.sku && task.sku.includes('批量任务') ? '批量任务' : '单个任务')
+      console.log('任务SKU:', task.sku)
+      console.log('任务skuList:', task.skuList ? `包含${task.skuList.length}个SKU` : '无')
+
+      // 正确获取SKU列表 - 检查是否是批量任务
+      let skuList = []
+      if (task.skuList && Array.isArray(task.skuList)) {
+        // 如果是批量任务，使用存储的SKU列表
+        skuList = [...task.skuList] // 使用数组拷贝，避免引用问题
+        console.log(`批量任务，使用skuList数组，包含${skuList.length}个SKU`)
+      } else {
+        // 如果是单个任务，将任务的SKU作为数组元素
+        // 确保sku不是任务名称（不含"批量任务"字样）
+        const sku = task.sku
+        if (sku && !sku.includes('批量任务')) {
+          skuList = [sku]
+          console.log(`单个任务，SKU: ${sku}`)
+        } else {
+          console.warn(`任务SKU格式不正确: ${sku}，此任务将被跳过`)
+          task.状态 = '失败'
+          task.结果 = 'SKU格式不正确'
+          failureCount++
+          continue
+        }
+      }
+
+      // 过滤掉无效的SKU
+      skuList = skuList.filter((sku) => {
+        const isValid =
+          sku && typeof sku === 'string' && sku.trim() !== '' && !sku.includes('批量任务')
+        if (!isValid) {
+          console.warn(`过滤无效SKU: ${sku}`)
+        }
+        return isValid
+      })
+
+      if (skuList.length === 0) {
+        console.warn('任务中没有有效的SKU，将跳过此任务')
+        task.状态 = '失败'
+        task.结果 = '没有有效的SKU'
+        failureCount++
+        continue
+      }
+
+      console.log(
+        `处理任务 ${taskIndex + 1}/${waitingTasks.length}, 包含${skuList.length}个SKU`,
+        skuList
+      )
+      statusDiv.querySelector('.status-text').textContent =
+        `正在处理任务: ${taskIndex + 1}/${waitingTasks.length} (${skuList.length}个SKU)`
+
+      // 处理状态
+      task.状态 = '执行中'
+
+      // 存储功能执行结果
+      const functionResults = []
+      let hasFailures = false
+
+      try {
+        // 获取店铺信息
+        const shopInfo = currentShopInfo.value
+
+        if (!shopInfo) {
+          throw new Error('请选择店铺')
+        }
+
+        // 确保店铺信息包含spShopNo属性
+        if (!shopInfo.spShopNo) {
+          console.log('注意: 店铺信息中缺少spShopNo属性，将使用shopNo代替')
+        } else {
+          console.log('使用店铺spShopNo:', shopInfo.spShopNo)
+        }
+
+        // =============================================
+        // 独立执行每个功能选项，互不干扰，严格按照选中的功能执行
+        // =============================================
+
+        // 启用店铺商品功能 - 独立执行，不受其他功能影响
+        if (options.useStore === true) {
+          try {
+            console.log('执行[启用店铺商品]功能，SKU列表:', skuList)
+            console.log('选项状态 (useStore):', options.useStore)
+
+            // 获取事业部信息
+            const department = getSelectedDepartment()
+            if (!department) {
+              throw new Error('未选择事业部，无法检查商品状态')
+            }
+
+            // 调用商品状态检查API
+            await checkProductStatus(
+              skuList,
+              taskIndex + 1,
+              waitingTasks.length,
+              allDisabledProducts
+            )
+
+            functionResults.push(`启用店铺商品: 成功 - 已检查${skuList.length}个商品`)
+            console.log('商品状态检查完成')
+          } catch (checkError) {
+            functionResults.push(`启用店铺商品: 失败 - ${checkError.message || '未知错误'}`)
+            console.error('启用店铺商品失败:', checkError)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[启用店铺商品]功能，未选择此功能')
+        }
+
+        // 导入店铺商品功能 - 独立执行，不受其他功能影响
+        if (options.importStore === true) {
+          try {
+            console.log('执行[导入店铺商品]功能，SKU列表:', skuList)
+            console.log('选项状态 (importStore):', options.importStore)
+
+            // 调用批量处理SKU的API
+            const importResult = await batchProcessSKUs(skuList, shopInfo)
+
+            if (importResult.success) {
+              functionResults.push(`导入店铺商品: 成功`)
+              console.log('导入店铺商品成功:', importResult.message)
+            } else {
+              functionResults.push(`导入店铺商品: 失败 - ${importResult.message}`)
+              console.error('导入店铺商品失败:', importResult.message)
+              hasFailures = true
+            }
+          } catch (importError) {
+            functionResults.push(`导入店铺商品: 错误 - ${importError.message || '未知错误'}`)
+            console.error('导入店铺商品出错:', importError)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[导入店铺商品]功能，未选择此功能')
+        }
+
+        // 导入物流属性功能
+        if (options.importProps === true) {
+          try {
+            console.log('执行[导入物流属性]功能')
+            // TODO: 实现导入物流属性的逻辑
+            functionResults.push('导入物流属性: 未实现')
+          } catch (error) {
+            functionResults.push(`导入物流属性: 失败 - ${error.message || '未知错误'}`)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[导入物流属性]功能，未选择此功能')
+        }
+
+        // 启用商品主数据功能
+        if (options.useMainData === true) {
+          try {
+            console.log('执行[启用商品主数据]功能')
+            // TODO: 实现启用商品主数据的逻辑
+            functionResults.push('启用商品主数据: 未实现')
+          } catch (error) {
+            functionResults.push(`启用商品主数据: 失败 - ${error.message || '未知错误'}`)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[启用商品主数据]功能，未选择此功能')
+        }
+
+        // 启用库存商品分配功能
+        if (options.useWarehouse === true) {
+          try {
+            console.log('执行[启用库存商品分配]功能')
+            // TODO: 实现启用库存商品分配的逻辑
+            functionResults.push('启用库存商品分配: 未实现')
+          } catch (error) {
+            functionResults.push(`启用库存商品分配: 失败 - ${error.message || '未知错误'}`)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[启用库存商品分配]功能，未选择此功能')
+        }
+
+        // 启用京配打标生效功能
+        if (options.useJdEffect === true) {
+          try {
+            console.log('执行[启用京配打标生效]功能')
+            // TODO: 实现启用京配打标生效的逻辑
+            functionResults.push('启用京配打标生效: 未实现')
+          } catch (error) {
+            functionResults.push(`启用京配打标生效: 失败 - ${error.message || '未知错误'}`)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[启用京配打标生效]功能，未选择此功能')
+        }
+
+        // 导入商品简称功能
+        if (options.importTitle === true) {
+          try {
+            console.log('执行[导入商品简称]功能')
+            // TODO: 实现导入商品简称的逻辑
+            functionResults.push('导入商品简称: 未实现')
+          } catch (error) {
+            functionResults.push(`导入商品简称: 失败 - ${error.message || '未知错误'}`)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[导入商品简称]功能，未选择此功能')
+        }
+
+        // 启用批次管理功能
+        if (options.useBatchManage === true) {
+          try {
+            console.log('执行[启用批次管理]功能')
+            // TODO: 实现启用批次管理的逻辑
+            functionResults.push('启用批次管理: 未实现')
+          } catch (error) {
+            functionResults.push(`启用批次管理: 失败 - ${error.message || '未知错误'}`)
+            hasFailures = true
+          }
+        } else {
+          console.log('跳过[启用批次管理]功能，未选择此功能')
+        }
+
+        // 基于所有功能的执行结果，更新任务状态
+        if (functionResults.length === 0) {
+          task.状态 = '失败'
+          task.结果 = '没有执行任何功能'
+          failureCount++
+        } else if (hasFailures) {
+          task.状态 = '部分成功'
+          task.结果 = functionResults.join('; ')
+          // 部分成功也计入成功数
+          successCount++
+        } else {
+          task.状态 = '成功'
+          task.结果 = functionResults.join('; ')
+          successCount++
+        }
+      } catch (error) {
+        console.error(`任务执行失败:`, error)
+
+        // 更新任务状态
+        task.状态 = '失败'
+        task.结果 = error.message || '执行出错'
+        failureCount++
+
+        // 如果是致命错误，中断后续任务处理
+        if (
+          error.message &&
+          (error.message.includes('登录') ||
+            error.message.includes('权限') ||
+            error.message.includes('会话'))
+        ) {
+          alert(`任务执行失败: ${error.message}。\n将停止后续任务处理。`)
+          break
+        }
+      }
+
+      // 如果不是最后一个任务，添加等待时间
+      if (taskIndex < waitingTasks.length - 1) {
+        const waitTimeMs = form.value.waitTime * 1000
+
+        // 倒计时显示
+        const countdownElement = statusDiv.querySelector('.status-countdown')
+        if (countdownElement) {
+          countdownElement.style.marginTop = '10px'
+          countdownElement.style.fontSize = '14px'
+
+          // 启动倒计时
+          let remainingTime = waitTimeMs
+          const countdownInterval = setInterval(() => {
+            remainingTime -= 1000
+            if (remainingTime <= 0) {
+              clearInterval(countdownInterval)
+              countdownElement.textContent = '准备处理下一个任务...'
+            } else {
+              const seconds = Math.ceil(remainingTime / 1000)
+              countdownElement.textContent = `等待处理下一个任务: ${seconds}秒`
+            }
+          }, 1000)
+
+          // 显示初始倒计时
+          countdownElement.textContent = `等待处理下一个任务: ${form.value.waitTime}秒`
+
+          // 等待指定时间
+          await new Promise((resolve) => setTimeout(resolve, waitTimeMs))
+        }
+      }
+    }
+
+    // 如果启用了"启用店铺商品"选项并找到了停用商品，则尝试启用它们
+    if (form.value.options.useStore === true && allDisabledProducts.length > 0) {
+      console.log(`找到${allDisabledProducts.length}个停用商品，准备启用它们`)
+      await enableDisabledProducts(allDisabledProducts)
+    }
+
+    // 显示执行总结果
+    if (successCount > 0 && failureCount > 0) {
+      alert(`处理完成，部分成功：\n成功: ${successCount}个任务\n失败: ${failureCount}个任务`)
+    } else if (failureCount > 0) {
+      alert(`处理失败：所有${failureCount}个任务均未成功完成`)
+    } else {
+      alert(`处理成功：全部${successCount}个任务已成功完成`)
+    }
+  } finally {
+    // 移除状态指示器
+    document.body.removeChild(statusDiv)
+  }
 }
 </script>
 
@@ -1169,28 +1481,27 @@ const switchTab = (tab) => {
           ></textarea>
         </div>
         <div class="file-upload-container">
-          <input
-            type="file"
-            id="skuFile"
-            ref="fileInput"
-            accept=".txt"
-            @change="handleFileUpload"
-            class="file-input"
-          />
-          <label for="skuFile" class="file-upload-label">
-            <span class="upload-icon">+</span>
-            <span>导入SKU文件</span>
-          </label>
-          <div v-if="form.fileImport.fileName" class="file-name">
-            已选择: {{ form.fileImport.fileName }}
-            <span class="file-remove" @click="clearFileInput">&times;</span>
+          <div class="file-upload">
+            <input
+              type="file"
+              ref="fileInput"
+              @change="handleFileChange"
+              accept=".xls, .xlsx"
+              style="display: none"
+            />
+            <span class="btn btn-primary" @click="$refs.fileInput.click()">选择文件</span>
+            <span v-if="selectedFile" class="selected-file-name">
+              已选：{{ selectedFile.name }}
+              <button class="btn-link" @click="handleClearFile">清除</button>
+            </span>
+            <span v-else class="selected-file-name">未选择文件</span>
           </div>
+          <div class="batch-import"></div>
         </div>
         <div class="import-actions">
-          <button class="btn btn-primary" @click="handleBatchImport">导入并执行</button>
-          <button class="btn btn-default" @click="downloadTestExcel">下载Excel</button>
+          <button class="btn btn-primary" @click="downloadTestExcel">下载Excel</button>
           <small class="import-tip"
-            >每行一个SKU，直接导入并自动执行任务。文件超过2000个SKU会自动分批处理。</small
+            >每行一个SKU，使用"添加任务"按钮添加并处理。系统会根据功能选项执行相应操作。</small
           >
         </div>
       </div>
@@ -1308,7 +1619,7 @@ const switchTab = (tab) => {
 
       <div class="form-actions">
         <button class="btn btn-default">保存快捷</button>
-        <button class="btn btn-success" @click="addTask">添加任务</button>
+        <button class="btn btn-success" @click="handleAddTask">添加任务</button>
       </div>
     </div>
 
