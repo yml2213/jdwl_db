@@ -1,4 +1,6 @@
 import { getSelectedDepartment } from '../../utils/storageHelper'
+import * as XLSX from 'xlsx'
+import { getAllCookies } from '../../utils/cookieHelper'
 
 export default {
   name: 'importLogisticsProps',
@@ -86,6 +88,12 @@ export default {
    */
   async uploadLogisticsData(skuList, department) {
     try {
+      // 获取所有cookies并构建cookie字符串
+      const cookies = await getAllCookies()
+      const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+
+      console.log('获取到cookies:', cookieString ? '已获取' : '未获取')
+
       // 创建Excel数据结构
       const data = this.createExcelData(skuList, department)
 
@@ -95,6 +103,9 @@ export default {
       // 创建FormData
       const formData = new FormData()
       formData.append('importAttributeFile', file)
+
+      // 序列化FormData
+      const serializedFormData = await this.serializeFormData(formData)
 
       // 发送请求
       const url = 'https://o.jdl.com/goods/doImportGoodsLogistics.do?_r=' + Math.random()
@@ -107,6 +118,7 @@ export default {
             'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
           'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
           'cache-control': 'no-cache',
+          'content-type': 'multipart/form-data',
           origin: 'https://o.jdl.com',
           pragma: 'no-cache',
           priority: 'u=0, i',
@@ -118,23 +130,49 @@ export default {
           'sec-fetch-mode': 'navigate',
           'sec-fetch-site': 'same-origin',
           'sec-fetch-user': '?1',
-          'upgrade-insecure-requests': '1'
+          'upgrade-insecure-requests': '1',
+          Cookie: cookieString
         },
-        body: this.serializeFormData(formData)
+        body: serializedFormData
       })
 
       console.log('上传物流属性响应:', response)
 
-      return {
-        success: response && response.success,
-        message: response ? response.message || '导入成功' : '导入失败',
-        data: response
+      // 正确解析响应结果
+      if (
+        response &&
+        (response.success === true || (response.data && response.data.includes('导入成功')))
+      ) {
+        // 成功响应
+        const taskId = (response.data && response.data.match(/任务编号:([^,]+)/)?.[1]) || '未知'
+        return {
+          success: true,
+          message: response.data || '导入成功',
+          taskId: taskId,
+          processedCount: skuList.length,
+          failedCount: 0,
+          skippedCount: 0,
+          data: response
+        }
+      } else {
+        // 失败响应
+        return {
+          success: false,
+          message: response?.tipMsg || response?.data || '导入失败，未知原因',
+          processedCount: 0,
+          failedCount: skuList.length,
+          skippedCount: 0,
+          data: response
+        }
       }
     } catch (error) {
       console.error('上传物流属性失败:', error)
       return {
         success: false,
         message: `上传失败: ${error.message || '未知错误'}`,
+        processedCount: 0,
+        failedCount: skuList.length,
+        skippedCount: 0,
         error
       }
     }
@@ -183,78 +221,88 @@ export default {
    * @returns {Promise<File>} Excel文件对象
    */
   async convertToExcelFile(data) {
-    // 使用XLSX库创建Excel文件
-    // 注意：这里需要使用在apiService.js中已有的XLSX导入
-    // 以下代码假设window.XLSX已经可用，实际使用时可能需要调整
-    const XLSX = window.XLSX || (await import('xlsx')).default
+    try {
+      // 直接使用导入的XLSX
+      // 生成工作表
+      const ws = XLSX.utils.aoa_to_sheet(data)
 
-    // 生成工作表
-    const ws = XLSX.utils.aoa_to_sheet(data)
+      // 创建工作簿
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'GoodsLogistics')
 
-    // 创建工作簿
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'GoodsLogistics')
+      // 生成二进制数据
+      const excelBinaryData = XLSX.write(wb, {
+        bookType: 'xls',
+        type: 'binary',
+        compression: true,
+        bookSST: false
+      })
 
-    // 生成二进制数据
-    const excelBinaryData = XLSX.write(wb, {
-      bookType: 'xls',
-      type: 'binary',
-      compression: true,
-      bookSST: false
-    })
+      // 将二进制字符串转换为ArrayBuffer
+      const buf = new ArrayBuffer(excelBinaryData.length)
+      const view = new Uint8Array(buf)
+      for (let i = 0; i < excelBinaryData.length; i++) {
+        view[i] = excelBinaryData.charCodeAt(i) & 0xff
+      }
 
-    // 将二进制字符串转换为ArrayBuffer
-    const buf = new ArrayBuffer(excelBinaryData.length)
-    const view = new Uint8Array(buf)
-    for (let i = 0; i < excelBinaryData.length; i++) {
-      view[i] = excelBinaryData.charCodeAt(i) & 0xff
+      // 创建文件对象
+      return new File([buf], 'GoodsLogisticsTemplate.xls', {
+        type: 'application/vnd.ms-excel'
+      })
+    } catch (error) {
+      console.error('生成Excel文件失败:', error)
+      throw new Error(`生成Excel文件失败: ${error.message}`)
     }
-
-    // 创建文件对象
-    return new File([buf], 'GoodsLogisticsTemplate.xls', {
-      type: 'application/vnd.ms-excel'
-    })
   },
 
   /**
    * 序列化FormData以便传递给主进程
    * @param {FormData} formData - FormData对象
-   * @returns {Object} 序列化后的FormData
+   * @returns {Promise<Object>} 序列化后的FormData
    */
-  serializeFormData(formData) {
+  async serializeFormData(formData) {
     const entries = []
+
+    // 处理FormData中的每一个条目
     for (const pair of formData.entries()) {
       const [key, value] = pair
+
       // 如果是文件对象，需要特殊处理
       if (value instanceof File) {
-        // 将文件转换为可序列化的格式
-        const fileReader = new FileReader()
-        return new Promise((resolve, reject) => {
-          fileReader.onload = () => {
-            const arrayBuffer = fileReader.result
-            const data = new Uint8Array(arrayBuffer)
-            entries.push([
-              key,
-              {
-                _isFile: true,
-                name: value.name,
-                type: value.type,
-                size: value.size,
-                data: Array.from(data) // 转换为普通数组以便序列化
-              }
-            ])
-            resolve({
-              _isFormData: true,
-              entries
-            })
-          }
-          fileReader.onerror = reject
-          fileReader.readAsArrayBuffer(value)
-        })
+        try {
+          // 读取文件内容为ArrayBuffer
+          const arrayBuffer = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = reject
+            reader.readAsArrayBuffer(value)
+          })
+
+          // 转换为Uint8Array，然后转为普通数组以便序列化
+          const data = Array.from(new Uint8Array(arrayBuffer))
+
+          // 将文件信息添加到entries
+          entries.push([
+            key,
+            {
+              _isFile: true,
+              name: value.name,
+              type: value.type,
+              size: value.size,
+              data: data
+            }
+          ])
+        } catch (error) {
+          console.error('序列化文件失败:', error)
+          throw new Error(`序列化文件失败: ${error.message}`)
+        }
       } else {
+        // 非文件类型直接添加
         entries.push([key, value])
       }
     }
+
+    // 返回可序列化的对象
     return {
       _isFormData: true,
       entries

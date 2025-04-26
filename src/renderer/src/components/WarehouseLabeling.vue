@@ -567,10 +567,27 @@ const submitLogisticsData = async (data) => {
     // 执行任务
     const result = await executeOneTask(task, shopInfo, task.选项)
 
+    console.log('导入物流属性结果:', result)
+
+    // 更新任务状态
+    if (result && result.success) {
+      task.状态 = '成功'
+      task.结果 = result.message || '导入物流属性成功'
+    } else {
+      task.状态 = '失败'
+      task.结果 = result?.message || '导入失败，未知原因'
+    }
+
     // 更新导入状态
     form.value.logisticsImport.success = result && result.success
     form.value.logisticsImport.uploading = false
-    form.value.logisticsImport.progress = '导入完成'
+    form.value.logisticsImport.progress =
+      result && result.success ? `导入成功: ${result.taskId || ''}` : '导入失败'
+
+    // 生成提示信息
+    if (result && result.success) {
+      alert(`物流属性导入成功！\n${result.message || ''}`)
+    }
 
     // 关闭对话框
     setTimeout(() => {
@@ -580,6 +597,17 @@ const submitLogisticsData = async (data) => {
     console.error('导入物流属性失败:', error)
     form.value.logisticsImport.error = `导入失败: ${error.message || '未知错误'}`
     form.value.logisticsImport.uploading = false
+
+    // 更新任务状态为失败
+    if (taskList.value.length > 0) {
+      const lastTask = taskList.value[taskList.value.length - 1]
+      if (lastTask && lastTask.状态 === '等待中') {
+        lastTask.状态 = '失败'
+        lastTask.结果 = error.message || '执行出错'
+      }
+    }
+
+    alert(`物流属性导入失败: ${error.message || '未知错误'}`)
   }
 }
 
