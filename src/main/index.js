@@ -10,7 +10,6 @@ import {
   setupLoginHandlers
 } from './loginManager'
 import { sendRequest } from './requestHandler'
-import { createExcelFile } from './excelHandler'
 
 // 主窗口引用
 let mainWindow = null
@@ -116,16 +115,6 @@ function setupIPCHandlers() {
       return await sendRequest(url, options)
     } catch (error) {
       console.error('IPC请求处理错误:', error)
-      throw error
-    }
-  })
-
-  // 处理Excel文件创建
-  ipcMain.handle('createExcelFile', async (event, options) => {
-    try {
-      return await createExcelFile(options)
-    } catch (error) {
-      console.error('创建Excel文件错误:', error)
       throw error
     }
   })

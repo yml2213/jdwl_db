@@ -457,35 +457,47 @@ export async function batchProcessSKUs(skuList, storeInfo) {
   console.log('已获取Cookie数量:', cookies.length)
 
   try {
-    // 创建一个包含SKU列表的临时文件内容
-    const headers = [
+    // 导入XLSX库
+    const XLSX = require('xlsx')
+
+    // 字段名
+    const header = [
       'POP店铺商品编号（SKU编码）',
       '商家商品标识',
       '商品条码',
       '是否代销（0-否，1-是）',
       '供应商CMG编码'
     ]
+
+    // 实际表格内容
     const data = skuList.map((sku) => [sku, sku, sku, '0', 'CMS4418047112894'])
 
-    // 添加headers作为第一行
-    data.unshift(headers)
+    // 合成数据（首行为 header）
+    const sheetData = [header, ...data]
 
-    // 使用window.api来创建Excel文件，因为主进程可以使用xlsx库
-    const excelOptions = {
-      fileName: 'PopGoodsImportTemplate.xls',
-      sheetName: 'POP商品导入',
-      data: data
+    // 生成 worksheet
+    const ws = XLSX.utils.aoa_to_sheet(sheetData)
+
+    // 创建 workbook 并追加 worksheet
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'POP商品导入')
+
+    // 生成Excel二进制数据
+    const excelBinaryData = XLSX.write(wb, { bookType: 'xls', type: 'binary' })
+
+    // 将二进制字符串转换为ArrayBuffer
+    const buf = new ArrayBuffer(excelBinaryData.length)
+    const view = new Uint8Array(buf)
+    for (let i = 0; i < excelBinaryData.length; i++) {
+      view[i] = excelBinaryData.charCodeAt(i) & 0xff
     }
 
-    const excelBlob = await window.api.createExcelFile(excelOptions)
-    console.log('Excel文件已创建')
-
     // 创建文件对象
-    const file = new File([excelBlob], 'PopGoodsImportTemplate.xls', {
+    const file = new File([buf], 'PopGoodsImportTemplate.xls', {
       type: 'application/vnd.ms-excel'
     })
 
-    console.log('已创建文件:', file.name, file.size, 'bytes')
+    console.log('已创建Excel文件:', file.name, file.size, 'bytes')
 
     // 使用FormData提交，但不使用自动Content-Type
     const formData = new FormData()
