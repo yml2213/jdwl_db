@@ -75,22 +75,50 @@ async function sendRequest(url, options = {}) {
     // 处理请求体
     if (options.body) {
       // 如果是FormData类型，直接传递
-      if (options.body instanceof FormData) {
+      if (options.body instanceof Object && options.body._isFormData) {
         // 对于FormData类型的请求，需要特殊处理
         console.log('处理FormData请求')
 
-        // axios在Node.js环境中处理FormData的方式与浏览器不同
-        // 需要手动设置boundary
-        const boundary = '--------------------------' + Date.now().toString(16)
+        // 创建Node.js的FormData对象
+        const FormData = require('form-data')
+        const formData = new FormData()
 
-        // 设置multipart/form-data的Content-Type
-        axiosOptions.headers['Content-Type'] = `multipart/form-data; boundary=${boundary}`
+        // 从传入的序列化FormData中获取数据
+        const formEntries = options.body.entries || []
+        console.log('FormData entries:', formEntries)
 
-        // 将FormData转换为适合axios的格式
-        const formData = options.body
+        // 处理每个表单项
+        for (const entry of formEntries) {
+          const [key, value] = entry
+
+          // 检查是否是文件对象
+          if (value && value._isFile) {
+            // 处理文件：从数组数据中创建buffer
+            const fileBuffer = Buffer.from(value.data)
+            formData.append(key, fileBuffer, {
+              filename: value.name,
+              contentType: value.type || 'application/octet-stream'
+            })
+            console.log(
+              `添加文件到FormData: ${key}, 文件名: ${value.name}, 大小: ${fileBuffer.length} bytes`
+            )
+          } else {
+            // 处理普通字段
+            formData.append(key, value)
+            console.log(`添加字段到FormData: ${key}, 值: ${value}`)
+          }
+        }
+
+        // 使用FormData的getHeaders方法获取正确的headers
+        const formHeaders = formData.getHeaders()
+        axiosOptions.headers = {
+          ...axiosOptions.headers,
+          ...formHeaders
+        }
+
+        // 设置数据为FormData
         axiosOptions.data = formData
-
-        console.log('发送FormData请求，boundary:', boundary)
+        console.log('FormData已准备好发送，headers:', formHeaders)
       } else if (typeof options.body === 'string') {
         try {
           // 尝试解析JSON字符串

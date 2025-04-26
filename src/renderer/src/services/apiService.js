@@ -379,9 +379,16 @@ export async function importProductsFromExcel(file, storeInfo) {
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
-        // 不设置Content-Type，让浏览器自动设置正确的multipart/form-data和边界
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
+        // 不要手动设置Content-Type，让浏览器自动添加包含boundary的multipart/form-data
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+        'cache-control': 'no-cache',
+        origin: BASE_URL,
+        pragma: 'no-cache',
+        referer: `${BASE_URL}/goToMainIframe.do`,
+        'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
         'X-Requested-With': 'XMLHttpRequest'
       },
       body: formData
@@ -476,12 +483,22 @@ export async function batchProcessSKUs(skuList, storeInfo) {
     // 生成 worksheet
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
 
-    // 创建 workbook 并追加 worksheet
+    // 创建 workbook 并追加 worksheet，确保sheet名为"POP商品导入"
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'POP商品导入')
 
-    // 生成Excel二进制数据
-    const excelBinaryData = XLSX.write(wb, { bookType: 'xls', type: 'binary' })
+    // 设置一些常用的单元格样式
+    if (!wb.Workbook) wb.Workbook = {}
+    if (!wb.Workbook.Sheets) wb.Workbook.Sheets = {}
+    if (!wb.Workbook.Sheets['POP商品导入']) wb.Workbook.Sheets['POP商品导入'] = {}
+
+    // 指定xls格式生成Excel二进制数据
+    const excelBinaryData = XLSX.write(wb, {
+      bookType: 'xls',
+      type: 'binary',
+      compression: true,
+      bookSST: false
+    })
 
     // 将二进制字符串转换为ArrayBuffer
     const buf = new ArrayBuffer(excelBinaryData.length)
@@ -497,42 +514,43 @@ export async function batchProcessSKUs(skuList, storeInfo) {
 
     console.log('已创建Excel文件:', file.name, file.size, 'bytes')
 
-    // 使用FormData提交，但不使用自动Content-Type
+    // 使用FormData提交
     const formData = new FormData()
     formData.append('csrfToken', csrfToken)
-    formData.append('shopGoodsPopGoodsListFile', file)
+
+    // 明确指定文件名，确保服务器端能正确接收
+    formData.append('shopGoodsPopGoodsListFile', file, 'PopGoodsImportTemplate.xls')
 
     // 检查FormData内容
     console.log('FormData已创建，包含以下字段:')
     for (const pair of formData.entries()) {
-      console.log(pair[0], ':', pair[1] instanceof File ? '文件对象' : pair[1])
+      console.log(
+        pair[0],
+        ':',
+        pair[1] instanceof File ? `文件对象 (${pair[1].name}, ${pair[1].size} bytes)` : pair[1]
+      )
     }
 
-    // 尝试使用Blob直接作为File对象
+    // 序列化FormData，以便传递给主进程
+    const serializedFormData = await serializeFormData(formData)
+
+    // 尝试发送请求
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        // 不要手动设置Content-Type，让浏览器自动添加包含boundary的multipart/form-data
+        Accept: 'application/json, text/javascript, */*; q=0.01',
         'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
         'cache-control': 'no-cache',
         origin: BASE_URL,
         pragma: 'no-cache',
-        priority: 'u=0, i',
         referer: `${BASE_URL}/goToMainIframe.do`,
         'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"macOS"',
-        'sec-fetch-dest': 'iframe',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'same-origin',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
         'X-Requested-With': 'XMLHttpRequest'
       },
-      body: formData
+      body: serializedFormData
     })
 
     console.log('批量处理响应:', response)
@@ -548,5 +566,47 @@ export async function batchProcessSKUs(skuList, storeInfo) {
       message: `处理失败: ${error.message || '未知错误'}`,
       error
     }
+  }
+}
+
+/**
+ * 序列化FormData对象，使其可以通过IPC传递
+ * @param {FormData} formData - FormData对象
+ * @returns {Promise<Object>} 序列化后的FormData对象
+ */
+async function serializeFormData(formData) {
+  const entries = []
+
+  // 遍历FormData中的每个字段
+  for (const pair of formData.entries()) {
+    const [key, value] = pair
+
+    // 如果是文件，需要特殊处理
+    if (value instanceof File || value instanceof Blob) {
+      // 转换文件为ArrayBuffer
+      const buffer = await value.arrayBuffer()
+
+      // 创建序列化文件对象
+      entries.push([
+        key,
+        {
+          _isFile: true,
+          name: value.name,
+          type: value.type,
+          size: value.size,
+          lastModified: value instanceof File ? value.lastModified : null,
+          data: Array.from(new Uint8Array(buffer)) // 将ArrayBuffer转换为数组
+        }
+      ])
+    } else {
+      // 普通字段直接添加
+      entries.push([key, value])
+    }
+  }
+
+  // 返回序列化的FormData对象
+  return {
+    _isFormData: true,
+    entries
   }
 }
