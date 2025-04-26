@@ -10,11 +10,7 @@
         rows="5"
       ></textarea>
     </div>
-    <file-uploader
-      @file-change="handleFileChange"
-      @clear-file="handleClearFile"
-      @download-template="downloadTemplate"
-    />
+    <file-uploader @file-change="handleFileChange" @clear-file="handleClearFile" />
   </div>
 </template>
 
@@ -29,7 +25,7 @@ defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'file-change', 'clear-file', 'download-template'])
+const emit = defineEmits(['update:modelValue', 'file-change', 'clear-file'])
 
 const updateValue = (event) => {
   emit('update:modelValue', event.target.value)
@@ -41,10 +37,6 @@ const handleFileChange = (file) => {
 
 const handleClearFile = () => {
   emit('clear-file')
-}
-
-const downloadTemplate = () => {
-  emit('download-template')
 }
 </script>
 

@@ -5,7 +5,7 @@
         type="file"
         ref="fileInputRef"
         @change="handleFileChange"
-        accept=".xls, .xlsx"
+        accept=".txt"
         style="display: none"
       />
       <span class="btn btn-primary" @click="triggerFileInput">选择文件</span>
@@ -17,18 +17,12 @@
     </div>
     <div class="batch-import"></div>
   </div>
-  <div class="import-actions">
-    <button class="btn btn-primary" @click="downloadTemplate">下载Excel</button>
-    <small class="import-tip"
-      >每行一个SKU，使用"添加任务"按钮添加并处理。系统会根据功能选项执行相应操作。</small
-    >
-  </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
 
-const emit = defineEmits(['file-change', 'download-template', 'clear-file'])
+const emit = defineEmits(['file-change', 'clear-file'])
 
 const fileInputRef = ref(null)
 const selectedFile = ref(null)
@@ -51,10 +45,6 @@ const handleClearFile = () => {
     fileInputRef.value.value = ''
   }
   emit('clear-file')
-}
-
-const downloadTemplate = () => {
-  emit('download-template')
 }
 </script>
 

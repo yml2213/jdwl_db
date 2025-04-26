@@ -9,12 +9,7 @@
       </div>
     </div>
 
-    <sku-input
-      v-model="form.sku"
-      @file-change="handleFileChange"
-      @clear-file="handleClearFile"
-      @download-template="downloadTemplate"
-    />
+    <sku-input v-model="form.sku" @file-change="handleFileChange" @clear-file="handleClearFile" />
 
     <wait-time-input v-model="form.waitTime" />
 
@@ -68,7 +63,6 @@ const handleStoreChange = inject('handleStoreChange')
 const handleWarehouseChange = inject('handleWarehouseChange')
 const handleFileChange = inject('handleFileChange')
 const handleClearFile = inject('handleClearFile')
-const downloadTemplate = inject('downloadTemplate')
 </script>
 
 <style scoped>
@@ -109,5 +103,26 @@ const downloadTemplate = inject('downloadTemplate')
 
 .btn:hover {
   opacity: 0.9;
+}
+
+.select-wrapper {
+  position: relative;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.form-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  outline: none;
+  height: 36px;
+  cursor: pointer;
+  background-color: white;
+}
+
+.form-select:focus {
+  border-color: #2196f3;
 }
 </style>

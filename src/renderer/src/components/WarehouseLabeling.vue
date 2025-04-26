@@ -445,21 +445,37 @@ const handleAddTask = () => {
 }
 
 // 处理文件变更的函数
-const handleFileChange = (event) => {
-  // 文件变更的实现...
-  console.log('文件已变更', event)
+const handleFileChange = (file) => {
+  console.log('文件已变更', file.name)
+
+  if (!file || !file.name.endsWith('.txt')) {
+    alert('请选择有效的.txt文件')
+    return
+  }
+
+  // 读取txt文件内容
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const content = e.target.result
+    // 获取文件内容，按行分割并移除空行
+    const skuList = content.split(/\r?\n/).filter((line) => line.trim())
+    if (skuList.length > 0) {
+      // 将SKU列表设置到表单中
+      form.value.sku = skuList.join('\n')
+    } else {
+      alert('文件内容为空或格式不正确')
+    }
+  }
+  reader.onerror = () => {
+    alert('读取文件失败')
+  }
+  reader.readAsText(file)
 }
 
 // 清除文件选择的函数
 const handleClearFile = () => {
-  // 清除文件的实现...
+  // 清除文件的实现
   console.log('清除文件选择')
-}
-
-// 下载测试Excel的函数
-const downloadTemplate = () => {
-  // 下载Excel的实现...
-  console.log('下载测试Excel')
 }
 
 // 删除任务
@@ -493,7 +509,6 @@ provide('handleStoreChange', handleStoreChange)
 provide('handleWarehouseChange', handleWarehouseChange)
 provide('handleFileChange', handleFileChange)
 provide('handleClearFile', handleClearFile)
-provide('downloadTemplate', downloadTemplate)
 provide('executeTask', executeTask)
 provide('clearTasks', clearTasks)
 provide('handleExecuteOneTask', handleExecuteOneTask)
