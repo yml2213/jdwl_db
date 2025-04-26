@@ -13,6 +13,7 @@ import {
   getSelectedVendor
 } from '../utils/storageHelper'
 import { getShopList, getWarehouseList, batchProcessSKUs } from '../services/apiService'
+import * as XLSX from 'xlsx'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -476,9 +477,6 @@ const downloadTestExcel = async () => {
   }
 
   try {
-    // 导入XLSX库
-    const XLSX = require('xlsx')
-
     // 字段名
     const header = [
       'POP店铺商品编号（SKU编码）',

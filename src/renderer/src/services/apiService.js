@@ -1,5 +1,6 @@
 import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
+import * as XLSX from 'xlsx'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
@@ -457,9 +458,6 @@ export async function batchProcessSKUs(skuList, storeInfo) {
   console.log('已获取Cookie数量:', cookies.length)
 
   try {
-    // 导入XLSX库
-    const XLSX = require('xlsx')
-
     // 字段名
     const header = [
       'POP店铺商品编号（SKU编码）',
