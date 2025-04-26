@@ -23,8 +23,10 @@ async function logRequest(message) {
 
 // 创建axios实例
 const axiosInstance = axios.create({
-  timeout: 30000, // 默认30秒超时
-  validateStatus: (status) => status >= 200 && status < 300 // 定义有效的状态码
+  timeout: 120000, // 修改为120秒超时，以处理大文件上传
+  validateStatus: (status) => status >= 200 && status < 300, // 定义有效的状态码
+  maxContentLength: 100 * 1024 * 1024, // 100MB的最大请求内容限制
+  maxBodyLength: 100 * 1024 * 1024 // 100MB的最大请求体限制
 })
 
 /**
@@ -58,8 +60,10 @@ async function sendRequest(url, options = {}) {
       url,
       method: options.method || 'GET',
       headers: options.headers || {},
-      timeout: options.timeout || 30000,
-      withCredentials: true // 确保跨域请求发送cookie
+      timeout: options.timeout || 120000, // 使用传入的超时或默认120秒
+      withCredentials: true, // 确保跨域请求发送cookie
+      maxContentLength: 100 * 1024 * 1024, // 100MB限制
+      maxBodyLength: 100 * 1024 * 1024 // 100MB限制
     }
 
     // 处理URL查询参数

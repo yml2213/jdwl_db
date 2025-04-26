@@ -55,11 +55,15 @@ const form = ref({
     importing: false,
     importError: '',
     importSuccess: false
-  }
+  },
+  uploadLogs: []
 })
 
 // 任务列表
 const taskList = ref([])
+
+// 当前活动的选项卡
+const activeTab = ref('tasks') // tasks 或 logs
 
 // 店铺列表
 const shopsList = ref([])
@@ -419,7 +423,9 @@ const handleBatchImport = async () => {
 
   // 如果超过一个批次，先提示用户
   if (batches.length > 1) {
-    const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}批提交。\n点击确定开始处理所有批次。`
+    const confirmMessage = `检测到${skuList.length}个SKU，将分成${batches.length}批提交。
+每批次之间将间隔至少1分5秒。
+点击确定开始处理所有批次。`
     if (!confirm(confirmMessage)) {
       return
     }
@@ -433,6 +439,7 @@ const handleBatchImport = async () => {
     statusDiv.innerHTML = `<div class="status-content">
       <div class="status-spinner"></div>
       <div class="status-text">正在处理批次: 0/${batches.length}</div>
+      <div class="status-countdown"></div>
     </div>`
   } else {
     statusDiv.innerHTML = `<div class="status-content">
@@ -451,7 +458,19 @@ const handleBatchImport = async () => {
     // 循环处理每个批次
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batchSkus = batches[batchIndex]
+      const batchStartTime = new Date()
       console.log(`处理批次 ${batchIndex + 1}/${batches.length}, 包含${batchSkus.length}个SKU`)
+
+      // 添加上传日志
+      const logEntry = {
+        time: batchStartTime.toLocaleString(),
+        batchNumber: batchIndex + 1,
+        totalBatches: batches.length,
+        skuCount: batchSkus.length,
+        status: '开始处理',
+        result: ''
+      }
+      form.value.uploadLogs.unshift(logEntry)
 
       // 更新状态指示器
       if (batches.length > 1) {
@@ -470,27 +489,50 @@ const handleBatchImport = async () => {
         // 使用文件上传方式进行批处理
         const result = await batchProcessSKUs(batchSkus, shopInfo)
 
-        // 为此批次添加一条汇总记录
-        const batchTask = {
-          sku:
-            batches.length > 1
-              ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
-              : `批量提交 (${batchSkus.length}个SKU)`,
-          店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
-          仓库: currentWarehouseInfo.value
-            ? currentWarehouseInfo.value.warehouseName
-            : form.value.selectedWarehouse,
-          创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-          状态: result.success ? '成功' : '失败',
-          结果: result.message || (result.success ? '成功导入' : '导入失败')
-        }
-
-        taskList.value.push(batchTask)
-        emit('add-task')
-
+        // 更新任务状态
         if (result.success) {
+          // 更新日志状态
+          logEntry.status = '成功'
+          logEntry.result = result.message || '成功导入'
+
+          // 为此批次添加一条汇总记录
+          const batchTask = {
+            sku:
+              batches.length > 1
+                ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
+                : `批量提交 (${batchSkus.length}个SKU)`,
+            店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
+            仓库: currentWarehouseInfo.value
+              ? currentWarehouseInfo.value.warehouseName
+              : form.value.selectedWarehouse,
+            创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+            状态: '成功',
+            结果: result.message || '成功导入'
+          }
+
+          taskList.value.push(batchTask)
+          emit('add-task')
           successCount += batchSkus.length
         } else {
+          // 更新日志状态
+          logEntry.status = '失败'
+          logEntry.result = result.message || '导入失败'
+
+          // 为此批次添加一条汇总记录
+          taskList.value.push({
+            sku:
+              batches.length > 1
+                ? `批次 ${batchIndex + 1}/${batches.length} (${batchSkus.length}个SKU)`
+                : `批量提交 (${batchSkus.length}个SKU)`,
+            店铺: currentShopInfo.value ? currentShopInfo.value.shopName : form.value.selectedStore,
+            仓库: currentWarehouseInfo.value
+              ? currentWarehouseInfo.value.warehouseName
+              : form.value.selectedWarehouse,
+            创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+            状态: '失败',
+            结果: result.message || '导入失败'
+          })
+
           failureCount += batchSkus.length
 
           // 如果是关键错误，考虑中断后续批次处理
@@ -504,12 +546,45 @@ const handleBatchImport = async () => {
           }
         }
 
-        // 如果不是最后一批，添加一个短暂的延迟
+        // 如果不是最后一批，添加等待时间
         if (batchIndex < batches.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000))
+          const waitTimeMs = 65000 // 1分5秒 = 65秒
+
+          // 倒计时显示
+          const countdownElement = statusDiv.querySelector('.status-countdown')
+          if (countdownElement) {
+            countdownElement.style.marginTop = '10px'
+            countdownElement.style.fontSize = '14px'
+
+            // 启动倒计时
+            let remainingTime = waitTimeMs
+            const countdownInterval = setInterval(() => {
+              remainingTime -= 1000
+              if (remainingTime <= 0) {
+                clearInterval(countdownInterval)
+                countdownElement.textContent = '准备处理下一批...'
+              } else {
+                const seconds = Math.ceil(remainingTime / 1000)
+                countdownElement.textContent = `等待处理下一批: ${Math.floor(seconds / 60)}分${seconds % 60}秒`
+              }
+            }, 1000)
+
+            // 显示初始倒计时
+            countdownElement.textContent = `等待处理下一批: 1分5秒`
+
+            // 更新日志
+            logEntry.result += ' - 等待处理下一批'
+
+            // 等待指定时间
+            await new Promise((resolve) => setTimeout(resolve, waitTimeMs))
+          }
         }
       } catch (error) {
         console.error(`批次${batchIndex + 1}执行失败:`, error)
+
+        // 更新日志状态
+        logEntry.status = '失败'
+        logEntry.result = error.message || '执行出错'
 
         // 为此批次添加一条失败的汇总记录
         taskList.value.push({
@@ -828,6 +903,11 @@ const clearFileInput = () => {
   form.value.fileImport.importSuccess = false
   form.value.sku = ''
 }
+
+// 切换选项卡
+const switchTab = (tab) => {
+  activeTab.value = tab
+}
 </script>
 
 <template>
@@ -1013,55 +1093,100 @@ const clearFileInput = () => {
       </div>
 
       <div class="task-table-container">
-        <table class="task-table">
-          <thead>
-            <tr>
-              <th style="width: 40px"><input type="checkbox" /></th>
-              <th>SKU</th>
-              <th>店铺</th>
-              <th>仓库</th>
-              <th>创建时间</th>
-              <th>状态</th>
-              <th>结果</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(task, index) in taskList" :key="index">
-              <td><input type="checkbox" /></td>
-              <td>{{ task.sku }}</td>
-              <td>{{ task.店铺 }}</td>
-              <td>{{ task.仓库 }}</td>
-              <td>{{ task.创建时间 }}</td>
-              <td>
-                <span :class="['status-tag', getStatusClass(task.状态)]">{{ task.状态 }}</span>
-              </td>
-              <td>
-                <span v-if="task.状态 === '等待中'">等待执行...</span>
-                <span v-else-if="task.状态 === '执行中'">处理中...</span>
-                <span v-else-if="task.状态 === '成功'">{{ task.结果 || '成功' }}</span>
-                <span v-else-if="task.状态 === '失败'" class="error-text">{{
-                  task.结果 || '失败'
-                }}</span>
-              </td>
-              <td>
-                <button
-                  class="btn btn-small btn-primary"
-                  @click="executeOneTask(index)"
-                  v-if="task.状态 === '等待中' || task.状态 === '失败'"
-                >
-                  执行
-                </button>
-                <button class="btn btn-small btn-danger" @click="taskList.splice(index, 1)">
-                  删除
-                </button>
-              </td>
-            </tr>
-            <tr v-if="taskList.length === 0">
-              <td colspan="8" class="no-data">No Data</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="tab-container">
+          <div class="tab-header">
+            <div :class="['tab', { active: activeTab === 'tasks' }]" @click="switchTab('tasks')">
+              任务列表
+            </div>
+            <div :class="['tab', { active: activeTab === 'logs' }]" @click="switchTab('logs')">
+              提交日志
+            </div>
+          </div>
+          <div class="tab-content">
+            <div :class="['tab-pane', { active: activeTab === 'tasks' }]">
+              <table class="task-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px"><input type="checkbox" /></th>
+                    <th>SKU</th>
+                    <th>店铺</th>
+                    <th>仓库</th>
+                    <th>创建时间</th>
+                    <th>状态</th>
+                    <th>结果</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(task, index) in taskList" :key="index">
+                    <td><input type="checkbox" /></td>
+                    <td>{{ task.sku }}</td>
+                    <td>{{ task.店铺 }}</td>
+                    <td>{{ task.仓库 }}</td>
+                    <td>{{ task.创建时间 }}</td>
+                    <td>
+                      <span :class="['status-tag', getStatusClass(task.状态)]">{{
+                        task.状态
+                      }}</span>
+                    </td>
+                    <td>
+                      <span v-if="task.状态 === '等待中'">等待执行...</span>
+                      <span v-else-if="task.状态 === '执行中'">处理中...</span>
+                      <span v-else-if="task.状态 === '成功'">{{ task.结果 || '成功' }}</span>
+                      <span v-else-if="task.状态 === '失败'" class="error-text">{{
+                        task.结果 || '失败'
+                      }}</span>
+                    </td>
+                    <td>
+                      <button
+                        class="btn btn-small btn-primary"
+                        @click="executeOneTask(index)"
+                        v-if="task.状态 === '等待中' || task.状态 === '失败'"
+                      >
+                        执行
+                      </button>
+                      <button class="btn btn-small btn-danger" @click="taskList.splice(index, 1)">
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="taskList.length === 0">
+                    <td colspan="8" class="no-data">No Data</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div :class="['tab-pane', { active: activeTab === 'logs' }]">
+              <table class="task-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>批次</th>
+                    <th>SKU数量</th>
+                    <th>状态</th>
+                    <th>结果</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(log, index) in form.uploadLogs" :key="index">
+                    <td>{{ log.time }}</td>
+                    <td>{{ log.batchNumber }}/{{ log.totalBatches }}</td>
+                    <td>{{ log.skuCount }}</td>
+                    <td>
+                      <span :class="['status-tag', getStatusClass(log.status)]">{{
+                        log.status
+                      }}</span>
+                    </td>
+                    <td>{{ log.result }}</td>
+                  </tr>
+                  <tr v-if="form.uploadLogs.length === 0">
+                    <td colspan="5" class="no-data">暂无提交日志</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="task-footer">
@@ -1574,5 +1699,50 @@ const clearFileInput = () => {
   100% {
     transform: rotate(360deg);
   }
+}
+
+.tab-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-header {
+  display: flex;
+  border-bottom: 1px solid #ebeef5;
+  margin-bottom: 10px;
+}
+
+.tab {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #606266;
+  font-size: 14px;
+}
+
+.tab.active {
+  color: #2196f3;
+  border-bottom: 2px solid #2196f3;
+  margin-bottom: -1px;
+}
+
+.tab-content {
+  flex: 1;
+  overflow: auto;
+}
+
+.tab-pane {
+  display: none;
+  height: 100%;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+.status-countdown {
+  color: #ff9800;
+  font-weight: 500;
 }
 </style>

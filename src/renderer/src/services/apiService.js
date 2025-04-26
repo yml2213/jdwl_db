@@ -22,24 +22,47 @@ async function getCsrfToken() {
  * @param {Object} options - 请求选项
  * @returns {Promise<any>} 响应数据
  */
-async function fetchApi(url, options = {}) {
+export const fetchApi = async (url, options = {}) => {
+  const MAX_RETRIES = 3 // 最大重试次数
+  const TIMEOUT = 120000 // 超时时间设为120秒
+
   try {
     // 获取包含Cookie的请求头
     const headers = await getRequestHeaders()
 
     // 合并选项
-    const requestOptions = {
+    const finalOptions = {
       ...options,
+      timeout: TIMEOUT, // 设置更长的超时时间
       headers: {
         ...headers,
         ...options.headers
       }
     }
 
-    console.log('发送请求:', url, requestOptions)
+    console.log('发送请求:', url, options)
 
-    // 使用主进程进行请求以解决跨域问题
-    return await window.api.sendRequest(url, requestOptions)
+    let retries = 0
+    while (retries < MAX_RETRIES) {
+      try {
+        const response = await window.api.sendRequest(url, finalOptions)
+        return response
+      } catch (error) {
+        retries++
+        console.warn(`API请求失败(尝试 ${retries}/${MAX_RETRIES}):`, error)
+
+        // 如果已经达到最大重试次数，抛出错误
+        if (retries >= MAX_RETRIES) {
+          console.error(`达到最大重试次数(${MAX_RETRIES})，请求失败:`, error)
+          throw error
+        }
+
+        // 等待一段时间后重试，使用指数退避策略
+        const waitTime = 2000 * Math.pow(2, retries - 1) // 2秒, 4秒, 8秒...
+        console.log(`将在 ${waitTime / 1000} 秒后重试...`)
+        await new Promise((resolve) => setTimeout(resolve, waitTime))
+      }
+    }
   } catch (error) {
     console.error('API请求失败:', error)
     throw error
@@ -616,6 +639,8 @@ async function serializeFormData(formData) {
   // 返回序列化的FormData对象
   return {
     _isFormData: true,
-    entries
+    entries,
+    // 注意: 对于大量SKU处理，增加超时时间至120秒
+    timeout: 120000
   }
 }
