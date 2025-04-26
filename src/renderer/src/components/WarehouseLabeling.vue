@@ -538,25 +538,37 @@ const submitLogisticsData = async (data) => {
     form.value.logisticsImport.currentBatch = 0
     form.value.logisticsImport.totalBatches = Math.ceil(data.skuList.length / 500)
 
-    // 添加任务
+    // 创建正确的任务对象
     const task = {
       id: Date.now().toString(),
-      type: 'importLogisticsProps',
-      label: '导入物流属性',
       skuList: data.skuList,
-      waitTime: data.waitTime,
-      status: 'pending',
-      progress: '0%',
-      result: null
+      sku: `物流属性导入 (${data.skuList.length}个SKU)`,
+      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      状态: '等待中',
+      结果: '',
+      选项: {
+        importStore: false,
+        useStore: false,
+        importProps: true,
+        useMainData: false,
+        useWarehouse: false,
+        useJdEffect: false,
+        importTitle: false,
+        useBatchManage: false
+      }
     }
 
+    // 添加到任务列表
     taskList.value.push(task)
 
+    // 获取当前选中的店铺（即使不需要，但保持参数结构一致）
+    const shopInfo = currentShopInfo.value || {}
+
     // 执行任务
-    await executeOneTask(taskList.value.length - 1)
+    const result = await executeOneTask(task, shopInfo, task.选项)
 
     // 更新导入状态
-    form.value.logisticsImport.success = true
+    form.value.logisticsImport.success = result && result.success
     form.value.logisticsImport.uploading = false
     form.value.logisticsImport.progress = '导入完成'
 

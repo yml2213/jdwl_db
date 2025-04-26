@@ -22,8 +22,16 @@ import {
  * @returns {Promise<Object>} 执行结果
  */
 export async function executeOneTask(task, shopInfo, options) {
-  if (!task || !shopInfo) {
-    throw new Error('缺少任务或店铺信息')
+  if (!task) {
+    throw new Error('缺少任务信息')
+  }
+
+  // 对于物流属性导入任务，不需要店铺信息
+  const isLogisticsImport =
+    options && options.importProps === true && !options.importStore && !options.useStore
+
+  if (!isLogisticsImport && !shopInfo) {
+    throw new Error('缺少店铺信息')
   }
 
   // 标记为执行中
@@ -104,7 +112,7 @@ export async function executeOneTask(task, shopInfo, options) {
     // 导入物流属性功能 - 使用独立模块
     if (options.importProps === true) {
       try {
-        console.log('执行[导入物流属性]功能，SKU:', task.sku)
+        console.log('执行[导入物流属性]功能，SKU:', task.sku || task.skuList)
 
         // 提取SKU
         const skuList = extractTaskSkuList(task)

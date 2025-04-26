@@ -80,7 +80,7 @@ const dimensions = ref({
   length: 120,
   width: 60,
   height: 60,
-  weight: 100
+  weight: 0.1
 })
 
 // 状态标志
