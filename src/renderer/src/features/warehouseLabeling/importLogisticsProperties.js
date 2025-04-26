@@ -26,6 +26,8 @@ export default {
       let processedCount = 0
       let failedCount = 0
       let totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
+      // 收集失败的错误信息
+      const failedResults = []
 
       console.log(`SKU总数: ${skuList.length}, 分成 ${totalBatches} 批处理`)
 
@@ -46,6 +48,14 @@ export default {
             console.log(`批次 ${batchIndex + 1} 处理成功`)
           } else {
             failedCount += batchSkus.length
+            // 添加失败原因到收集器
+            if (result.data) {
+              failedResults.push(result.data)
+            } else if (result.message) {
+              failedResults.push(result.message)
+            } else {
+              failedResults.push(`批次 ${batchIndex + 1} 处理失败`)
+            }
             console.error(`批次 ${batchIndex + 1} 处理失败: ${result.message}`)
           }
 
@@ -58,6 +68,8 @@ export default {
         } catch (error) {
           console.error(`批次 ${batchIndex + 1} 处理出错:`, error)
           failedCount += batchSkus.length
+          // 添加错误消息到收集器
+          failedResults.push(error.message || `批次 ${batchIndex + 1} 出现未知错误`)
         }
       }
 
@@ -66,7 +78,8 @@ export default {
         message: `导入物流属性完成: 成功 ${processedCount} 个, 失败 ${failedCount} 个`,
         processedCount,
         failedCount,
-        skippedCount: 0
+        skippedCount: 0,
+        errorDetail: failedResults.length > 0 ? failedResults.join('; ') : null
       }
     } catch (error) {
       console.error('导入物流属性失败:', error)
@@ -75,7 +88,8 @@ export default {
         message: `导入物流属性失败: ${error.message || '未知错误'}`,
         processedCount: 0,
         failedCount: skuList.length,
-        skippedCount: 0
+        skippedCount: 0,
+        errorDetail: error.message
       }
     }
   },
@@ -141,7 +155,10 @@ export default {
       // 正确解析响应结果
       if (
         response &&
-        (response.success === true || (response.data && response.data.includes('导入成功')))
+        (response.success === true ||
+          (response.data &&
+            typeof response.data === 'string' &&
+            response.data.includes('导入成功')))
       ) {
         // 成功响应
         const taskId = (response.data && response.data.match(/任务编号:([^,]+)/)?.[1]) || '未知'
@@ -152,17 +169,48 @@ export default {
           processedCount: skuList.length,
           failedCount: 0,
           skippedCount: 0,
-          data: response
+          data: response.data
         }
       } else {
         // 失败响应
+        let errorMessage = '导入失败，未知原因'
+        let isPartialSuccess = false
+
+        // 处理各种可能的错误响应格式
+        if (response) {
+          if (typeof response.data === 'string' && response.data.trim() !== '') {
+            // 优先使用data字段中的错误信息（例如"5分钟内只能导入一次,请稍后再试!!"）
+            errorMessage = response.data
+
+            // 检查是否是特定的API限制类型错误（这类错误通常算部分成功）
+            if (
+              response.data.includes('分钟内只能导入一次') ||
+              response.data.includes('请稍后再试')
+            ) {
+              isPartialSuccess = true
+            }
+          } else if (typeof response.tipMsg === 'string' && response.tipMsg.trim() !== '') {
+            // 其次使用tipMsg
+            errorMessage = response.tipMsg
+          } else if (typeof response.message === 'string' && response.message.trim() !== '') {
+            // 最后使用message
+            errorMessage = response.message
+          }
+        }
+
+        console.error('物流属性导入失败:', errorMessage)
+
+        // 重要：明确标记为false，告知上游处理逻辑这是失败状态
         return {
-          success: false,
-          message: response?.tipMsg || response?.data || '导入失败，未知原因',
+          success: false, // 始终返回false表示API调用失败
+          message: errorMessage,
           processedCount: 0,
           failedCount: skuList.length,
           skippedCount: 0,
-          data: response
+          data: errorMessage,
+          tipMsg: response?.tipMsg,
+          isPartialSuccess: isPartialSuccess, // 添加标识供上游判断是否部分成功
+          originalResponse: response
         }
       }
     } catch (error) {

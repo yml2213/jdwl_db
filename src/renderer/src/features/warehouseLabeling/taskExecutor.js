@@ -126,7 +126,20 @@ export async function executeOneTask(task, shopInfo, options) {
         if (importResult.success) {
           functionResults.push(`导入物流属性: 成功 - 处理了${importResult.processedCount}个SKU`)
         } else {
-          functionResults.push(`导入物流属性: 失败 - ${importResult.message}`)
+          // 获取原始错误信息
+          let errorMessage = ''
+
+          // 优先使用API返回的原始错误信息
+          if (importResult.data) {
+            errorMessage = importResult.data
+          } else if (importResult.message) {
+            errorMessage = importResult.message
+          } else {
+            errorMessage = '导入物流属性失败'
+          }
+
+          // 添加清晰的错误信息到结果
+          functionResults.push(`导入物流属性: 失败 - ${errorMessage}`)
           hasFailures = true
         }
       } catch (importError) {

@@ -115,14 +115,39 @@ export function useLogisticsAttributes(taskList, currentShopInfo) {
 
       console.log('导入物流属性结果:', result)
 
-      // 更新任务状态 - 修复状态更新问题，正确处理返回数据
-      if (result && result.success) {
+      // 更新任务状态 - 修复状态更新问题，确保正确处理API返回状态
+      if (result && result.success === true) {
+        // 任务成功执行
         task.状态 = '成功'
         // 使用正确的字段，data或message
         task.结果 = result.data || result.message || '导入物流属性成功'
       } else {
-        task.状态 = '失败'
-        task.结果 = result?.message || result?.data || '导入失败，未知原因'
+        // 任务执行失败
+        // 检查是否是部分成功
+        if (result && result.isPartialSuccess) {
+          task.状态 = '部分成功'
+          task.结果 = result.data || result.message || '导入部分成功，请查看日志'
+        } else {
+          task.状态 = '失败'
+          // 处理不同格式的错误响应
+          let errorMessage = '导入失败，未知原因'
+
+          // 如果是API返回的错误信息
+          if (result) {
+            if (typeof result.data === 'string' && result.data.trim() !== '') {
+              // 优先使用data字段中的错误信息
+              errorMessage = result.data
+            } else if (typeof result.tipMsg === 'string' && result.tipMsg.trim() !== '') {
+              // 其次使用tipMsg
+              errorMessage = result.tipMsg
+            } else if (typeof result.message === 'string' && result.message.trim() !== '') {
+              // 最后使用message
+              errorMessage = result.message
+            }
+          }
+
+          task.结果 = errorMessage
+        }
       }
 
       // 更新导入状态
@@ -134,6 +159,11 @@ export function useLogisticsAttributes(taskList, currentShopInfo) {
       // 生成提示信息
       if (result && result.success) {
         alert(`物流属性导入成功！\n${result.data || result.message || ''}`)
+      } else if (result && result.isPartialSuccess) {
+        alert(`物流属性导入受限: ${result.data || result.message || ''}`)
+      } else {
+        // 显示错误提示
+        alert(`物流属性导入失败: ${task.结果}`)
       }
 
       // 关闭对话框

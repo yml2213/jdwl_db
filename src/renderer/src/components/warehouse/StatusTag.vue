@@ -47,6 +47,11 @@ const statusClass = computed(() => getStatusClass(props.status))
   color: #e53935;
 }
 
+.status-tag.partial-success {
+  background-color: #fff3e0;
+  color: #ef6c00;
+}
+
 .status-tag.temp-saved {
   background-color: #e3f2fd;
   color: #1976d2;
