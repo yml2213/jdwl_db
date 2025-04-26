@@ -25,6 +25,7 @@
         <td>
           <span v-if="task.状态 === '等待中'">等待执行...</span>
           <span v-else-if="task.状态 === '执行中'">处理中...</span>
+          <span v-else-if="task.状态 === '暂存'">{{ task.结果 || '等待批量处理' }}</span>
           <span v-else-if="task.状态 === '成功'">{{ task.结果 || '成功' }}</span>
           <span v-else-if="task.状态 === '失败'" class="error-text">{{ task.结果 || '失败' }}</span>
         </td>
@@ -32,7 +33,7 @@
           <button
             class="btn btn-small btn-primary"
             @click="$emit('execute-one', task, index)"
-            v-if="task.状态 === '等待中' || task.状态 === '失败'"
+            v-if="task.状态 === '等待中' || task.状态 === '失败' || task.状态 === '暂存'"
           >
             执行
           </button>

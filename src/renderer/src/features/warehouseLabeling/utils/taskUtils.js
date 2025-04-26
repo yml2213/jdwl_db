@@ -132,8 +132,9 @@ export function getStatusClass(status) {
     case '成功':
       return 'success'
     case '失败':
-    case '部分成功':
       return 'failure'
+    case '暂存':
+      return 'temp-saved'
     default:
       return ''
   }

@@ -30,11 +30,21 @@
         </button>
         <button
           class="btn btn-success"
-          @click="submitTemplate"
+          @click="submitTemplate(false)"
           :disabled="!canSubmit || isUploading"
         >
           {{ isUploading ? '提交中...' : '提交物流数据' }}
         </button>
+        <button
+          class="btn btn-secondary"
+          @click="submitTemplate(true)"
+          :disabled="!canSubmit || isUploading"
+        >
+          暂存到任务列表
+        </button>
+      </div>
+      <div class="close-button" @click="closeDialog">
+        <span>×</span>
       </div>
       <div v-if="generatedTemplate" class="template-preview">
         <h4>生成的模板预览</h4>
@@ -121,6 +131,11 @@ const canSubmit = computed(() => {
   )
 })
 
+// 关闭对话框
+const closeDialog = () => {
+  emit('close')
+}
+
 // 生成物流模板数据
 const generateLogisticsTemplate = () => {
   isGenerating.value = true
@@ -162,25 +177,28 @@ const generateLogisticsTemplate = () => {
 }
 
 // 提交模板数据
-const submitTemplate = () => {
+const submitTemplate = (tempSave = false) => {
   if (!generatedTemplate.value) {
     alert('请先生成模板')
     return
   }
 
-  if (
-    confirm(
-      `确定要提交${props.skuList.length}个SKU的物流属性数据吗？每批处理将等待${props.waitTime}分钟。`
-    )
-  ) {
-    isUploading.value = true
+  const message = tempSave
+    ? `确定要将${props.skuList.length}个SKU的物流属性数据暂存到任务列表吗？`
+    : `确定要提交${props.skuList.length}个SKU的物流属性数据吗？每批处理将等待${props.waitTime}分钟。`
+
+  if (confirm(message)) {
+    if (!tempSave) {
+      isUploading.value = true
+    }
 
     // 触发提交事件
     emit('submit', {
       skuList: props.skuList,
       template: generatedTemplate.value,
       dimensions: dimensions.value,
-      waitTime: props.waitTime
+      waitTime: props.waitTime,
+      tempSave: tempSave // 添加暂存标志
     })
   }
 }
@@ -209,6 +227,20 @@ const submitTemplate = () => {
   max-width: 90%;
   max-height: 90vh;
   overflow-y: auto;
+  position: relative;
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.close-button:hover {
+  color: #333;
 }
 
 .import-dialog h3 {
@@ -239,6 +271,7 @@ const submitTemplate = () => {
   display: flex;
   justify-content: space-between;
   margin: 24px 0;
+  gap: 10px;
 }
 
 .btn {
@@ -248,6 +281,7 @@ const submitTemplate = () => {
   border-radius: 4px;
   border: none;
   cursor: pointer;
+  flex: 1;
 }
 
 .btn:disabled {
@@ -262,6 +296,11 @@ const submitTemplate = () => {
 
 .btn-success {
   background-color: #52c41a;
+  color: white;
+}
+
+.btn-secondary {
+  background-color: #909399;
   color: white;
 }
 

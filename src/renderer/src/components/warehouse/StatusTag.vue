@@ -47,6 +47,12 @@ const statusClass = computed(() => getStatusClass(props.status))
   color: #e53935;
 }
 
+.status-tag.temp-saved {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border: 1px dashed #2196f3;
+}
+
 @keyframes pulse {
   0% {
     opacity: 1;

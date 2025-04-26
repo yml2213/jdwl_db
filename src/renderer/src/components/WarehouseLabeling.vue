@@ -17,6 +17,8 @@ import { getShopList, getWarehouseList, enableShopProducts } from '../services/a
 // 导入任务执行器和工具函数
 import { executeOneTask, executeTasks } from '../features/warehouseLabeling/taskExecutor'
 import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
+// 导入物流属性相关功能
+import { useLogisticsAttributes } from '../features/warehouseLabeling/logisticsAttributes'
 
 // 导入拆分的组件
 import OperationArea from './warehouse/OperationArea.vue'
@@ -75,15 +77,6 @@ const form = ref({
     currentBatch: 0,
     totalBatches: 0,
     progress: '初始化...'
-  },
-  logisticsImport: {
-    showDialog: false,
-    uploading: false,
-    success: false,
-    error: '',
-    progress: '',
-    currentBatch: 0,
-    totalBatches: 0
   }
 })
 
@@ -117,6 +110,13 @@ const currentWarehouseInfo = computed(() => {
     (warehouse) => warehouse.warehouseNo === form.value.selectedWarehouse
   )
 })
+
+// 使用物流属性相关功能
+const { logisticsImport, openLogisticsImporter, closeLogisticsImporter, submitLogisticsData } =
+  useLogisticsAttributes(taskList, currentShopInfo)
+
+// 将物流属性状态添加到表单中
+form.value.logisticsImport = logisticsImport.value
 
 // 加载店铺列表
 const loadShops = async () => {
@@ -359,10 +359,12 @@ const handleExecuteOneTask = async (task) => {
 
 // 执行任务按钮点击处理
 const executeTask = async () => {
-  // 过滤出所有等待中的任务
-  const waitingTasks = taskList.value.filter((task) => task.状态 === '等待中')
-  if (waitingTasks.length === 0) {
-    alert('没有等待中的任务')
+  // 过滤出所有等待中或暂存的任务
+  const tasksToExecute = taskList.value.filter(
+    (task) => task.状态 === '等待中' || task.状态 === '暂存'
+  )
+  if (tasksToExecute.length === 0) {
+    alert('没有等待中或暂存的任务')
     return
   }
 
@@ -376,7 +378,7 @@ const executeTask = async () => {
   // 使用任务执行器执行所有任务
   try {
     const result = await executeTasks(
-      waitingTasks,
+      tasksToExecute,
       shopInfo,
       form.value.waitTime,
       form.value.disabledProducts,
@@ -493,122 +495,9 @@ const handleDeleteTask = (index) => {
   taskList.value.splice(index, 1)
 }
 
-// 打开物流属性导入对话框
-const openLogisticsImporter = () => {
-  // 检查是否输入了SKU
-  const skuText = form.value.sku.trim()
-  if (!skuText) {
-    alert('请先输入SKU')
-    return
-  }
-
-  // 解析SKU列表
-  const skuList = skuText.split(/\r?\n/).filter((line) => line.trim())
-  if (skuList.length === 0) {
-    alert('请至少输入一个有效的SKU')
-    return
-  }
-
-  // 检查是否选择了事业部
-  const department = getSelectedDepartment()
-  if (!department) {
-    alert('请先选择事业部')
-    return
-  }
-
-  // 设置对话框状态并显示
-  form.value.logisticsImport.showDialog = true
-}
-
-// 关闭物流属性导入对话框
-const closeLogisticsImporter = () => {
-  form.value.logisticsImport.showDialog = false
-}
-
-// 提交物流属性数据
-const submitLogisticsData = async (data) => {
-  console.log('提交物流属性数据:', data)
-
-  try {
-    // 重置导入状态
-    form.value.logisticsImport.uploading = true
-    form.value.logisticsImport.success = false
-    form.value.logisticsImport.error = ''
-    form.value.logisticsImport.progress = '准备导入...'
-    form.value.logisticsImport.currentBatch = 0
-    form.value.logisticsImport.totalBatches = Math.ceil(data.skuList.length / 500)
-
-    // 创建正确的任务对象
-    const task = {
-      id: Date.now().toString(),
-      skuList: data.skuList,
-      sku: `物流属性导入 (${data.skuList.length}个SKU)`,
-      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-      状态: '等待中',
-      结果: '',
-      选项: {
-        importStore: false,
-        useStore: false,
-        importProps: true,
-        useMainData: false,
-        useWarehouse: false,
-        useJdEffect: false,
-        importTitle: false,
-        useBatchManage: false
-      }
-    }
-
-    // 添加到任务列表
-    taskList.value.push(task)
-
-    // 获取当前选中的店铺（即使不需要，但保持参数结构一致）
-    const shopInfo = currentShopInfo.value || {}
-
-    // 执行任务
-    const result = await executeOneTask(task, shopInfo, task.选项)
-
-    console.log('导入物流属性结果:', result)
-
-    // 更新任务状态
-    if (result && result.success) {
-      task.状态 = '成功'
-      task.结果 = result.message || '导入物流属性成功'
-    } else {
-      task.状态 = '失败'
-      task.结果 = result?.message || '导入失败，未知原因'
-    }
-
-    // 更新导入状态
-    form.value.logisticsImport.success = result && result.success
-    form.value.logisticsImport.uploading = false
-    form.value.logisticsImport.progress =
-      result && result.success ? `导入成功: ${result.taskId || ''}` : '导入失败'
-
-    // 生成提示信息
-    if (result && result.success) {
-      alert(`物流属性导入成功！\n${result.message || ''}`)
-    }
-
-    // 关闭对话框
-    setTimeout(() => {
-      form.value.logisticsImport.showDialog = false
-    }, 1500)
-  } catch (error) {
-    console.error('导入物流属性失败:', error)
-    form.value.logisticsImport.error = `导入失败: ${error.message || '未知错误'}`
-    form.value.logisticsImport.uploading = false
-
-    // 更新任务状态为失败
-    if (taskList.value.length > 0) {
-      const lastTask = taskList.value[taskList.value.length - 1]
-      if (lastTask && lastTask.状态 === '等待中') {
-        lastTask.状态 = '失败'
-        lastTask.结果 = error.message || '执行出错'
-      }
-    }
-
-    alert(`物流属性导入失败: ${error.message || '未知错误'}`)
-  }
+// 打开物流属性导入对话框的封装方法
+const handleOpenLogisticsImporter = () => {
+  openLogisticsImporter(form.value.sku)
 }
 
 // 使用provide向子组件提供数据和方法
@@ -643,7 +532,7 @@ provide('handleExecuteOneTask', handleExecuteOneTask)
 provide('handleDeleteTask', handleDeleteTask)
 provide('enableDisabledProducts', enableDisabledProducts)
 provide('getStatusClass', getStatusClass)
-provide('openLogisticsImporter', openLogisticsImporter)
+provide('openLogisticsImporter', handleOpenLogisticsImporter)
 </script>
 
 <template>
