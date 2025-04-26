@@ -72,7 +72,8 @@ const form = ref({
     checkSuccess: false,
     enableSuccess: false,
     currentBatch: 0,
-    totalBatches: 0
+    totalBatches: 0,
+    progress: '初始化...'
   }
 })
 
@@ -702,6 +703,7 @@ const checkProductStatus = async (batchSkus, currentBatch, totalBatches, allDisa
   form.value.disabledProducts.currentBatch = currentBatch
   form.value.disabledProducts.totalBatches = totalBatches
   form.value.disabledProducts.checkError = ''
+  form.value.disabledProducts.progress = '初始化...'
 
   console.log(`开始检查批次 ${currentBatch}/${totalBatches} 的商品状态`)
 
@@ -723,6 +725,7 @@ const checkProductStatus = async (batchSkus, currentBatch, totalBatches, allDisa
     }
 
     console.log(`将${batchSkus.length}个SKU分成${skuGroups.length}组进行状态查询`)
+    form.value.disabledProducts.progress = `准备查询 ${skuGroups.length}组 SKU`
 
     // 遍历每个SKU组，查询状态
     for (let groupIndex = 0; groupIndex < skuGroups.length; groupIndex++) {
@@ -730,21 +733,28 @@ const checkProductStatus = async (batchSkus, currentBatch, totalBatches, allDisa
       console.log(
         `查询第${groupIndex + 1}/${skuGroups.length}组SKU状态，包含${skuGroup.length}个SKU`
       )
+      form.value.disabledProducts.progress = `查询第${groupIndex + 1}/${skuGroups.length}组 SKU`
 
       // 调用API查询商品状态
       const statusResult = await queryProductStatus(skuGroup, shopInfo, department)
 
-      if (statusResult.success && statusResult.disabledItems.length > 0) {
-        console.log(`发现${statusResult.disabledItems.length}个停用商品`)
+      if (statusResult.success) {
+        if (statusResult.disabledItems.length > 0) {
+          console.log(`发现${statusResult.disabledItems.length}个停用商品`)
+          form.value.disabledProducts.progress = `第${groupIndex + 1}组: 发现${statusResult.disabledItems.length}个停用商品`
 
-        // 将找到的停用商品添加到全局列表
-        allDisabledProducts.push(...statusResult.disabledItems)
+          // 将找到的停用商品添加到全局列表
+          allDisabledProducts.push(...statusResult.disabledItems)
 
-        // 更新UI状态
-        form.value.disabledProducts.items = allDisabledProducts
-        form.value.disabledProducts.checkSuccess = true
-      } else if (!statusResult.success) {
+          // 更新UI状态
+          form.value.disabledProducts.items = allDisabledProducts
+          form.value.disabledProducts.checkSuccess = true
+        } else {
+          form.value.disabledProducts.progress = `第${groupIndex + 1}组: 未发现停用商品`
+        }
+      } else {
         form.value.disabledProducts.checkError = statusResult.message
+        form.value.disabledProducts.progress = `第${groupIndex + 1}组: 查询出错`
         console.warn(`查询商品状态出错: ${statusResult.message}`)
       }
 
@@ -757,14 +767,17 @@ const checkProductStatus = async (batchSkus, currentBatch, totalBatches, allDisa
     console.log(
       `批次${currentBatch}/${totalBatches}状态检查完成，累计发现${allDisabledProducts.length}个停用商品`
     )
+    form.value.disabledProducts.progress = `批次${currentBatch}/${totalBatches}完成, 累计${allDisabledProducts.length}个停用商品`
   } catch (error) {
     console.error('检查商品状态失败:', error)
     form.value.disabledProducts.checkError = error.message || '检查商品状态时出错'
+    form.value.disabledProducts.progress = '检查失败'
     throw error
   } finally {
     // 如果这是最后一个批次，结束检查状态
     if (currentBatch === totalBatches) {
       form.value.disabledProducts.checking = false
+      form.value.disabledProducts.progress = `全部完成, 共${allDisabledProducts.length}个停用商品`
     }
   }
 }
@@ -1421,9 +1434,12 @@ const switchTab = (tab) => {
               <div v-if="form.disabledProducts.checking" class="status-checking">
                 <div class="spinner"></div>
                 <div>
-                  正在检查商品状态 (批次 {{ form.disabledProducts.currentBatch }}/{{
-                    form.disabledProducts.totalBatches
-                  }})...
+                  <div>
+                    正在检查商品状态 (批次 {{ form.disabledProducts.currentBatch }}/{{
+                      form.disabledProducts.totalBatches
+                    }})...
+                  </div>
+                  <div class="progress-text">{{ form.disabledProducts.progress }}</div>
                 </div>
               </div>
 
@@ -1440,6 +1456,18 @@ const switchTab = (tab) => {
                   {{ form.disabledProducts.enabling ? '正在启用...' : '启用所有停用商品' }}
                 </button>
                 <span>共发现 {{ form.disabledProducts.items.length }} 个停用商品</span>
+              </div>
+
+              <div v-if="form.disabledProducts.items.length > 0" class="status-summary">
+                <div class="status-detail">
+                  <i class="status-icon"></i>
+                  有
+                  <span class="status-count">{{ form.disabledProducts.items.length }}</span>
+                  个商品处于停用状态，需要启用后才能正常销售
+                </div>
+                <div class="status-description">
+                  系统会自动收集所有停用商品，点击"启用所有停用商品"按钮可一键启用
+                </div>
               </div>
 
               <table class="task-table" v-if="form.disabledProducts.items.length > 0">
@@ -2037,8 +2065,8 @@ const switchTab = (tab) => {
 /* 停用商品相关样式 */
 .status-checking {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 15px;
   padding: 15px;
   background-color: #f5f7fa;
   border-radius: 4px;
@@ -2052,6 +2080,14 @@ const switchTab = (tab) => {
   border-top: 2px solid #2196f3;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #606266;
+  margin-top: 5px;
 }
 
 .error-message {
@@ -2067,6 +2103,52 @@ const switchTab = (tab) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 15px;
+}
+
+.status-summary {
+  background-color: #fef9e7;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  border-left: 4px solid #f39c12;
+}
+
+.status-detail {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.status-count {
+  font-weight: bold;
+  color: #e67e22;
+}
+
+.status-description {
+  font-size: 12px;
+  color: #7f8c8d;
+}
+
+.status-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: #f39c12;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-icon:after {
+  content: '!';
+  position: absolute;
+  color: white;
+  font-weight: bold;
+  font-size: 12px;
+  top: 0;
+  left: 5px;
+  line-height: 16px;
 }
 
 .badge {
