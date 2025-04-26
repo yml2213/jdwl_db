@@ -1,6 +1,7 @@
 import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
 import * as XLSX from 'xlsx'
+import { getSelectedVendor } from '../utils/storageHelper'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
@@ -465,6 +466,14 @@ export async function batchProcessSKUs(skuList, storeInfo) {
   console.log('已获取Cookie数量:', cookies.length)
 
   try {
+    // 获取当前选择的供应商
+    const selectedVendor = getSelectedVendor()
+    const cmgCode =
+      selectedVendor && selectedVendor.supplierNo
+        ? `CMS${selectedVendor.supplierNo}`
+        : 'CMS4418047112894'
+    console.log('获取供应商编码:', cmgCode)
+
     // 字段名
     const header = [
       'POP店铺商品编号（SKU编码）',
@@ -475,7 +484,7 @@ export async function batchProcessSKUs(skuList, storeInfo) {
     ]
 
     // 实际表格内容
-    const data = skuList.map((sku) => [sku, sku, sku, '0', 'CMS4418047112894'])
+    const data = skuList.map((sku) => [sku, sku, sku, '0', cmgCode])
 
     // 合成数据（首行为 header）
     const sheetData = [header, ...data]
