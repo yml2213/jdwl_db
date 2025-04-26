@@ -23,6 +23,11 @@ const api = {
   // 网络请求相关
   sendRequest: (url, options) => {
     return ipcRenderer.invoke('sendRequest', url, options)
+  },
+
+  // Excel文件处理
+  createExcelFile: (options) => {
+    return ipcRenderer.invoke('createExcelFile', options)
   }
 }
 

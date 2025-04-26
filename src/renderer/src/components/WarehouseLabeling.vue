@@ -263,6 +263,17 @@ const executeTask = async () => {
     return
   }
 
+  // 确保店铺信息包含spShopNo属性
+  if (!shopInfo.spShopNo) {
+    console.log('注意: 店铺信息中缺少spShopNo属性，将使用shopNo代替')
+    // 为防止服务器报错，添加一个兼容处理
+    if (shopInfo.shopNo) {
+      console.log('使用shopNo:', shopInfo.shopNo)
+    }
+  } else {
+    console.log('使用店铺spShopNo:', shopInfo.spShopNo)
+  }
+
   // 将所有等待中的任务标记为执行中
   waitingTasks.forEach((task) => {
     task.状态 = '执行中'
@@ -418,6 +429,13 @@ const executeOneTask = async (index) => {
   if (!shopInfo) {
     alert('请选择店铺')
     return
+  }
+
+  // 确保店铺信息包含spShopNo属性
+  if (!shopInfo.spShopNo) {
+    console.log('注意: 店铺信息中缺少spShopNo属性，将使用shopNo代替')
+  } else {
+    console.log('使用店铺spShopNo:', shopInfo.spShopNo)
   }
 
   // 标记为执行中

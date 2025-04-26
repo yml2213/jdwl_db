@@ -443,36 +443,83 @@ export async function batchProcessSKUs(skuList, storeInfo) {
   }
 
   console.log(`开始批量处理${skuList.length}个SKU`)
-  const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${storeInfo.spShopNo || storeInfo.shopNo}&_r=${Math.random()}&=`
+  // 使用与原始请求完全相同的URL格式
+  const spShopNo = storeInfo.spShopNo || storeInfo.shopNo || '18661988' // 默认值用于测试
+  const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}&=`
 
   console.log('url', url)
   console.log('storeInfo', storeInfo)
   const csrfToken = await getCsrfToken()
+  console.log('csrfToken', csrfToken)
+
+  // 获取所有Cookie
+  const cookies = await getAllCookies()
+  console.log('已获取Cookie数量:', cookies.length)
 
   try {
     // 创建一个包含SKU列表的临时文件内容
-    const content = skuList.map((sku) => `${sku}\t${sku}\t${sku}\t0\tCMS4418047112894`).join('\n')
-    const headers =
-      'POP店铺商品编号（SKU编码）\t商家商品标识\t商品条码\t是否代销（0-否，1-是）\t供应商CMG编码'
-    const fileContent = headers + '\n' + content
+    const headers = [
+      'POP店铺商品编号（SKU编码）',
+      '商家商品标识',
+      '商品条码',
+      '是否代销（0-否，1-是）',
+      '供应商CMG编码'
+    ]
+    const data = skuList.map((sku) => [sku, sku, sku, '0', 'CMS4418047112894'])
+
+    // 添加headers作为第一行
+    data.unshift(headers)
+
+    // 使用window.api来创建Excel文件，因为主进程可以使用xlsx库
+    const excelOptions = {
+      fileName: 'PopGoodsImportTemplate.xls',
+      sheetName: 'POP商品导入',
+      data: data
+    }
+
+    const excelBlob = await window.api.createExcelFile(excelOptions)
+    console.log('Excel文件已创建')
 
     // 创建文件对象
-    const blob = new Blob([fileContent], { type: 'application/vnd.ms-excel' })
-    const file = new File([blob], 'PopGoodsImportTemplate.xls', {
+    const file = new File([excelBlob], 'PopGoodsImportTemplate.xls', {
       type: 'application/vnd.ms-excel'
     })
 
-    // 调用文件导入API
+    console.log('已创建文件:', file.name, file.size, 'bytes')
+
+    // 使用FormData提交，但不使用自动Content-Type
     const formData = new FormData()
     formData.append('csrfToken', csrfToken)
     formData.append('shopGoodsPopGoodsListFile', file)
 
+    // 检查FormData内容
+    console.log('FormData已创建，包含以下字段:')
+    for (const pair of formData.entries()) {
+      console.log(pair[0], ':', pair[1] instanceof File ? '文件对象' : pair[1])
+    }
+
+    // 尝试使用Blob直接作为File对象
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
-        // 不设置Content-Type，让浏览器自动设置正确的multipart/form-data和边界
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+        'cache-control': 'no-cache',
+        origin: BASE_URL,
+        pragma: 'no-cache',
+        priority: 'u=0, i',
+        referer: `${BASE_URL}/goToMainIframe.do`,
+        'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'sec-fetch-dest': 'iframe',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
         'X-Requested-With': 'XMLHttpRequest'
       },
       body: formData

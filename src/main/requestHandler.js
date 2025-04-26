@@ -38,12 +38,28 @@ async function sendRequest(url, options = {}) {
     // 记录请求信息
     await logRequest(`发送请求: ${url}, 方法: ${options.method || 'GET'}`)
 
+    // 记录更详细的请求信息
+    console.log(
+      '完整请求选项:',
+      JSON.stringify(
+        {
+          url,
+          method: options.method,
+          headers: options.headers,
+          hasBody: !!options.body
+        },
+        null,
+        2
+      )
+    )
+
     // 将fetch风格的options转换为axios接受的格式
     const axiosOptions = {
       url,
       method: options.method || 'GET',
       headers: options.headers || {},
-      timeout: options.timeout || 30000
+      timeout: options.timeout || 30000,
+      withCredentials: true // 确保跨域请求发送cookie
     }
 
     // 处理URL查询参数
@@ -60,9 +76,21 @@ async function sendRequest(url, options = {}) {
     if (options.body) {
       // 如果是FormData类型，直接传递
       if (options.body instanceof FormData) {
-        axiosOptions.data = options.body
-        // 确保不手动设置Content-Type，让axios自动设置带边界的multipart/form-data
-        delete axiosOptions.headers['Content-Type']
+        // 对于FormData类型的请求，需要特殊处理
+        console.log('处理FormData请求')
+
+        // axios在Node.js环境中处理FormData的方式与浏览器不同
+        // 需要手动设置boundary
+        const boundary = '--------------------------' + Date.now().toString(16)
+
+        // 设置multipart/form-data的Content-Type
+        axiosOptions.headers['Content-Type'] = `multipart/form-data; boundary=${boundary}`
+
+        // 将FormData转换为适合axios的格式
+        const formData = options.body
+        axiosOptions.data = formData
+
+        console.log('发送FormData请求，boundary:', boundary)
       } else if (typeof options.body === 'string') {
         try {
           // 尝试解析JSON字符串
@@ -78,6 +106,8 @@ async function sendRequest(url, options = {}) {
 
     // 使用axios发送请求
     const response = await axiosInstance(axiosOptions)
+
+    console.log('响应状态:', response.status)
 
     // 根据响应类型决定如何处理响应
     let result

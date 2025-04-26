@@ -21,7 +21,9 @@
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
     "axios": "^1.6.7",
-    "qs": "^6.14.0"
+    "exceljs": "^4.4.0",
+    "qs": "^6.14.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.0.0",
