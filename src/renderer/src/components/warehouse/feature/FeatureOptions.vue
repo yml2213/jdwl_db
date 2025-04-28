@@ -15,10 +15,6 @@
         <span>导入物流属性(参数)</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.useMainData" />
-        <span>启用商品主数据</span>
-      </label>
-      <label class="checkbox-label">
         <input type="checkbox" v-model="options.useWarehouse" />
         <span>启用库存商品分配</span>
       </label>
@@ -50,7 +46,6 @@ const props = defineProps({
       importStore: true,
       useStore: true,
       importProps: false,
-      useMainData: false,
       useWarehouse: false,
       useJdEffect: false,
       importTitle: false,
