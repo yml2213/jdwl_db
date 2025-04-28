@@ -21,13 +21,15 @@ export default {
     }
 
     try {
-      // 构建表格数据，每批最多处理500个SKU
-      const BATCH_SIZE = 500
+      // 构建表格数据，每批最多处理2000个SKU
+      const BATCH_SIZE = 2000
       let processedCount = 0
       let failedCount = 0
       let totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
       // 收集失败的错误信息
       const failedResults = []
+      // 需要重试的批次
+      const retryBatches = [];
 
       console.log(`SKU总数: ${skuList.length}, 分成 ${totalBatches} 批处理`)
 
@@ -47,29 +49,109 @@ export default {
             processedCount += batchSkus.length
             console.log(`批次 ${batchIndex + 1} 处理成功`)
           } else {
-            failedCount += batchSkus.length
-            // 添加失败原因到收集器
-            if (result.data) {
-              failedResults.push(result.data)
-            } else if (result.message) {
-              failedResults.push(result.message)
+            // 如果是频繁操作的错误，将批次加入重试队列
+            if (result.errorType === 'frequent_operation') {
+              console.log(`批次 ${batchIndex + 1} 因频繁操作限制而失败，将加入重试队列`);
+              retryBatches.push({
+                batchIndex,
+                skus: batchSkus,
+                retryCount: 0
+              });
+              // 在这种情况下不立即计入失败数，等待重试
+              console.log(`批次 ${batchIndex + 1} 将在其他批次处理后重试`);
             } else {
-              failedResults.push(`批次 ${batchIndex + 1} 处理失败`)
+              // 其他类型的错误，直接计入失败
+              failedCount += batchSkus.length;
+              // 添加失败原因到收集器
+              if (result.data) {
+                failedResults.push(result.data)
+              } else if (result.message) {
+                failedResults.push(result.message)
+              } else {
+                failedResults.push(`批次 ${batchIndex + 1} 处理失败`)
+              }
+              console.error(`批次 ${batchIndex + 1} 处理失败: ${result.message}`)
             }
-            console.error(`批次 ${batchIndex + 1} 处理失败: ${result.message}`)
           }
 
-          // 每批之间等待至少5分钟
+          // 每批之间等待，避免频繁操作错误
           if (batchIndex < totalBatches - 1) {
             const waitTime = 5 * 60 * 1000 // 5分钟
             console.log(`等待${waitTime / 1000}秒后处理下一批...`)
-            await new Promise((resolve) => setTimeout(resolve, waitTime))
+            
+            // 定期输出等待状态，避免UI看起来像卡住
+            const startTime = Date.now();
+            const endTime = startTime + waitTime;
+            
+            // 每30秒输出一次等待状态
+            while (Date.now() < endTime) {
+              const remainingTime = Math.ceil((endTime - Date.now()) / 1000);
+              console.log(`等待下一批处理，剩余${remainingTime}秒...`);
+              await new Promise(resolve => setTimeout(resolve, 30000)); // 每30秒更新一次
+            }
           }
         } catch (error) {
           console.error(`批次 ${batchIndex + 1} 处理出错:`, error)
           failedCount += batchSkus.length
           // 添加错误消息到收集器
           failedResults.push(error.message || `批次 ${batchIndex + 1} 出现未知错误`)
+        }
+      }
+      
+      // 处理需要重试的批次
+      if (retryBatches.length > 0) {
+        console.log(`开始处理${retryBatches.length}个需要重试的批次`);
+        
+        // 对每个需要重试的批次进行处理
+        for (let i = 0; i < retryBatches.length; i++) {
+          const retryItem = retryBatches[i];
+          const maxRetries = 3;
+          
+          console.log(`重试批次 ${retryItem.batchIndex + 1}/${totalBatches}, 第${retryItem.retryCount + 1}/${maxRetries}次尝试`);
+          
+          // 等待较长时间再重试
+          const retryWaitTime = 10 * 60 * 1000; // 10分钟
+          console.log(`等待${retryWaitTime / 1000}秒后重试...`);
+          
+          // 定期输出等待状态
+          const startTime = Date.now();
+          const endTime = startTime + retryWaitTime;
+          
+          // 每30秒输出一次等待状态
+          while (Date.now() < endTime) {
+            const remainingTime = Math.ceil((endTime - Date.now()) / 1000);
+            console.log(`等待重试批次${retryItem.batchIndex + 1}，剩余${remainingTime}秒...`);
+            await new Promise(resolve => setTimeout(resolve, 30000));
+          }
+          
+          try {
+            // 重试上传
+            const result = await this.uploadGoodsStockConfigData(retryItem.skus, department);
+            
+            if (result.success) {
+              processedCount += retryItem.skus.length;
+              console.log(`重试批次 ${retryItem.batchIndex + 1} 处理成功`);
+            } else {
+              // 重试仍然失败
+              retryItem.retryCount++;
+              
+              // 如果还有重试次数且仍然是频繁操作错误，将再次添加到重试队列
+              if (retryItem.retryCount < maxRetries && result.errorType === 'frequent_operation') {
+                console.log(`批次 ${retryItem.batchIndex + 1} 重试失败，将进行第${retryItem.retryCount + 1}次重试`);
+                // 将该批次重新加入队列末尾
+                retryBatches.push(retryItem);
+              } else {
+                // 超过最大重试次数或不是频繁操作错误，计为失败
+                failedCount += retryItem.skus.length;
+                failedResults.push(result.message || `批次 ${retryItem.batchIndex + 1} 重试${retryItem.retryCount}次后仍失败`);
+                console.error(`批次 ${retryItem.batchIndex + 1} 在${retryItem.retryCount}次重试后仍失败: ${result.message}`);
+              }
+            }
+          } catch (error) {
+            console.error(`重试批次 ${retryItem.batchIndex + 1} 处理出错:`, error);
+            failedCount += retryItem.skus.length;
+            failedResults.push(error.message || `批次 ${retryItem.batchIndex + 1} 重试出现未知错误`);
+          }
         }
       }
 
@@ -128,36 +210,78 @@ export default {
       // 序列化FormData
       const serializedFormData = await this.serializeFormData(formData)
 
-      // 发送请求
-      const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=' + Math.random()
-      const response = await window.api.sendRequest(url, {
-        method: 'POST',
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
-          'cache-control': 'no-cache',
-          // 不手动设置content-type，让FormData自动设置
-          origin: 'https://o.jdl.com',
-          pragma: 'no-cache',
-          priority: 'u=0, i',
-          referer: 'https://o.jdl.com/goToMainIframe.do',
-          'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"macOS"',
-          'sec-fetch-dest': 'iframe',
-          'sec-fetch-mode': 'navigate',
-          'sec-fetch-site': 'same-origin',
-          'sec-fetch-user': '?1',
-          'upgrade-insecure-requests': '1',
-          Cookie: cookieString
-        },
-        body: serializedFormData
-      })
+      // 最大重试次数及等待时间配置
+      const MAX_RETRIES = 3
+      let retryCount = 0
+      let response = null
 
-      console.log('上传库存商品分配数据响应:', response)
+      // 添加重试逻辑
+      while (retryCount <= MAX_RETRIES) {
+        // 发送请求
+        const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=' + Math.random()
+        response = await window.api.sendRequest(url, {
+          method: 'POST',
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+            'cache-control': 'no-cache',
+            // 不手动设置content-type，让FormData自动设置
+            origin: 'https://o.jdl.com',
+            pragma: 'no-cache',
+            priority: 'u=0, i',
+            referer: 'https://o.jdl.com/goToMainIframe.do',
+            'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"',
+            'sec-fetch-dest': 'iframe',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'same-origin',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
+            Cookie: cookieString
+          },
+          body: serializedFormData
+        })
+
+        console.log('上传库存商品分配数据响应:', response)
+
+        // 检查是否是频繁操作的错误
+        const isFrequentOperationError = 
+          response && 
+          response.resultCode === "0" && 
+          response.resultMessage && 
+          (response.resultMessage.includes('5分钟内不要频繁操作') || 
+           response.resultMessage.includes('请稍后再试'));
+
+        // 如果是频繁操作错误且未达到最大重试次数，等待后重试
+        if (isFrequentOperationError && retryCount < MAX_RETRIES) {
+          retryCount++;
+          // 计算等待时间：第一次5分钟，之后递增
+          const waitTimeMs = (5 + retryCount) * 60 * 1000; 
+          console.log(`收到频繁操作限制响应，第${retryCount}次重试，等待${waitTimeMs/1000}秒后重试...`);
+          
+          // 定期输出等待剩余时间，避免UI看起来像卡住
+          const startTime = Date.now();
+          const endTime = startTime + waitTimeMs;
+          
+          // 每30秒输出一次等待状态
+          while (Date.now() < endTime) {
+            const remainingTime = Math.ceil((endTime - Date.now()) / 1000);
+            console.log(`等待重试中，剩余${remainingTime}秒...`);
+            await new Promise(resolve => setTimeout(resolve, 30000)); // 每30秒更新一次
+          }
+          
+          // 重新准备请求数据
+          console.log('准备重试请求...');
+          continue;
+        }
+        
+        // 其他情况，跳出循环处理结果
+        break;
+      }
 
       // 解析响应结果
       if (response && response.resultCode === "1") {
@@ -171,20 +295,36 @@ export default {
           data: response.resultData
         }
       } else {
+        // 检查是否是频繁操作的错误
+        const isFrequentOperationError = 
+          response && 
+          response.resultCode === "0" && 
+          response.resultMessage && 
+          (response.resultMessage.includes('5分钟内不要频繁操作') || 
+           response.resultMessage.includes('请稍后再试'));
+
         // 失败响应
-        let errorMessage = '启用库存商品分配失败，未知原因'
+        let errorMessage = '启用库存商品分配失败，未知原因';
+        let errorType = 'general'; // 一般错误
 
         if (response) {
-          if (response.resultData) {
-            errorMessage = response.resultData
+          if (response.resultMessage) {
+            errorMessage = response.resultMessage;
+          } else if (response.resultData) {
+            errorMessage = response.resultData;
           } else if (response.tipMsg) {
-            errorMessage = response.tipMsg
+            errorMessage = response.tipMsg;
           } else if (response.message) {
-            errorMessage = response.message
+            errorMessage = response.message;
+          }
+          
+          // 标记频繁操作错误类型
+          if (isFrequentOperationError) {
+            errorType = 'frequent_operation';
           }
         }
 
-        console.error('库存商品分配导入失败:', errorMessage)
+        console.error('库存商品分配导入失败:', errorMessage);
 
         return {
           success: false,
@@ -193,6 +333,7 @@ export default {
           failedCount: skuList.length,
           skippedCount: 0,
           data: errorMessage,
+          errorType: errorType, // 添加错误类型
           originalResponse: response
         }
       }
