@@ -111,12 +111,19 @@ export default {
       // 创建Excel数据结构
       const data = this.createExcelData(skuList, department)
 
-      // 将数据转换为xls文件
+      // 将数据转换为xlsx文件
       const file = await this.convertToExcelFile(data)
 
-      // 创建FormData
+      // 创建FormData - 确保参数名称正确
       const formData = new FormData()
+      // 根据curl命令使用正确的参数名
       formData.append('goodsStockConfigExcelFile', file)
+      
+      // 打印FormData条目
+      console.log('FormData条目:')
+      for (const pair of formData.entries()) {
+        console.log(`  ${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`)
+      }
 
       // 序列化FormData
       const serializedFormData = await this.serializeFormData(formData)
@@ -132,7 +139,7 @@ export default {
             'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
           'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
           'cache-control': 'no-cache',
-          'content-type': 'multipart/form-data',
+          // 不手动设置content-type，让FormData自动设置
           origin: 'https://o.jdl.com',
           pragma: 'no-cache',
           priority: 'u=0, i',
@@ -272,7 +279,7 @@ export default {
         view[i] = excelBinaryData.charCodeAt(i) & 0xff
       }
 
-      // 创建文件对象 - 修改文件扩展名
+      // 创建文件对象 - 使用标准化的文件名和MIME类型
       return new File([buf], 'goodsStockConfigTemplate.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       })
@@ -328,6 +335,12 @@ export default {
         entries.push([key, value])
       }
     }
+
+    // 记录序列化后的条目数
+    console.log(`序列化后的FormData条目数: ${entries.length}`)
+    entries.forEach(entry => {
+      console.log(`  序列化条目: ${entry[0]}, 类型: ${entry[1]._isFile ? '文件' : '普通值'}`)
+    })
 
     // 返回可序列化的对象
     return {
