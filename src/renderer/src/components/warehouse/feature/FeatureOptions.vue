@@ -18,6 +18,10 @@
         <input type="checkbox" v-model="options.useWarehouse" />
         <span>启用库存商品分配</span>
       </label>
+      <label class="checkbox-label small-margin-left" v-if="options.useWarehouse">
+        <input type="checkbox" v-model="options.skipConfigErrors" />
+        <span>出错时跳过</span>
+      </label>
       <label class="checkbox-label">
         <input type="checkbox" v-model="options.useJdEffect" />
         <span>启用京配打标生效</span>
@@ -49,7 +53,8 @@ const props = defineProps({
       useWarehouse: false,
       useJdEffect: false,
       importTitle: false,
-      useBatchManage: false
+      useBatchManage: false,
+      skipConfigErrors: true  // 默认启用跳过选项
     })
   }
 })
@@ -95,5 +100,10 @@ const handleImportPropsChange = (event) => {
 
 .checkbox-label input[type='checkbox'] {
   margin-right: 6px;
+}
+
+.small-margin-left {
+  margin-left: 15px;
+  font-size: 0.9em;
 }
 </style>

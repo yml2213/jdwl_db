@@ -5,6 +5,7 @@
 import enableStoreProductsFeature from './enableStoreProducts'
 import importStoreProductsFeature from './importStoreProducts'
 import importLogisticsPropsFeature from './importLogisticsProperties'
+import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import { enableShopProducts } from '../../services/apiService'
 import {
   extractTaskSkuList,
@@ -146,6 +147,45 @@ export async function executeOneTask(task, shopInfo, options) {
         functionResults.push(`导入物流属性: 错误 - ${importError.message || '未知错误'}`)
         console.error('导入物流属性失败:', importError)
         hasFailures = true
+      }
+    }
+
+    // 启用库存商品分配功能
+    if (options.useWarehouse === true) {
+      try {
+        console.log('执行[启用库存商品分配]功能，SKU:', task.sku)
+
+        // 提取SKU
+        const skuList = extractTaskSkuList(task)
+        if (skuList.length === 0) {
+          throw new Error('没有有效的SKU')
+        }
+
+        // 使用启用库存商品分配功能模块
+        const warehouseResult = await importGoodsStockConfigFeature.execute(skuList)
+
+        if (warehouseResult.success) {
+          functionResults.push(`启用库存商品分配: 成功`)
+        } else {
+          // 检查是否允许跳过库存配置错误
+          if (options.skipConfigErrors === true) {
+            functionResults.push(`启用库存商品分配: 已跳过 - ${warehouseResult.message}`)
+            console.warn('已跳过库存商品分配功能，继续执行其他功能')
+          } else {
+            functionResults.push(`启用库存商品分配: 失败 - ${warehouseResult.message}`)
+            hasFailures = true
+          }
+        }
+      } catch (warehouseError) {
+        // 检查是否允许跳过库存配置错误
+        if (options.skipConfigErrors === true) {
+          functionResults.push(`启用库存商品分配: 已跳过 - ${warehouseError.message || '未知错误'}`)
+          console.warn('已跳过库存商品分配功能，继续执行其他功能')
+        } else {
+          functionResults.push(`启用库存商品分配: 错误 - ${warehouseError.message || '未知错误'}`)
+          console.error('启用库存商品分配失败:', warehouseError)
+          hasFailures = true
+        }
       }
     }
 
