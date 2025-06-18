@@ -24,6 +24,7 @@ import { useLogisticsAttributes } from '../features/warehouseLabeling/logisticsA
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 import LogisticsAttributesImporter from './warehouse/LogisticsAttributesImporter.vue'
+import ProductNameImporter from './warehouse/feature/ProductNameImporter.vue'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -50,6 +51,7 @@ const form = ref({
     useWarehouse: false,
     useJdEffect: false,
     importTitle: false,
+    importProductNames: false,
     skipConfigErrors: true
   },
   enablePurchase: false,
@@ -555,13 +557,18 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
     </div>
 
     <!-- 物流属性导入对话框 -->
-    <logistics-attributes-importer
+          <logistics-attributes-importer
       v-if="form.logisticsImport.showDialog"
       :skuList="form.sku.split(/\r?\n/).filter((line) => line.trim())"
       :waitTime="form.waitTime"
       @close="closeLogisticsImporter"
       @submit="submitLogisticsData"
     />
+    
+    <!-- 商品简称导入组件 -->
+    <div v-if="form.options.importProductNames" class="product-names-container">
+      <product-name-importer />
+    </div>
   </div>
   <div v-else class="login-required">请先登录</div>
 </template>
@@ -572,5 +579,19 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
   display: flex;
   padding: 0;
   height: calc(100vh - 120px);
+}
+
+.product-names-container {
+  position: fixed;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  max-width: 800px;
+  z-index: 1000;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 </style>

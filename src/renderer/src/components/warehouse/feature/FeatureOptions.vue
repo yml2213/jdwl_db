@@ -26,8 +26,12 @@
         <input type="checkbox" v-model="options.useJdEffect" />
         <span>启用京配打标生效</span>
       </label>
-      <label class="checkbox-label">
+      <!-- <label class="checkbox-label">
         <input type="checkbox" v-model="options.importTitle" />
+        <span>导入商品标题</span>
+      </label> -->
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="options.importProductNames" />
         <span>导入商品简称</span>
       </label>
     </div>
@@ -49,6 +53,7 @@ const props = defineProps({
       useWarehouse: false,
       useJdEffect: false,
       importTitle: false,
+      importProductNames: false,
       skipConfigErrors: true  // 默认启用跳过选项
     })
   }

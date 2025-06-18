@@ -7,6 +7,7 @@ import importStoreProductsFeature from './importStoreProducts'
 import importLogisticsPropsFeature from './importLogisticsProperties'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
+import importProductNamesFeature from './importProductNames'
 import { enableShopProducts } from '../../services/apiService'
 import {
   extractTaskSkuList,
@@ -157,6 +158,12 @@ export async function executeOneTask(task, shopInfo, options) {
         // 更新任务的结果字段
         task.结果 = errorMessage
       }
+    }
+
+    // 导入商品简称功能
+    if (options.importProductNames === true) {
+      // 商品简称功能需要在用户界面上通过文件上传实现，不需要在任务执行器中处理
+      functionResults.push(`导入商品简称: 请在界面上传Excel文件`)
     }
 
     // 启用库存商品分配功能
