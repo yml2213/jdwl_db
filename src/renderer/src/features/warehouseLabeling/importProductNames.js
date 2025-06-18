@@ -35,9 +35,6 @@ export default {
       // 将数据转换为Excel文件
       const newFile = await this.convertToExcelFile(newExcelData)
       
-      // 保存文件到本地用于调试
-      await this.saveFileForDebug(newFile)
-      
       // 上传数据到服务器
       const result = await this.uploadProductNamesData(newFile)
 
@@ -219,41 +216,7 @@ export default {
     }
   },
 
-  /**
-   * 保存文件到本地用于调试
-   * @param {File} file - 要保存的文件
-   * @returns {Promise<void>}
-   */
-  async saveFileForDebug(file) {
-    try {
-      console.log('正在保存文件到本地用于调试:', file.name)
-      
-      // 检查API是否可用
-      if (!window.api || typeof window.api.saveFile !== 'function') {
-        console.log('保存文件API不可用，请重启应用以使新功能生效')
-        return
-      }
-      
-      // 读取文件内容
-      const arrayBuffer = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsArrayBuffer(file)
-      })
-      
-      // 调用主进程保存文件
-      const saveResult = await window.api.saveFile({
-        fileName: `debug_${file.name}`,
-        data: Array.from(new Uint8Array(arrayBuffer))
-      })
-      
-      console.log('文件保存结果:', saveResult ? '成功' : '失败', saveResult)
-    } catch (error) {
-      console.error('保存文件到本地失败:', error)
-      // 这里只是打印错误，不影响主流程继续执行
-    }
-  },
+
 
   /**
    * 上传商品简称数据到服务器
@@ -318,41 +281,59 @@ export default {
       
       // 解析响应结果
       if (response && response.resultCode === "1") {
-        // 解析成功但可能存在业务错误
-        if (response.successNum > 0) {
-          // 至少有一条数据导入成功
-          console.log('商品简称导入成功')
-          return {
-            success: true,
-            message: response.resultMsg || '导入商品简称成功',
-            data: response
-          }
-        } else if (response.failNum > 0) {
-          // 所有数据导入失败但系统识别了请求
-          console.log('商品简称导入失败: 所有记录均导入失败')
-          return {
-            success: false,
-            message: response.resultMsg || '导入失败: 所有记录均导入失败',
-            data: response
-          }
-        } else {
-          // 其他情况
-          console.log('商品简称导入结果不明确')
-          return {
-            success: false,
-            message: response.resultMsg || '导入结果不明确',
-            data: response
+        // 处理成功响应，但需要区分是否有成功导入的记录
+        const totalCount = parseInt(response.totalNum) || 0;
+        const successCount = parseInt(response.successNum) || 0;
+        const failCount = parseInt(response.failNum) || 0;
+        
+        console.log(`导入统计 - 总数: ${totalCount}, 成功: ${successCount}, 失败: ${failCount}`);
+        
+        // 格式化结果消息，提取错误信息
+        let formattedMsg = '';
+        if (response.resultMsg) {
+          // 保留原始消息
+          formattedMsg = response.resultMsg;
+          
+          // 提取并格式化错误信息
+          const lines = response.resultMsg.split('\n');
+          if (lines.length > 2) {
+            // 去掉开头和结尾的固定文本，只保留错误信息
+            const errorLines = lines.slice(1, -1);
+            if (errorLines.length > 0) {
+              console.log(`检测到${errorLines.length}个错误信息`);
+            }
           }
         }
+        
+        if (successCount > 0) {
+          // 部分或全部成功
+          const successRatio = Math.round((successCount / totalCount) * 100);
+          console.log(`商品简称导入部分成功 (${successRatio}%)`);
+          
+          return {
+            success: true,
+            message: `导入完成: 共${totalCount}条，成功${successCount}条，失败${failCount}条`,
+            data: response
+          };
+        } else {
+          // 全部失败
+          console.log('商品简称导入失败: 所有记录均导入失败');
+          
+          return {
+            success: false,
+            message: formattedMsg || `导入失败: 共${totalCount}条，全部导入失败`,
+            data: response
+          };
+        }
       } else {
-        // 失败响应
-        console.error('商品简称导入失败:', response)
+        // 解析失败或服务器错误
+        console.error('商品简称导入失败:', response);
         
         return {
           success: false,
           message: response ? response.resultMsg || '导入商品简称失败' : '导入失败，无响应数据',
           data: response
-        }
+        };
       }
     } catch (error) {
       console.error('上传商品简称数据失败:', error)
