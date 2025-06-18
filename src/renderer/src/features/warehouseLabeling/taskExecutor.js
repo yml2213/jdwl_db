@@ -161,8 +161,29 @@ export async function executeOneTask(task, shopInfo, options) {
           throw new Error('没有有效的SKU')
         }
 
-        // 使用启用库存商品分配功能模块
-        const warehouseResult = await importGoodsStockConfigFeature.execute(skuList)
+        // 创建批次任务的回调函数，用于将批次任务添加到任务列表
+        const createBatchTask = (batchTask) => {
+          if (!batchTask) return;
+          
+          console.log('创建批次任务', batchTask);
+          
+          // 将批次任务添加到任务列表
+          if (this.addTaskToList) {
+            this.addTaskToList(batchTask);
+          }
+        };
+
+        // 使用启用库存商品分配功能模块，传入createBatchTask回调
+        const warehouseResult = await importGoodsStockConfigFeature.execute(skuList, task, createBatchTask)
+
+        // 将分批导入日志添加到任务中，用于UI展示
+        if (warehouseResult.importLogs) {
+          if (!task.importLogs) {
+            task.importLogs = [];
+          }
+          task.importLogs = task.importLogs.concat(warehouseResult.importLogs);
+          console.log(`添加${warehouseResult.importLogs.length}条导入日志到任务`);
+        }
 
         if (warehouseResult.success) {
           functionResults.push(`启用库存商品分配: 成功`)

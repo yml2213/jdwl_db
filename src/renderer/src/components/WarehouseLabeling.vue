@@ -417,39 +417,27 @@ const handleAddTask = () => {
     return
   }
 
-  // 如果只有一个SKU，添加单个任务
-  if (skuList.length === 1) {
+  // 创建日期时间标记
+  const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  
+  // 无论是单个还是多个SKU，都创建单独的任务
+  for (const sku of skuList) {
     taskList.value.push({
-      sku: skuList[0].trim(),
+      sku: sku.trim(),
       店铺: shopInfo ? shopInfo.shopName : '未选择',
       仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
-      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      创建时间: timestamp,
       状态: '等待中',
       结果: '',
       选项: JSON.parse(JSON.stringify(form.value.options))
     })
-  }
-  // 如果有多个SKU，添加批量任务
-  else {
-    const batchName = `批量任务 (${skuList.length}个SKU) - ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`
-
-    taskList.value.push({
-      sku: batchName,
-      skuList: skuList.map((sku) => sku.trim()),
-      店铺: shopInfo ? shopInfo.shopName : '未选择',
-      仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
-      创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-      状态: '等待中',
-      结果: '',
-      选项: JSON.parse(JSON.stringify(form.value.options))
-    })
+    
+    // 触发添加任务事件
+    emit('add-task', taskList.value[taskList.value.length - 1])
   }
 
   // 清空输入框
   form.value.sku = ''
-
-  // 触发添加任务事件
-  emit('add-task', taskList.value[taskList.value.length - 1])
 
   // 如果启用了自动开始，自动执行任务
   if (form.value.autoStart) {

@@ -1,19 +1,45 @@
 <template>
-  <span :class="['status-tag', statusClass]">{{ status }}</span>
+  <span class="status-tag" :class="statusClass">{{ displayText }}</span>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { getStatusClass } from '../../features/warehouseLabeling/utils/taskUtils'
 
 const props = defineProps({
   status: {
     type: String,
-    required: true
+    required: true,
+    default: '等待中'
   }
 })
 
-const statusClass = computed(() => getStatusClass(props.status))
+const statusClass = computed(() => {
+  switch (props.status) {
+    case '等待中':
+      return 'waiting'
+    case '执行中':
+      return 'processing'
+    case '分批处理中':
+      return 'batch-processing'
+    case '成功':
+      return 'success'
+    case '失败':
+      return 'failure'
+    case '部分成功':
+      return 'partial-success'
+    case '暂存':
+      return 'temp-saved'
+    default:
+      return 'waiting'
+  }
+})
+
+const displayText = computed(() => {
+  if (props.status === '分批处理中') {
+    return '分批处理中'
+  }
+  return props.status
+})
 </script>
 
 <style scoped>
@@ -21,49 +47,45 @@ const statusClass = computed(() => getStatusClass(props.status))
   display: inline-block;
   padding: 2px 8px;
   font-size: 12px;
-  border-radius: 2px;
-  background-color: #e1f5fe;
-  color: #039be5;
+  border-radius: 12px;
+  color: white;
+  text-align: center;
+  white-space: nowrap;
 }
 
-.status-tag.waiting {
-  background-color: #e8f5e9;
-  color: #43a047;
+.waiting {
+  background-color: #909399;
 }
 
-.status-tag.processing {
-  background-color: #fff8e1;
-  color: #ffa000;
-  animation: pulse 1.5s infinite;
+.processing {
+  background-color: #409eff;
 }
 
-.status-tag.success {
-  background-color: #e8f5e9;
-  color: #43a047;
+.batch-processing {
+  background-color: #8e44ad;
+  animation: pulsate 1.5s infinite alternate;
 }
 
-.status-tag.failure {
-  background-color: #ffebee;
-  color: #e53935;
+.success {
+  background-color: #67c23a;
 }
 
-.status-tag.partial-success {
-  background-color: #fff3e0;
-  color: #ef6c00;
+.failure {
+  background-color: #f56c6c;
 }
 
-.status-tag.temp-saved {
-  background-color: #e3f2fd;
-  color: #1976d2;
-  border: 1px dashed #2196f3;
+.partial-success {
+  background-color: #e6a23c;
 }
 
-@keyframes pulse {
+.temp-saved {
+  background-color: #909399;
+  border: 1px dashed #606266;
+}
+
+@keyframes pulsate {
   0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
+    opacity: 0.8;
   }
   100% {
     opacity: 1;
