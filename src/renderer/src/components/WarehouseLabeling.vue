@@ -54,8 +54,6 @@ const form = ref({
     importProductNames: false,
     skipConfigErrors: true
   },
-  enablePurchase: false,
-  purchaseQuantity: 1,
   selectedStore: '',
   selectedWarehouse: '',
   autoStart: false,

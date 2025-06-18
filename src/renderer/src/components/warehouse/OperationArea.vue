@@ -15,8 +15,6 @@
 
     <feature-options v-model="form.options" />
 
-    <purchase-input v-model:enable="form.enablePurchase" v-model:quantity="form.purchaseQuantity" />
-
     <store-selector
       :shops="shopsList"
       :loading="isLoadingShops"
@@ -47,7 +45,6 @@ import WaitTimeInput from './WaitTimeInput.vue'
 import FeatureOptions from './feature/FeatureOptions.vue'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
-import PurchaseInput from './PurchaseInput.vue'
 
 const form = inject('form')
 const shopsList = inject('shopsList')
