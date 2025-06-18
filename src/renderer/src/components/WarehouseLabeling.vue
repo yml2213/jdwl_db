@@ -50,7 +50,6 @@ const form = ref({
     useWarehouse: false,
     useJdEffect: false,
     importTitle: false,
-    useBatchManage: false,
     skipConfigErrors: true
   },
   enablePurchase: false,

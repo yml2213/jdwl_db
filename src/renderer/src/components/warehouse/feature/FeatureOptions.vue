@@ -30,10 +30,6 @@
         <input type="checkbox" v-model="options.importTitle" />
         <span>导入商品简称</span>
       </label>
-      <label class="checkbox-label">
-        <input type="checkbox" v-model="options.useBatchManage" />
-        <span>启用批次管理</span>
-      </label>
     </div>
   </div>
 </template>
@@ -53,7 +49,6 @@ const props = defineProps({
       useWarehouse: false,
       useJdEffect: false,
       importTitle: false,
-      useBatchManage: false,
       skipConfigErrors: true  // 默认启用跳过选项
     })
   }

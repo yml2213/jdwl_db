@@ -85,7 +85,6 @@ export function useLogisticsAttributes(taskList, currentShopInfo) {
           useWarehouse: false,
           useJdEffect: false,
           importTitle: false,
-          useBatchManage: false,
           isTempSaved: tempSave // 标记为暂存任务
         }
       }
