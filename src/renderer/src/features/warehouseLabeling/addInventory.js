@@ -244,11 +244,7 @@ export default {
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies();
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
-      const csrfToken = cookies.find((cookie) => cookie.name === 'csrfToken')?.value;
-
-      if (!csrfToken) {
-        throw new Error('未获取到csrfToken');
-      }
+    
 
       console.log('获取到cookies:', cookieString ? '已获取' : '未获取');
       
@@ -263,7 +259,7 @@ export default {
       formData.append('goods', goodsJson);
       formData.append('deptId', deptInfo.id);
       formData.append('deptName', deptInfo.name);
-      formData.append('supplierId', deptInfo.sellerId);
+      formData.append('supplierId', '4418047117122');
       formData.append('warehouseId', '14897'); // 这里使用固定的仓库ID，实际应从UI获取
       formData.append('billOfLading', '');
       formData.append('qualityCheckFlag', '');
@@ -288,10 +284,12 @@ export default {
       formData.append('isPorterTeam', '0');
       formData.append('orderType', 'CGRK');
       formData.append('poReturnMode', '1');
-      formData.append('importFiles', ';headers="Content-Type: application/octet-stream"');
+      formData.append('importFiles', '');
+
+ 
 
       // 发送请求
-      const url = 'https://o.jdl.com/poMain/downPoMain.do';
+      const url = 'https://o.jdl.com/poMain/downPoMain.do';  
       
       console.log('发送添加库存请求:', url);
       const response = await window.api.sendRequest(url, {
