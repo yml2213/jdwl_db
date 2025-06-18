@@ -9,6 +9,7 @@
         class="form-input sku-textarea"
         rows="5"
       ></textarea>
+      <button v-if="modelValue" class="clear-btn" @click="clearValue">清空</button>
     </div>
     <file-uploader @file-change="handleFileChange" @clear-file="handleClearFile" />
   </div>
@@ -29,6 +30,10 @@ const emit = defineEmits(['update:modelValue', 'file-change', 'clear-file'])
 
 const updateValue = (event) => {
   emit('update:modelValue', event.target.value)
+}
+
+const clearValue = () => {
+  emit('update:modelValue', '')
 }
 
 const handleFileChange = (file) => {
@@ -54,6 +59,7 @@ const handleClearFile = () => {
 .input-group {
   display: flex;
   gap: 10px;
+  position: relative;
 }
 
 .form-input {
@@ -70,5 +76,22 @@ const handleClearFile = () => {
   padding: 12px;
   font-family: monospace;
   width: 100%;
+}
+
+.clear-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: #f56c6c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.clear-btn:hover {
+  background-color: #e74c3c;
 }
 </style>

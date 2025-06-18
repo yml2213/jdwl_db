@@ -81,9 +81,8 @@ const addTask = () => {
     状态: '等待中'
   })
 
-  // 清空SKU输入
-  form.value.sku = ''
-
+  // 不再自动清空输入框，改为手动清空
+  
   // 通知父组件
   emit('add-task')
 }
@@ -175,6 +174,7 @@ watch(
             @keyup.enter="handleImport"
           />
           <button class="btn btn-primary" @click="handleImport">导入</button>
+          <button v-if="form.sku" class="btn btn-danger" @click="form.sku = ''">清空</button>
         </div>
       </div>
 

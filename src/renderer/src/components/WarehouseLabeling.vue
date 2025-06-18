@@ -449,9 +449,7 @@ const handleAddTask = () => {
     emit('add-task', taskList.value[taskList.value.length - 1])
   })
 
-  // 清空输入框
-  form.value.sku = ''
-
+  // 不再自动清空输入框，改为手动清空
   // 如果启用了自动开始，自动执行任务
   if (form.value.autoStart) {
     executeTask()
