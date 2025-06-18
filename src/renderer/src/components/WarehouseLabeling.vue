@@ -419,22 +419,36 @@ const handleAddTask = () => {
 
   // 创建日期时间标记
   const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  
-  // 无论是单个还是多个SKU，都创建单独的任务
-  for (const sku of skuList) {
+
+  // 将SKU列表按2000个一组进行分割
+  const BATCH_SIZE = 2000
+  const skuGroups = []
+  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+    skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
+  }
+
+  // 为每个组创建一个任务
+  skuGroups.forEach((group, index) => {
+    const groupNumber = index + 1
     taskList.value.push({
-      sku: sku.trim(),
+      sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
+      skuList: group, // 存储该组的所有SKU
       店铺: shopInfo ? shopInfo.shopName : '未选择',
       仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
       创建时间: timestamp,
       状态: '等待中',
       结果: '',
-      选项: JSON.parse(JSON.stringify(form.value.options))
+      选项: JSON.parse(JSON.stringify(form.value.options)),
+      importLogs: [{
+        type: 'batch-info',
+        message: `批次${groupNumber}/${skuGroups.length} - 包含${group.length}个SKU`,
+        timestamp: new Date().toLocaleString()
+      }]
     })
     
     // 触发添加任务事件
     emit('add-task', taskList.value[taskList.value.length - 1])
-  }
+  })
 
   // 清空输入框
   form.value.sku = ''

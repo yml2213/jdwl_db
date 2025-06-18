@@ -12,6 +12,12 @@ export default {
    * @returns {Promise<Object>} 执行结果
    */
   async execute(skuList, shopInfo) {
+    // 如果传入的是任务对象，使用其skuList属性
+    if (typeof skuList === 'object' && !Array.isArray(skuList) && skuList.skuList) {
+      console.log('从任务对象中获取SKU列表:', skuList.skuList.length)
+      skuList = skuList.skuList
+    }
+
     console.log('执行[导入店铺商品]功能，SKU列表:', skuList)
 
     // 获取事业部信息
@@ -20,21 +26,32 @@ export default {
       throw new Error('未选择事业部，无法导入商品')
     }
 
-    // 调用批量处理SKU的功能
-    const result = await batchProcessSKUs(
-      skuList,
-      shopInfo,
-      true, // importStore
-      false, // useStore
-      department
-    )
+    try {
+      // 调用批量处理SKU的功能
+      const result = await batchProcessSKUs(
+        skuList,
+        shopInfo,
+        true, // importStore
+        false, // useStore
+        department
+      )
 
-    return {
-      success: result.success,
-      message: result.message,
-      processedCount: result.processedCount,
-      failedCount: result.failedCount,
-      skippedCount: result.skippedCount
+      return {
+        success: result.success,
+        message: result.message,
+        processedCount: result.processedCount,
+        failedCount: result.failedCount,
+        skippedCount: result.skippedCount
+      }
+    } catch (error) {
+      console.error('导入店铺商品失败:', error)
+      return {
+        success: false,
+        message: `导入失败: ${error.message || '未知错误'}`,
+        processedCount: 0,
+        failedCount: skuList.length,
+        skippedCount: 0
+      }
     }
   },
 
