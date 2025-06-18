@@ -10,6 +10,7 @@ import {
   setupLoginHandlers
 } from './loginManager'
 import { sendRequest } from './requestHandler'
+import { saveFile } from './fileHandler'
 
 // 主窗口引用
 let mainWindow = null
@@ -115,6 +116,16 @@ function setupIPCHandlers() {
       return await sendRequest(url, options)
     } catch (error) {
       console.error('IPC请求处理错误:', error)
+      throw error
+    }
+  })
+
+  // 处理文件保存
+  ipcMain.handle('saveFile', async (event, params) => {
+    try {
+      return await saveFile(params)
+    } catch (error) {
+      console.error('保存文件错误:', error)
       throw error
     }
   })

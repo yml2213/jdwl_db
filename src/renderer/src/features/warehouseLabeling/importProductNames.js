@@ -35,6 +35,9 @@ export default {
       // 将数据转换为Excel文件
       const newFile = await this.convertToExcelFile(newExcelData)
       
+      // 保存文件到本地用于调试
+      await this.saveFileForDebug(newFile)
+      
       // 上传数据到服务器
       const result = await this.uploadProductNamesData(newFile)
 
@@ -69,10 +72,18 @@ export default {
           
           // 获取第一个工作表
           const firstSheetName = workbook.SheetNames[0]
+          console.log('Excel工作表名称:', firstSheetName)
+          
           const worksheet = workbook.Sheets[firstSheetName]
           
           // 将工作表转换为数组
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+          
+          // 打印前几行数据用于调试
+          console.log('Excel前5行数据:')
+          for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+            console.log(`行${i}:`, JSON.stringify(jsonData[i]))
+          }
           
           console.log('Excel解析结果:', jsonData.length, '行')
           resolve(jsonData)
@@ -98,8 +109,14 @@ export default {
    * @returns {Array} 新的Excel数据
    */
   createNewExcelData(originalData, department) {
-    // 表头行
-    const headers = ['事业部编码', '商家商品标识', '商品名称']
+    console.log('开始创建新Excel数据，原始数据行数:', originalData.length)
+    console.log('使用事业部编码:', department.deptNo)
+    
+    // 表头行 - 中文
+    const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
+    
+    // 表头行 - 英文（第二行）
+    const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
     
     // 数据行
     const rows = []
@@ -108,17 +125,39 @@ export default {
     for (let i = 1; i < originalData.length; i++) {
       const row = originalData[i]
       if (row && row.length >= 2) {
-        // 原始数据的第一列是SKU，第二列是商品名称
-        rows.push([
-          department.deptNo, // 事业部编码
-          row[0],           // 商家商品标识（SKU）
-          row[1]            // 商品名称
-        ])
+        // 确保SKU是字符串格式
+        const sku = String(row[0] || '').trim()
+        // 确保商品名称是字符串格式
+        const name = String(row[1] || '').trim()
+        
+        if (sku && name) {
+          // 原始数据的第一列是SKU，第二列是商品名称
+          rows.push([
+            department.deptNo, // 事业部编码
+            sku,              // 商家商品标识（SKU）
+            name              // 商品名称
+          ])
+        } else {
+          console.log(`跳过第${i+1}行: SKU或名称为空`, JSON.stringify(row))
+        }
+      } else {
+        console.log(`跳过第${i+1}行: 列数不足`, JSON.stringify(row))
       }
     }
     
-    // 合并表头和数据行
-    return [headers, ...rows]
+    console.log(`处理完成，生成${rows.length}行有效数据`)
+    
+    // 打印前几行生成的数据用于调试
+    console.log('生成的Excel数据结构:')
+    // 合并中文表头、英文表头和数据行
+    const mergedData = [chineseHeaders, englishHeaders, ...rows]
+    console.log(`第1行(中文表头): ${JSON.stringify(mergedData[0])}`)
+    console.log(`第2行(英文字段): ${JSON.stringify(mergedData[1])}`)
+    for (let i = 2; i < Math.min(7, mergedData.length); i++) {
+      console.log(`第${i+1}行(数据): ${JSON.stringify(mergedData[i])}`)
+    }
+    
+    return mergedData
   },
 
   /**
@@ -128,14 +167,33 @@ export default {
    */
   async convertToExcelFile(data) {
     try {
+      console.log('开始转换数据为Excel文件...')
+      
       // 生成工作表
       const ws = XLSX.utils.aoa_to_sheet(data)
+      
+      // 设置列宽
+      const colWidths = [
+        { wch: 20 }, // 事业部编码列宽
+        { wch: 20 }, // 商家商品标识列宽
+        { wch: 30 }  // 商品名称列宽
+      ]
+      ws['!cols'] = colWidths
       
       // 创建工作簿
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
       
+      // 添加一些元数据
+      wb.Props = {
+        Title: '商品批量修改自定义模板',
+        Subject: '商品简称导入',
+        Author: 'JDL系统',
+        CreatedDate: new Date()
+      }
+      
       // 生成二进制数据
+      console.log('生成Excel二进制数据...')
       const excelBinaryData = XLSX.write(wb, {
         bookType: 'xls',
         type: 'binary',
@@ -151,6 +209,7 @@ export default {
       }
       
       // 创建文件对象
+      console.log('创建Excel文件对象完成')
       return new File([buf], '商品批量修改自定义模板.xls', {
         type: 'application/vnd.ms-excel'
       })
@@ -161,12 +220,50 @@ export default {
   },
 
   /**
+   * 保存文件到本地用于调试
+   * @param {File} file - 要保存的文件
+   * @returns {Promise<void>}
+   */
+  async saveFileForDebug(file) {
+    try {
+      console.log('正在保存文件到本地用于调试:', file.name)
+      
+      // 检查API是否可用
+      if (!window.api || typeof window.api.saveFile !== 'function') {
+        console.log('保存文件API不可用，请重启应用以使新功能生效')
+        return
+      }
+      
+      // 读取文件内容
+      const arrayBuffer = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsArrayBuffer(file)
+      })
+      
+      // 调用主进程保存文件
+      const saveResult = await window.api.saveFile({
+        fileName: `debug_${file.name}`,
+        data: Array.from(new Uint8Array(arrayBuffer))
+      })
+      
+      console.log('文件保存结果:', saveResult ? '成功' : '失败', saveResult)
+    } catch (error) {
+      console.error('保存文件到本地失败:', error)
+      // 这里只是打印错误，不影响主流程继续执行
+    }
+  },
+
+  /**
    * 上传商品简称数据到服务器
    * @param {File} file - Excel文件
    * @returns {Promise<Object>} 上传结果
    */
   async uploadProductNamesData(file) {
     try {
+      console.log('准备上传商品简称数据，文件大小:', file.size, '字节')
+      
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies()
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
@@ -177,13 +274,20 @@ export default {
       const formData = new FormData()
       formData.append('importFile', file)
       
+      // 打印FormData条目
+      console.log('FormData条目:')
+      for (const pair of formData.entries()) {
+        console.log(`  ${pair[0]}: ${pair[1] instanceof File ? pair[1].name + ' (' + pair[1].size + '字节)' : pair[1]}`)
+      }
+      
       // 序列化FormData
       const serializedFormData = await this.serializeFormData(formData)
+      console.log('FormData序列化完成')
       
       // 发送请求
       const url = 'https://o.jdl.com/goods/doUpdateCustomImportGoods.do?_r=' + Math.random()
       
-      console.log('开始上传商品简称数据')
+      console.log('开始上传商品简称数据', url)
       const response = await window.api.sendRequest(url, {
         method: 'POST',
         headers: {
@@ -202,24 +306,43 @@ export default {
           'sec-fetch-site': 'same-origin',
           'sec-fetch-user': '?1',
           'upgrade-insecure-requests': '1',
+          'Content-Type': 'multipart/form-data',
           'Cookie': cookieString
         },
         body: serializedFormData
       })
       
       console.log('上传商品简称响应:', response)
-      console.log(JSON.stringify(response));
+      console.log('完整响应对象:', JSON.stringify(response, null, 2))
       
       
       // 解析响应结果
       if (response && response.resultCode === "1") {
-        // 成功响应
-        console.log('商品简称导入成功')
-        
-        return {
-          success: true,
-          message: response.resultMsg || '导入商品简称成功',
-          data: response
+        // 解析成功但可能存在业务错误
+        if (response.successNum > 0) {
+          // 至少有一条数据导入成功
+          console.log('商品简称导入成功')
+          return {
+            success: true,
+            message: response.resultMsg || '导入商品简称成功',
+            data: response
+          }
+        } else if (response.failNum > 0) {
+          // 所有数据导入失败但系统识别了请求
+          console.log('商品简称导入失败: 所有记录均导入失败')
+          return {
+            success: false,
+            message: response.resultMsg || '导入失败: 所有记录均导入失败',
+            data: response
+          }
+        } else {
+          // 其他情况
+          console.log('商品简称导入结果不明确')
+          return {
+            success: false,
+            message: response.resultMsg || '导入结果不明确',
+            data: response
+          }
         }
       } else {
         // 失败响应

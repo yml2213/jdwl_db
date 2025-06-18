@@ -23,6 +23,11 @@ const api = {
   // 网络请求相关
   sendRequest: (url, options) => {
     return ipcRenderer.invoke('sendRequest', url, options)
+  },
+  
+  // 保存文件到本地
+  saveFile: (params) => {
+    return ipcRenderer.invoke('saveFile', params)
   }
 }
 
