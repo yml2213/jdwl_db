@@ -30,10 +30,6 @@
         <input type="checkbox" v-model="options.useAddInventory" />
         <span>添加库存</span>
       </label>
-      <div class="input-group" v-if="options.useAddInventory">
-        <span>库存数量：</span>
-        <input type="number" v-model="options.inventoryAmount" min="1" max="10000" class="inventory-input" />
-      </div>
       <!-- <label class="checkbox-label">
         <input type="checkbox" v-model="options.importTitle" />
         <span>导入商品标题</span>
@@ -42,6 +38,11 @@
         <input type="checkbox" v-model="options.importProductNames" />
         <span>导入商品简称</span>
       </label>
+    </div>
+    
+    <div class="inventory-container" v-if="options.useAddInventory">
+      <label class="inventory-label">库存数量：</label>
+      <input type="number" v-model="options.inventoryAmount" min="1" max="10000" class="inventory-input" />
     </div>
   </div>
 </template>
@@ -117,17 +118,33 @@ const handleImportPropsChange = (event) => {
   font-size: 0.9em;
 }
 
-.input-group {
+.inventory-container {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border: 1px solid #eaeaea;
   display: flex;
   align-items: center;
-  margin-left: 15px;
+  max-width: 250px;
+}
+
+.inventory-label {
+  font-weight: 500;
+  margin-right: 8px;
 }
 
 .inventory-input {
-  width: 80px;
-  padding: 4px;
-  margin-left: 5px;
+  width: 100px;
+  padding: 6px 8px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
+  font-size: 14px;
+}
+
+.inventory-input:focus {
+  border-color: #1890ff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
 }
 </style>
