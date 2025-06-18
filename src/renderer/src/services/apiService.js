@@ -902,11 +902,11 @@ export async function getCSGList(skuList) {
     return { success: false, message: '未提供SKU列表', csgList: [] }
   }
 
-  console.log(`============== getCSGList 函数被调用 ==============`)
-  console.log('skuList', skuList)
+  // console.log(`============== getCSGList 函数被调用 ==============`)
+  // console.log('skuList', skuList)
 
   // 打印调用栈，帮助排查调用来源
-  console.log('调用栈:', new Error().stack)
+  // console.log('调用栈:', new Error().stack)
 
   // 将SKU列表转换为英文逗号分隔的字符串
   const skuString = skuList.join(',')
