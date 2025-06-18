@@ -113,10 +113,19 @@ export function updateTaskResult(task, functionResults, hasFailures) {
       result.includes('失败') || result.includes('错误')
     );
     
+    // 检查是否是后台任务（包含"请稍后在任务日志中查看结果"的消息）
+    const isBackgroundTask = functionResults.some(result =>
+      result.includes('请稍后在任务日志中查看结果')
+    );
+    
     if (hasFailureMessage || hasFailures) {
       task.状态 = '失败'
       task.结果 = functionResults.join('; ')
       return '失败'
+    } else if (isBackgroundTask) {
+      task.状态 = '处理中'
+      task.结果 = functionResults.join('; ')
+      return '处理中'
     } else {
       task.状态 = '成功'
       task.结果 = functionResults.join('; ')
