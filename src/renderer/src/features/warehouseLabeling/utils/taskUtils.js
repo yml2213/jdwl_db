@@ -107,14 +107,21 @@ export function updateTaskResult(task, functionResults, hasFailures) {
     task.状态 = '失败'
     task.结果 = '没有执行任何功能'
     return '失败'
-  } else if (hasFailures) {
-    task.状态 = '部分成功'
-    task.结果 = functionResults.join('; ')
-    return '部分成功'
   } else {
-    task.状态 = '成功'
-    task.结果 = functionResults.join('; ')
-    return '成功'
+    // 检查是否有任何结果包含"失败"字样
+    const hasFailureMessage = functionResults.some(result => 
+      result.includes('失败') || result.includes('错误')
+    );
+    
+    if (hasFailureMessage || hasFailures) {
+      task.状态 = '失败'
+      task.结果 = functionResults.join('; ')
+      return '失败'
+    } else {
+      task.状态 = '成功'
+      task.结果 = functionResults.join('; ')
+      return '成功'
+    }
   }
 }
 

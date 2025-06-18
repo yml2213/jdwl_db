@@ -160,57 +160,36 @@ export default {
         task.结果 = [`正在处理${skuList.length}个SKU`];
       }
       
-      // 实际处理SKU的逻辑
-      // SKU列表处理成功的数量
-      let successCount = 0;
-      let failureCount = 0;
-      
-      // 处理每个SKU
-      for (const sku of skuList) {
-        try {
-          // TODO: 实际的SKU处理逻辑
-          // 这里模拟处理成功
-          successCount++;
-          
-          // 每处理100个SKU记录一次日志
-          if (successCount % 100 === 0) {
-            result.importLogs.push({
-              type: 'success',
-              message: `已成功处理${successCount}个SKU`,
-              time: new Date().toLocaleString()
-            });
-          }
-        } catch (skuError) {
-          failureCount++;
-          result.importLogs.push({
-            type: 'error',
-            message: `SKU: ${sku} 处理失败: ${skuError.message || '未知错误'}`,
-            time: new Date().toLocaleString()
-          });
-        }
+      // 获取事业部信息
+      const department = getSelectedDepartment();
+      if (!department) {
+        throw new Error('未选择事业部，无法启用库存商品分配');
       }
+
+      // 实际处理SKU - 调用上传方法
+      const uploadResult = await this.uploadGoodsStockConfigData(skuList, department);
       
       // 记录处理结果
       const endTime = new Date();
       const processingTime = (endTime - startTime) / 1000; // 秒
       
-      // 处理成功
-      result.success = true;
-      result.message = `处理完成，成功: ${successCount}，失败: ${failureCount}，耗时: ${processingTime}秒`;
+      // 根据上传结果设置成功/失败状态
+      result.success = uploadResult.success;
+      result.message = uploadResult.message;
       result.results.push(result.message);
       
       result.importLogs.push({
-        type: 'summary',
+        type: uploadResult.success ? 'success' : 'error',
         message: result.message,
         time: endTime.toLocaleString(),
-        successCount,
-        failureCount,
+        successCount: uploadResult.processedCount || 0,
+        failureCount: uploadResult.failedCount || 0,
         processingTime
       });
       
       // 更新任务状态
       if (task) {
-        task.状态 = successCount > 0 ? (failureCount > 0 ? '部分成功' : '成功') : '失败';
+        task.状态 = uploadResult.success ? '成功' : '失败';  // 确保任何失败（包括时间限制）都标记为失败
         task.结果 = result.results;
         task.importLogs = result.importLogs;
       }
@@ -277,78 +256,35 @@ export default {
       // 序列化FormData
       const serializedFormData = await this.serializeFormData(formData)
 
-      // 最大重试次数及等待时间配置
-      const MAX_RETRIES = 3
-      let retryCount = 0
-      let response = null
+      // 发送请求
+      const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=' + Math.random()
+      const response = await window.api.sendRequest(url, {
+        method: 'POST',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+          'cache-control': 'no-cache',
+          origin: 'https://o.jdl.com',
+          pragma: 'no-cache',
+          priority: 'u=0, i',
+          referer: 'https://o.jdl.com/goToMainIframe.do',
+          'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'iframe',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-site': 'same-origin',
+          'sec-fetch-user': '?1',
+          'upgrade-insecure-requests': '1',
+          Cookie: cookieString
+        },
+        body: serializedFormData
+      })
 
-      // 添加重试逻辑
-      while (retryCount <= MAX_RETRIES) {
-        // 发送请求
-        const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=' + Math.random()
-        response = await window.api.sendRequest(url, {
-          method: 'POST',
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-            Accept:
-              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
-            'cache-control': 'no-cache',
-            // 不手动设置content-type，让FormData自动设置
-            origin: 'https://o.jdl.com',
-            pragma: 'no-cache',
-            priority: 'u=0, i',
-            referer: 'https://o.jdl.com/goToMainIframe.do',
-            'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"',
-            'sec-fetch-dest': 'iframe',
-            'sec-fetch-mode': 'navigate',
-            'sec-fetch-site': 'same-origin',
-            'sec-fetch-user': '?1',
-            'upgrade-insecure-requests': '1',
-            Cookie: cookieString
-          },
-          body: serializedFormData
-        })
-
-        console.log('上传库存商品分配数据响应:', response)
-
-        // 检查是否是频繁操作的错误
-        const isFrequentOperationError = 
-          response && 
-          response.resultCode === "0" && 
-          response.resultMessage && 
-          (response.resultMessage.includes('5分钟内不要频繁操作') || 
-           response.resultMessage.includes('请稍后再试'));
-
-        // 如果是频繁操作错误且未达到最大重试次数，等待后重试
-        if (isFrequentOperationError && retryCount < MAX_RETRIES) {
-          retryCount++;
-          // 计算等待时间：第一次5分钟，之后递增
-          const waitTimeMs = (5 + retryCount) * 60 * 1000; 
-          console.log(`收到频繁操作限制响应，第${retryCount}次重试，等待${waitTimeMs/1000}秒后重试...`);
-          
-          // 定期输出等待剩余时间，避免UI看起来像卡住
-          const startTime = Date.now();
-          const endTime = startTime + waitTimeMs;
-          
-          // 每30秒输出一次等待状态
-          while (Date.now() < endTime) {
-            const remainingTime = Math.ceil((endTime - Date.now()) / 1000);
-            console.log(`等待重试中，剩余${remainingTime}秒...`);
-            await new Promise(resolve => setTimeout(resolve, 30000)); // 每30秒更新一次
-          }
-          
-          // 重新准备请求数据
-          console.log('准备重试请求...');
-          continue;
-        }
-        
-        // 其他情况，跳出循环处理结果
-        break;
-      }
+      console.log('上传库存商品分配数据响应:', response)
 
       // 解析响应结果
       if (response && (response.resultCode === "1" || response.resultCode === "2")) {
@@ -386,33 +322,14 @@ export default {
           logFileName: logFileName
         }
       } else {
-        // 检查是否是频繁操作的错误
-        const isFrequentOperationError = 
-          response && 
-          response.resultCode === "0" && 
-          response.resultMessage && 
-          (response.resultMessage.includes('5分钟内不要频繁操作') || 
-           response.resultMessage.includes('请稍后再试'));
-
         // 失败响应
-        let errorMessage = '启用库存商品分配失败，未知原因';
-        let errorType = 'general'; // 一般错误
-
-        if (response) {
-          if (response.resultMessage) {
-            errorMessage = response.resultMessage;
-          } else if (response.resultData) {
-            errorMessage = response.resultData;
-          } else if (response.tipMsg) {
-            errorMessage = response.tipMsg;
-          } else if (response.message) {
-            errorMessage = response.message;
-          }
-          
-          // 标记频繁操作错误类型
-          if (isFrequentOperationError) {
-            errorType = 'frequent_operation';
-          }
+        let errorMessage = response?.resultMessage || response?.message || '启用库存商品分配失败，未知原因';
+        let isTimeLimit = false;
+        
+        // 如果是5分钟限制的错误，修改错误信息格式
+        if (response?.resultMessage?.includes('5分钟内不要频繁操作') || response?.message?.includes('5分钟内不要频繁操作')) {
+          errorMessage = '启用库存商品分配: 已失败 - 5分钟内不要频繁操作！';
+          isTimeLimit = true;
         }
 
         console.error('库存商品分配导入失败:', errorMessage);
@@ -434,9 +351,8 @@ export default {
           processedCount: 0,
           failedCount: skuList.length,
           skippedCount: 0,
-          data: errorMessage,
-          errorType: errorType, // 添加错误类型
-          originalResponse: response
+          data: response,
+          isTimeLimit: isTimeLimit  // 添加标记以便上层代码知道是时间限制错误
         }
       }
     } catch (error) {
