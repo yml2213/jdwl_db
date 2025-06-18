@@ -3,3 +3,8 @@
 
 启用库存商品分配  间隔 5分组  2000一组  最大
 
+https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=0.5182165822130649
+sku 查询 csg  cmg等信息   限制1000 一次
+
+库存导入的时候 限制 500   
+

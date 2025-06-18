@@ -1064,3 +1064,175 @@ export async function getCSGList(skuList) {
     }
   }
 }
+
+/**
+ * 根据SKU列表获取CMG编号列表
+ * @param {Array<string>} skuList - SKU列表
+ * @returns {Promise<Object>} 包含CMG编号列表的对象
+ */
+export async function getCMGBySkuList(skuList) {
+  if (!skuList || skuList.length === 0) {
+    return { success: false, message: '未提供SKU列表', cmgList: [] }
+  }
+
+  // 将SKU列表转换为英文逗号分隔的字符串
+  const skuString = skuList.join(',')
+
+  console.log(`开始查询${skuList.length}个SKU对应的CMG编号`)
+  const baseUrl = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+  console.log('查询接口URL:', baseUrl)
+  const csrfToken = await getCsrfToken()
+
+  try {
+    let allCMGItems = [] // 存储所有页的CMG商品信息
+    let currentStart = 0
+    const pageSize = 100 // 每页请求的数量
+    let totalRecords = null
+    let hasMoreData = true
+
+    // 循环查询所有页的数据
+    while (hasMoreData) {
+      console.log(`查询CMG商品分页数据：起始位置=${currentStart}, 每页数量=${pageSize}`)
+
+      // 构建aoData参数
+      const aoDataObj = [
+        { name: 'sEcho', value: 2 },
+        { name: 'iColumns', value: 14 },
+        { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+        { name: 'iDisplayStart', value: currentStart },
+        { name: 'iDisplayLength', value: pageSize },
+        { name: 'mDataProp_0', value: 0 },
+        { name: 'bSortable_0', value: false },
+        { name: 'mDataProp_1', value: 1 },
+        { name: 'bSortable_1', value: false },
+        { name: 'mDataProp_2', value: 'shopGoodsName' },
+        { name: 'bSortable_2', value: false },
+        { name: 'mDataProp_3', value: 'goodsNo' },
+        { name: 'bSortable_3', value: false },
+        { name: 'mDataProp_4', value: 'spGoodsNo' },
+        { name: 'bSortable_4', value: false },
+        { name: 'mDataProp_5', value: 'isvGoodsNo' },
+        { name: 'bSortable_5', value: false },
+        { name: 'mDataProp_6', value: 'shopGoodsNo' },
+        { name: 'bSortable_6', value: false },
+        { name: 'mDataProp_7', value: 'barcode' },
+        { name: 'bSortable_7', value: false },
+        { name: 'mDataProp_8', value: 'shopName' },
+        { name: 'bSortable_8', value: false },
+        { name: 'mDataProp_9', value: 'createTime' },
+        { name: 'bSortable_9', value: false },
+        { name: 'mDataProp_10', value: 10 },
+        { name: 'bSortable_10', value: false },
+        { name: 'mDataProp_11', value: 'isCombination' },
+        { name: 'bSortable_11', value: false },
+        { name: 'mDataProp_12', value: 'status' },
+        { name: 'bSortable_12', value: false },
+        { name: 'mDataProp_13', value: 13 },
+        { name: 'bSortable_13', value: false },
+        { name: 'iSortCol_0', value: 9 },
+        { name: 'sSortDir_0', value: 'desc' },
+        { name: 'iSortingCols', value: 1 }
+      ]
+
+      // 从事业部信息中获取sellerId和sellerNo
+      const deptInfo = getSelectedDepartment()
+      if (!deptInfo) {
+        throw new Error('未选择事业部，无法获取CMG编号')
+      }
+
+      // 构建查询参数
+      const data = qs.stringify({
+        csrfToken: csrfToken,
+        ids: '',
+        shopId: '',
+        sellerId: deptInfo.sellerId || '',
+        deptId: deptInfo.id || '',
+        sellerNo: deptInfo.sellerNo || '',
+        deptNo: deptInfo.deptNo || '',
+        shopNo: '',
+        spSource: '',
+        shopGoodsName: '',
+        isCombination: '',
+        barcode: '',
+        jdDeliver: '',
+        sellerGoodsSigns: skuString,
+        spGoodsNos: '',
+        goodsNos: '',
+        isvGoodsNos: '',
+        status: '1', // 查询启用状态的商品
+        originSend: '',
+        aoData: JSON.stringify(aoDataObj)
+      })
+
+      const response = await fetchApi(baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}/goToMainIframe.do`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: data
+      })
+
+      // 处理响应
+      if (response && response.aaData) {
+        // 首次获取总记录数
+        if (totalRecords === null) {
+          totalRecords = response.iTotalRecords || 0
+          console.log(`查询到总共有${totalRecords}个商品`)
+        }
+
+        // 解析本页数据，创建SKU到CMG的映射
+        const pageCMGItems = response.aaData
+          .filter(item => item.goodsNo) // 只保留有CMG编号的商品
+          .map(item => ({
+            sku: item.isvGoodsNo, // 明确使用isvGoodsNo作为sku
+            cmg: item.goodsNo,    // 使用goodsNo作为cmg
+            goodsName: item.shopGoodsName // 使用shopGoodsName作为商品名称
+          }))
+
+        // 合并到总结果中
+        allCMGItems = [...allCMGItems, ...pageCMGItems]
+
+        console.log(`当前已获取${allCMGItems.length}/${totalRecords}个CMG编号`)
+
+        // 判断是否还有更多数据
+        currentStart += response.aaData.length
+        hasMoreData = currentStart < totalRecords
+
+        // 如果没有更多数据或已获取所有记录，退出循环
+        if (!hasMoreData || allCMGItems.length >= totalRecords) {
+          break
+        }
+
+        // 添加短暂延迟避免频繁请求
+        if (hasMoreData) {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        }
+      } else {
+        // 如果响应异常，退出循环
+        console.warn('查询CMG编号响应异常:', response)
+        hasMoreData = false
+      }
+    }
+
+    console.log(`CMG编号查询完成，共获取${allCMGItems.length}个CMG编号`)
+
+    return {
+      success: true,
+      message: `查询到${allCMGItems.length}个CMG编号`,
+      cmgList: allCMGItems,
+      totalCount: totalRecords || allCMGItems.length
+    }
+  } catch (error) {
+    console.error('查询CMG编号失败:', error)
+    return {
+      success: false,
+      message: `查询CMG编号失败: ${error.message || '未知错误'}`,
+      cmgList: []
+    }
+  }
+}
+

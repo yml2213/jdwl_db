@@ -4,7 +4,7 @@
     <div class="purchase-input-group">
       <label class="checkbox-label">
         <input type="checkbox" :checked="enable" @change="updateEnable" />
-        <span>启用采购入库</span>
+        <span>添加库存</span>
       </label>
       <div class="number-input">
         <input
