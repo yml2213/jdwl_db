@@ -32,16 +32,31 @@ export default {
       // 创建新的Excel文件
       const newExcelData = this.createNewExcelData(data, department)
       
-      // 将数据转换为Excel文件
-      const newFile = await this.convertToExcelFile(newExcelData)
+      // 检查数据量是否需要分组处理
+      const rowCount = newExcelData.length - 2  // 减去两行表头
+      const BATCH_SIZE = 2000
       
-      // 上传数据到服务器
-      const result = await this.uploadProductNamesData(newFile)
+      if (rowCount <= BATCH_SIZE) {
+        // 数据量较小，直接处理
+        console.log(`数据量较小(${rowCount}行)，不需要分组处理`)
+        
+        // 将数据转换为Excel文件
+        const newFile = await this.convertToExcelFile(newExcelData)
+        
+        // 上传数据到服务器
+        const result = await this.uploadProductNamesData(newFile)
 
-      return {
-        success: result.success,
-        message: result.message,
-        data: result.data
+        return {
+          success: result.success,
+          message: result.message,
+          data: result.data
+        }
+      } else {
+        // 数据量较大，需要分组处理
+        console.log(`数据量较大(${rowCount}行)，需要分组处理，每组最多${BATCH_SIZE}行`)
+        
+        // 分组处理
+        return await this.processBatches(newExcelData, department, BATCH_SIZE)
       }
     } catch (error) {
       console.error('导入商品简称失败:', error)
@@ -158,11 +173,153 @@ export default {
   },
 
   /**
+   * 分组处理大量数据
+   * @param {Array} fullData - 完整的Excel数据（包含表头）
+   * @param {Object} department - 事业部信息
+   * @param {Number} batchSize - 每组数据量
+   * @returns {Promise<Object>} 处理结果
+   */
+  async processBatches(fullData, department, batchSize) {
+    // 表头行（前两行）
+    const headers = fullData.slice(0, 2)
+    
+    // 数据行
+    const dataRows = fullData.slice(2)
+    
+    // 计算总批次数
+    const totalBatches = Math.ceil(dataRows.length / batchSize)
+    console.log(`共分为${totalBatches}个批次处理`)
+    
+    // 结果统计
+    let totalCount = 0
+    let successCount = 0
+    let failCount = 0
+    let combinedResultMsg = '分批处理汇总:\n'
+    let allResults = []
+    
+    // 进度事件
+    const progressEvent = new CustomEvent('importProductNamesProgress', {
+      detail: { total: totalBatches, current: 0 }
+    })
+    window.dispatchEvent(progressEvent)
+    
+    // 逐批处理
+    for (let i = 0; i < totalBatches; i++) {
+      const start = i * batchSize
+      const end = Math.min(start + batchSize, dataRows.length)
+      const currentBatch = dataRows.slice(start, end)
+      
+      console.log(`处理第${i+1}/${totalBatches}批，数据行数:${currentBatch.length}`)
+      
+      // 更新进度
+      const batchProgressEvent = new CustomEvent('importProductNamesProgress', {
+        detail: { total: totalBatches, current: i + 1 }
+      })
+      window.dispatchEvent(batchProgressEvent)
+      
+      // 创建当前批次的完整数据（表头+数据）
+      const batchData = [...headers, ...currentBatch]
+      
+      // 转换为Excel文件
+      const batchFile = await this.convertToExcelFile(batchData, `批次${i+1}`)
+      
+      // 上传数据
+      const result = await this.uploadProductNamesData(batchFile)
+      allResults.push(result)
+      
+      // 累加统计数据
+      if (result.data) {
+        const batchTotal = parseInt(result.data.totalNum) || 0
+        const batchSuccess = parseInt(result.data.successNum) || 0
+        const batchFail = parseInt(result.data.failNum) || 0
+        
+        totalCount += batchTotal
+        successCount += batchSuccess
+        failCount += batchFail
+        
+        // 添加当前批次结果到汇总信息
+        combinedResultMsg += `批次${i+1}: 共${batchTotal}条，成功${batchSuccess}条，失败${batchFail}条\n`
+        
+        // 如果有错误信息，也添加到汇总
+        if (result.data.resultMsg && result.data.failNum > 0) {
+          const errorLines = result.data.resultMsg.split('\n')
+            .filter(line => line.includes('的商品不存在'))
+            .join('\n')
+          
+          if (errorLines) {
+            combinedResultMsg += `${errorLines}\n`
+          }
+        }
+      }
+      
+      // 如果不是最后一批，等待指定时间再处理下一批
+      if (i < totalBatches - 1) {
+        console.log(`等待5分钟后处理下一批...`)
+        
+        // 等待5分钟(300000毫秒)
+        await new Promise(resolve => {
+          const waitTime = 5 * 60 * 1000 // 5分钟
+          const startWait = Date.now()
+          
+          // 每秒更新等待进度
+          const interval = setInterval(() => {
+            const elapsed = Date.now() - startWait
+            const remaining = waitTime - elapsed
+            if (remaining <= 0) {
+              clearInterval(interval)
+              resolve()
+            } else {
+              const remainingMinutes = Math.floor(remaining / 60000)
+              const remainingSeconds = Math.floor((remaining % 60000) / 1000)
+              
+              // 发送等待进度事件
+              const waitEvent = new CustomEvent('importProductNamesWaiting', {
+                detail: { 
+                  minutes: remainingMinutes,
+                  seconds: remainingSeconds,
+                  total: waitTime,
+                  elapsed: elapsed
+                }
+              })
+              window.dispatchEvent(waitEvent)
+              
+              console.log(`等待下一批次: 剩余${remainingMinutes}分${remainingSeconds}秒`)
+            }
+          }, 1000)
+        })
+      }
+    }
+    
+    // 发送完成事件
+    const completeEvent = new CustomEvent('importProductNamesComplete')
+    window.dispatchEvent(completeEvent)
+    
+    // 汇总最终结果
+    console.log(`所有批次处理完成，总计: ${totalCount}条，成功: ${successCount}条，失败: ${failCount}条`)
+    
+    // 构建最终返回结果
+    const finalResult = {
+      success: successCount > 0,
+      message: `分批导入完成: 共${totalCount}条，成功${successCount}条，失败${failCount}条`,
+      data: {
+        totalNum: totalCount,
+        successNum: successCount,
+        failNum: failCount,
+        resultMsg: combinedResultMsg,
+        batchResults: allResults
+      }
+    }
+    
+    return finalResult
+  },
+
+  /**
    * 将数据转换为Excel文件
    * @param {Array} data - Excel数据
+   * @param {String} batchInfo - 批次信息(可选)
    * @returns {Promise<File>} Excel文件对象
    */
-  async convertToExcelFile(data) {
+  async convertToExcelFile(data, batchInfo = '') {
     try {
       console.log('开始转换数据为Excel文件...')
       
@@ -205,9 +362,13 @@ export default {
         view[i] = excelBinaryData.charCodeAt(i) & 0xff
       }
       
-      // 创建文件对象
-      console.log('创建Excel文件对象完成')
-      return new File([buf], '商品批量修改自定义模板.xls', {
+      // 创建文件对象，根据是否有批次信息添加批次标记
+      const fileName = batchInfo ? 
+        `商品批量修改自定义模板_${batchInfo}.xls` : 
+        '商品批量修改自定义模板.xls'
+        
+      console.log('创建Excel文件对象完成:', fileName)
+      return new File([buf], fileName, {
         type: 'application/vnd.ms-excel'
       })
     } catch (error) {
@@ -215,8 +376,6 @@ export default {
       throw new Error(`生成Excel文件失败: ${error.message}`)
     }
   },
-
-
 
   /**
    * 上传商品简称数据到服务器

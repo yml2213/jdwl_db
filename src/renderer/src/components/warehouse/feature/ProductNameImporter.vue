@@ -25,13 +25,34 @@
           <span v-else class="selected-file-name">未选择文件</span>
         </div>
         
-                 <button 
+        <button 
           class="btn btn-success" 
           @click="handleImport" 
           :disabled="!selectedFile || isUploading"
         >
           {{ isUploading ? '导入中...' : '开始导入' }}
         </button>
+      </div>
+      
+      <!-- 批处理进度显示 -->
+      <div v-if="batchProgress.isProcessing" class="batch-progress">
+        <div class="progress-header">
+          <h6>批量处理进度</h6>
+          <span class="progress-status">{{ batchProgress.currentBatch }} / {{ batchProgress.totalBatches }}</span>
+        </div>
+        
+        <div class="progress-bar-container">
+          <div class="progress-bar" :style="{ width: progressPercentage + '%' }"></div>
+        </div>
+        
+        <!-- 等待计时器 -->
+        <div v-if="batchProgress.isWaiting" class="waiting-timer">
+          <div class="timer-icon">⏱️</div>
+          <div class="timer-text">
+            等待处理下一批次: 
+            <span class="timer-countdown">{{ batchProgress.minutes }}分{{ batchProgress.seconds }}秒</span>
+          </div>
+        </div>
       </div>
       
       <div v-if="importResult" class="import-result" :class="{ 'success': importResult.success, 'error': !importResult.success }">
@@ -63,19 +84,94 @@
             </ul>
           </div>
         </div>
+        
+        <!-- 批次详情 -->
+        <div v-if="importResult.data && importResult.data.batchResults && importResult.data.batchResults.length > 1" class="batch-details">
+          <h6 @click="toggleBatchDetails" class="batch-toggle">
+            批次详情 ({{ importResult.data.batchResults.length }}个批次)
+            <span class="toggle-icon">{{ showBatchDetails ? '▼' : '►' }}</span>
+          </h6>
+          <div v-if="showBatchDetails" class="batch-list">
+            <div v-for="(batch, index) in importResult.data.batchResults" :key="index" class="batch-item">
+              <div class="batch-header">
+                批次 {{ index + 1 }}:
+                <span class="batch-stats">
+                  总数: {{ batch.data?.totalNum || 0 }} | 
+                  成功: {{ batch.data?.successNum || 0 }} | 
+                  失败: {{ batch.data?.failNum || 0 }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import importProductNamesModule from '../../../features/warehouseLabeling/importProductNames.js'
 
 const fileInputRef = ref(null)
 const selectedFile = ref(null)
 const isUploading = ref(false)
 const importResult = ref(null)
+const showBatchDetails = ref(false)
+
+// 批处理进度状态
+const batchProgress = ref({
+  isProcessing: false,
+  isWaiting: false,
+  currentBatch: 0,
+  totalBatches: 0,
+  minutes: 0,
+  seconds: 0
+})
+
+// 计算进度百分比
+const progressPercentage = computed(() => {
+  if (!batchProgress.value.totalBatches) return 0
+  return Math.round((batchProgress.value.currentBatch / batchProgress.value.totalBatches) * 100)
+})
+
+// 切换批次详情显示
+const toggleBatchDetails = () => {
+  showBatchDetails.value = !showBatchDetails.value
+}
+
+// 事件监听处理函数
+const handleProgressEvent = (event) => {
+  const { total, current } = event.detail
+  batchProgress.value.isProcessing = true
+  batchProgress.value.totalBatches = total
+  batchProgress.value.currentBatch = current
+}
+
+const handleWaitingEvent = (event) => {
+  const { minutes, seconds } = event.detail
+  batchProgress.value.isWaiting = true
+  batchProgress.value.minutes = minutes
+  batchProgress.value.seconds = seconds
+}
+
+const handleCompleteEvent = () => {
+  batchProgress.value.isProcessing = false
+  batchProgress.value.isWaiting = false
+}
+
+// 注册和移除事件监听
+onMounted(() => {
+  window.addEventListener('importProductNamesProgress', handleProgressEvent)
+  window.addEventListener('importProductNamesWaiting', handleWaitingEvent)
+  window.addEventListener('importProductNamesComplete', handleCompleteEvent)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('importProductNamesProgress', handleProgressEvent)
+  window.removeEventListener('importProductNamesWaiting', handleWaitingEvent)
+  window.removeEventListener('importProductNamesComplete', handleCompleteEvent)
+})
 
 // 触发文件选择框
 const triggerFileInput = () => {
@@ -109,6 +205,16 @@ const handleImport = async () => {
   isUploading.value = true
   importResult.value = null
   
+  // 重置批处理状态
+  batchProgress.value = {
+    isProcessing: false,
+    isWaiting: false,
+    currentBatch: 0,
+    totalBatches: 0,
+    minutes: 0,
+    seconds: 0
+  }
+  
   try {
     const result = await importProductNamesModule.execute(selectedFile.value)
     importResult.value = result
@@ -127,6 +233,9 @@ const handleImport = async () => {
     }
   } finally {
     isUploading.value = false
+    // 确保进度显示已完成
+    batchProgress.value.isProcessing = false
+    batchProgress.value.isWaiting = false
   }
 }
 
@@ -375,5 +484,118 @@ h4 {
   font-size: 12px;
   height: 28px;
   padding: 0 12px;
+}
+
+/* 批处理进度样式 */
+.batch-progress {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-header h6 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.progress-status {
+  font-size: 14px;
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.progress-bar-container {
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: #2196f3;
+  transition: width 0.3s;
+}
+
+.waiting-timer {
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+  padding: 8px;
+  background-color: #e8f4fd;
+  border-radius: 4px;
+  border-left: 3px solid #2196f3;
+}
+
+.timer-icon {
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.timer-text {
+  font-size: 13px;
+  color: #333;
+}
+
+.timer-countdown {
+  font-weight: 500;
+  color: #1976d2;
+}
+
+/* 批次详情样式 */
+.batch-details {
+  margin-top: 16px;
+  border-top: 1px dashed #e0e0e0;
+  padding-top: 12px;
+}
+
+.batch-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+}
+
+.toggle-icon {
+  font-size: 12px;
+  color: #666;
+}
+
+.batch-list {
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.batch-item {
+  padding: 8px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  margin-bottom: 6px;
+}
+
+.batch-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.batch-stats {
+  color: #666;
+  font-size: 12px;
 }
 </style> 
