@@ -286,7 +286,20 @@ export default {
       formData.append('poReturnMode', '1');
       formData.append('importFiles', '');
 
- 
+      // 将FormData转换为适合IPC传输的对象
+      const formDataEntries = [];
+      for (const [key, value] of formData.entries()) {
+        formDataEntries.push([key, value]);
+        console.log(`FormData字段: ${key} = ${value}`);
+      }
+      
+      // 创建特殊标记对象，让requestHandler知道这是FormData
+      const formDataObj = {
+        _isFormData: true,
+        entries: formDataEntries
+      };
+      
+      console.log(`已创建FormData对象，包含${formDataEntries.length}个字段，准备通过IPC传递`);
 
       // 发送请求
       const url = 'https://o.jdl.com/poMain/downPoMain.do';  
@@ -311,8 +324,9 @@ export default {
           'sec-fetch-user': '?1',
           'upgrade-insecure-requests': '1',
           'Cookie': cookieString
+          // 不要在这里设置Content-Type，让form-data自动设置
         },
-        body: formData
+        body: formDataObj
       });
 
       console.log('添加库存响应:', response);
