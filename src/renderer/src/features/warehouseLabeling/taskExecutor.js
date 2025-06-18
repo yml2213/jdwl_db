@@ -127,11 +127,13 @@ export async function executeOneTask(task, shopInfo, options) {
         if (importResult.success) {
           functionResults.push(`导入物流属性: 成功 - 处理了${importResult.processedCount}个SKU`)
         } else {
-          // 获取原始错误信息
+          // 获取错误信息
           let errorMessage = ''
-
-          // 优先使用API返回的原始错误信息
-          if (importResult.data) {
+          if (importResult.errorDetail) {
+            // 使用收集到的详细错误信息
+            errorMessage = importResult.errorDetail
+          } else if (importResult.data) {
+            // 使用API返回的原始错误信息
             errorMessage = importResult.data
           } else if (importResult.message) {
             errorMessage = importResult.message
@@ -142,11 +144,17 @@ export async function executeOneTask(task, shopInfo, options) {
           // 添加清晰的错误信息到结果
           functionResults.push(`导入物流属性: 失败 - ${errorMessage}`)
           hasFailures = true
+
+          // 更新任务的结果字段，确保显示具体的错误原因
+          task.结果 = errorMessage
         }
       } catch (importError) {
-        functionResults.push(`导入物流属性: 错误 - ${importError.message || '未知错误'}`)
+        const errorMessage = importError.message || '未知错误'
+        functionResults.push(`导入物流属性: 错误 - ${errorMessage}`)
         console.error('导入物流属性失败:', importError)
         hasFailures = true
+        // 更新任务的结果字段
+        task.结果 = errorMessage
       }
     }
 

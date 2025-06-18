@@ -48,7 +48,7 @@ export default {
             console.log(`批次 ${batchIndex + 1} 处理成功`)
           } else {
             failedCount += batchSkus.length
-            // 添加失败原因到收集器
+            // 添加失败原因到收集器，优先使用API返回的具体错误信息
             if (result.data) {
               failedResults.push(result.data)
             } else if (result.message) {
@@ -56,10 +56,16 @@ export default {
             } else {
               failedResults.push(`批次 ${batchIndex + 1} 处理失败`)
             }
-            console.error(`批次 ${batchIndex + 1} 处理失败: ${result.message}`)
+            console.error(`批次 ${batchIndex + 1} 处理失败: ${result.data || result.message}`)
+
+            // 如果是API限制错误（5分钟限制），直接中断处理
+            if (result.data && result.data.includes('5分钟内只能导入一次')) {
+              console.log('检测到5分钟限制，中断后续批次处理')
+              break
+            }
           }
 
-          // 每批之间等待至少5分钟
+          // 每批之间等待5分钟
           if (batchIndex < totalBatches - 1) {
             const waitTime = 5 * 60 * 1000 // 5分钟
             console.log(`等待${waitTime / 1000}秒后处理下一批...`)
@@ -73,13 +79,16 @@ export default {
         }
       }
 
+      // 返回结果时包含所有错误信息
+      const isPartialSuccess = processedCount > 0 && failedCount > 0
       return {
         success: failedCount === 0,
         message: `导入物流属性完成: 成功 ${processedCount} 个, 失败 ${failedCount} 个`,
         processedCount,
         failedCount,
         skippedCount: 0,
-        errorDetail: failedResults.length > 0 ? failedResults.join('; ') : null
+        errorDetail: failedResults.length > 0 ? failedResults.join('; ') : null,
+        isPartialSuccess
       }
     } catch (error) {
       console.error('导入物流属性失败:', error)
