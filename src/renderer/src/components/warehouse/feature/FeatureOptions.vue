@@ -26,6 +26,14 @@
         <input type="checkbox" v-model="options.useJdEffect" />
         <span>启用京配打标生效</span>
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="options.useAddInventory" />
+        <span>添加库存</span>
+      </label>
+      <div class="input-group" v-if="options.useAddInventory">
+        <span>库存数量：</span>
+        <input type="number" v-model="options.inventoryAmount" min="1" max="10000" class="inventory-input" />
+      </div>
       <!-- <label class="checkbox-label">
         <input type="checkbox" v-model="options.importTitle" />
         <span>导入商品标题</span>
@@ -52,6 +60,8 @@ const props = defineProps({
       importProps: false,
       useWarehouse: false,
       useJdEffect: false,
+      useAddInventory: false,
+      inventoryAmount: 1000,
       importTitle: false,
       importProductNames: false,
       skipConfigErrors: true  // 默认启用跳过选项
@@ -105,5 +115,19 @@ const handleImportPropsChange = (event) => {
 .small-margin-left {
   margin-left: 15px;
   font-size: 0.9em;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  margin-left: 15px;
+}
+
+.inventory-input {
+  width: 80px;
+  padding: 4px;
+  margin-left: 5px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
 }
 </style>

@@ -1068,11 +1068,11 @@ export async function getCSGList(skuList) {
 /**
  * 根据SKU列表获取CMG编号列表
  * @param {Array<string>} skuList - SKU列表
- * @returns {Promise<Object>} 包含CMG编号列表的对象
+ * @returns {Promise<Array>} 包含CMG和商品信息的数组
  */
-export async function getCMGBySkuList(skuList) {
+export async function getCMGBySkuList(skuList, applyInstoreQty = 1000) {
   if (!skuList || skuList.length === 0) {
-    return { success: false, message: '未提供SKU列表', cmgList: [] }
+    return []
   }
 
   // 将SKU列表转换为英文逗号分隔的字符串
@@ -1184,13 +1184,22 @@ export async function getCMGBySkuList(skuList) {
           console.log(`查询到总共有${totalRecords}个商品`)
         }
 
-        // 解析本页数据，创建SKU到CMG的映射
+        // 解析本页数据，转换为所需格式
         const pageCMGItems = response.aaData
           .filter(item => item.goodsNo) // 只保留有CMG编号的商品
           .map(item => ({
-            sku: item.isvGoodsNo, // 明确使用isvGoodsNo作为sku
-            cmg: item.goodsNo,    // 使用goodsNo作为cmg
-            goodsName: item.shopGoodsName // 使用shopGoodsName作为商品名称
+            poNo: "undefined",
+            goodsNo: item.goodsNo,    // CMG编号
+            goodsName: item.shopGoodsName, // 商品名称
+            applyInstoreQty: applyInstoreQty || 1000, // 默认库存数量，根据需要可以调整
+            customRecord: "",
+            sellerRecord: "",
+            goodsPrice: "0",
+            barCodeType: 2,
+            sellerGoodsSign: item.isvGoodsNo, // SKU编号
+            sidCheckout: 0,
+            outPackNo: "",
+            goodsUom: ""
           }))
 
         // 合并到总结果中
@@ -1220,19 +1229,11 @@ export async function getCMGBySkuList(skuList) {
 
     console.log(`CMG编号查询完成，共获取${allCMGItems.length}个CMG编号`)
 
-    return {
-      success: true,
-      message: `查询到${allCMGItems.length}个CMG编号`,
-      cmgList: allCMGItems,
-      totalCount: totalRecords || allCMGItems.length
-    }
+    // 直接返回格式化后的数组，不再包装在对象中
+    return allCMGItems
   } catch (error) {
     console.error('查询CMG编号失败:', error)
-    return {
-      success: false,
-      message: `查询CMG编号失败: ${error.message || '未知错误'}`,
-      cmgList: []
-    }
+    return [] // 发生错误时返回空数组
   }
 }
 

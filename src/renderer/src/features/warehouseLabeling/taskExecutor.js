@@ -16,6 +16,7 @@ import {
   updateTaskStatus,
   updateTaskResult
 } from './utils/taskUtils'
+import addInventoryFeature from './addInventory'
 
 /**
  * 执行单个任务
@@ -269,6 +270,62 @@ export async function executeOneTask(task, shopInfo, options) {
       } catch (error) {
         console.error('启用京配打标生效出错:', error)
         functionResults.push(`启用京配打标生效: 失败 - ${error.message || '未知错误'}`)
+        hasFailures = true
+      }
+    }
+
+    // 添加库存功能
+    if (options.useAddInventory === true) {
+      try {
+        console.log('执行[添加库存]功能，SKU:', task.sku)
+
+        // 提取SKU
+        const skuList = extractTaskSkuList(task)
+        if (skuList.length === 0) {
+          throw new Error('没有有效的SKU')
+        }
+
+        // 获取库存数量
+        const inventoryAmount = options.inventoryAmount || 1000
+
+        // 创建批次任务的回调函数，用于将批次任务添加到任务列表
+        const createBatchTask = (batchTask) => {
+          if (!batchTask) return;
+          
+          console.log('创建批次任务', batchTask);
+          
+          // 将批次任务添加到任务列表
+          if (this.addTaskToList) {
+            this.addTaskToList(batchTask);
+          }
+        };
+
+        // 使用添加库存功能模块，传入createBatchTask回调和库存数量
+        const addInventoryResult = await addInventoryFeature.execute(skuList, task, createBatchTask, inventoryAmount)
+
+        // 将分批导入日志添加到任务中，用于UI展示
+        if (addInventoryResult.importLogs) {
+          if (!task.importLogs) {
+            task.importLogs = [];
+          }
+          task.importLogs = task.importLogs.concat(addInventoryResult.importLogs);
+          console.log(`添加${addInventoryResult.importLogs.length}条导入日志到任务`);
+        }
+
+        if (addInventoryResult.success) {
+          // 检查是否是后台任务
+          if (addInventoryResult.message && addInventoryResult.message.includes('后台任务')) {
+            functionResults.push(`添加库存: 已提交后台任务，请稍后在任务日志中查看结果`)
+          } else {
+            functionResults.push(`添加库存: 成功`)
+          }
+        } else {
+          functionResults.push(`添加库存: 失败 - ${addInventoryResult.message}`)
+          hasFailures = true
+        }
+      } catch (error) {
+        console.error('添加库存出错:', error)
+        functionResults.push(`添加库存: 失败 - ${error.message || '未知错误'}`)
         hasFailures = true
       }
     }
