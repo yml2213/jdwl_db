@@ -61,44 +61,50 @@
         </td>
       </tr>
       <!-- 日志展示行 -->
-      <tr
-        v-for="(task, index) in tasks"
-        :key="`log-${index}`"
-        v-if="expandedTasks.includes(index) && task.importLogs"
-      >
+      <tr v-for="taskIndex in tasksWithExpandedLogs" :key="`log-${taskIndex}`">
         <td colspan="8" class="logs-container">
           <div class="task-logs">
             <h4>批次处理日志明细</h4>
 
             <!-- 统计信息 -->
             <div class="batch-summary">
-              <div v-if="getBatchCount(task.importLogs) > 0">
-                总共 <span class="highlight">{{ getBatchCount(task.importLogs) }}</span> 个批次，
-                每批最多 <span class="highlight">2000</span> 个SKU
+              <div v-if="getBatchCount(tasks[taskIndex].importLogs) > 0">
+                总共
+                <span class="highlight">{{ getBatchCount(tasks[taskIndex].importLogs) }}</span>
+                个批次， 每批最多 <span class="highlight">2000</span> 个SKU
               </div>
-              <div v-if="getSummaryLog(task.importLogs)">
-                总结: {{ getSummaryLog(task.importLogs).message }}
+              <div v-if="getSummaryLog(tasks[taskIndex].importLogs)">
+                总结: {{ getSummaryLog(tasks[taskIndex].importLogs).message }}
               </div>
             </div>
 
             <!-- 按批次分组显示日志 -->
             <div class="batch-groups">
-              <template v-for="batchIndex in getBatchCount(task.importLogs)" :key="batchIndex">
+              <template
+                v-for="batchIndex in getBatchCount(tasks[taskIndex].importLogs)"
+                :key="batchIndex"
+              >
                 <!-- 批次标题 -->
                 <div class="batch-header">
                   <div class="batch-title">批次 {{ batchIndex }}</div>
                   <div
-                    v-if="getBatchStatus(task.importLogs, batchIndex)"
-                    :class="['batch-status', getBatchStatus(task.importLogs, batchIndex)]"
+                    v-if="getBatchStatus(tasks[taskIndex].importLogs, batchIndex)"
+                    :class="[
+                      'batch-status',
+                      getBatchStatus(tasks[taskIndex].importLogs, batchIndex)
+                    ]"
                   >
-                    {{ getBatchStatusText(task.importLogs, batchIndex) }}
+                    {{ getBatchStatusText(tasks[taskIndex].importLogs, batchIndex) }}
                   </div>
                 </div>
 
                 <!-- 批次内的日志 -->
                 <div class="batch-logs">
                   <div
-                    v-for="(log, logIndex) in getLogsForBatch(task.importLogs, batchIndex)"
+                    v-for="(log, logIndex) in getLogsForBatch(
+                      tasks[taskIndex].importLogs,
+                      batchIndex
+                    )"
                     :key="logIndex"
                     :class="['log-item', `log-${log.type}`]"
                   >
@@ -171,7 +177,10 @@
                       </div>
                     </div>
                   </div>
-                  <div v-if="!hasLogsForBatch(task.importLogs, batchIndex)" class="no-logs-message">
+                  <div
+                    v-if="!hasLogsForBatch(tasks[taskIndex].importLogs, batchIndex)"
+                    class="no-logs-message"
+                  >
                     此批次尚无详细日志
                   </div>
                 </div>
@@ -179,34 +188,34 @@
             </div>
 
             <!-- 总结信息 -->
-            <div v-if="getSummaryLog(task.importLogs)" class="summary-section">
+            <div v-if="getSummaryLog(tasks[taskIndex].importLogs)" class="summary-section">
               <div class="summary-header">处理结果总结</div>
               <div class="summary-content">
                 <div class="detail-item">
                   <span class="detail-label">总SKU数:</span>
                   <span class="detail-value"
-                    >{{ getSummaryLog(task.importLogs).totalCount }}个</span
+                    >{{ getSummaryLog(tasks[taskIndex].importLogs).totalCount }}个</span
                   >
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">成功处理:</span>
                   <span class="detail-value success"
-                    >{{ getSummaryLog(task.importLogs).processedCount }}个</span
+                    >{{ getSummaryLog(tasks[taskIndex].importLogs).processedCount }}个</span
                   >
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">失败处理:</span>
                   <span class="detail-value error"
-                    >{{ getSummaryLog(task.importLogs).failedCount }}个</span
+                    >{{ getSummaryLog(tasks[taskIndex].importLogs).failedCount }}个</span
                   >
                 </div>
                 <div
-                  v-if="getSummaryLog(task.importLogs).failedReasons"
+                  v-if="getSummaryLog(tasks[taskIndex].importLogs).failedReasons"
                   class="detail-item failed-reasons"
                 >
                   <span class="detail-label">失败原因:</span>
                   <span class="detail-value">{{
-                    getSummaryLog(task.importLogs).failedReasons
+                    getSummaryLog(tasks[taskIndex].importLogs).failedReasons
                   }}</span>
                 </div>
               </div>
@@ -236,6 +245,13 @@ const emit = defineEmits(['execute-one', 'delete-task'])
 
 const selectedTasks = ref([])
 const expandedTasks = ref([]) // 跟踪展开的任务
+
+// 计算属性：获取需要展示日志的任务索引
+const tasksWithExpandedLogs = computed(() => {
+  return expandedTasks.value.filter(
+    (index) => index < props.tasks.length && props.tasks[index].importLogs
+  )
+})
 
 // 切换任务日志显示
 const toggleTaskLogs = (index) => {
