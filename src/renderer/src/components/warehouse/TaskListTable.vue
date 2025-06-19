@@ -154,9 +154,21 @@
                           <span class="detail-label">成功导入:</span>
                           <span class="detail-value highlight">{{ log.batchSize }}个SKU</span>
                         </div>
+                        <div v-if="log.poNumber" class="detail-item">
+                          <span class="detail-label">单号:</span>
+                          <span class="detail-value po-number">{{ log.poNumber }}</span>
+                        </div>
                         <div v-if="log.logFile" class="detail-item">
                           <span class="detail-label">日志文件:</span>
                           <span class="detail-value log-file">{{ log.logFile }}</span>
+                        </div>
+                        <div v-if="log.processingTime" class="detail-item">
+                          <span class="detail-label">处理时间:</span>
+                          <span class="detail-value">{{ log.processingTime }}秒</span>
+                        </div>
+                        <div v-if="log.fullMessage" class="detail-item">
+                          <span class="detail-label">详细信息:</span>
+                          <span class="detail-value full-message">{{ log.fullMessage }}</span>
                         </div>
                       </div>
 
@@ -165,6 +177,21 @@
                         <div class="detail-item">
                           <span class="detail-label">错误原因:</span>
                           <span class="detail-value">{{ log.message }}</span>
+                        </div>
+                        <div v-if="log.batchSize" class="detail-item">
+                          <span class="detail-label">影响SKU数:</span>
+                          <span class="detail-value">{{ log.batchSize }}个</span>
+                        </div>
+                        <div v-if="log.processingTime" class="detail-item">
+                          <span class="detail-label">处理时间:</span>
+                          <span class="detail-value">{{ log.processingTime }}秒</span>
+                        </div>
+                        <div
+                          v-if="log.fullMessage && log.fullMessage !== log.message"
+                          class="detail-item"
+                        >
+                          <span class="detail-label">详细信息:</span>
+                          <span class="detail-value full-message">{{ log.fullMessage }}</span>
                         </div>
                       </div>
 
@@ -447,127 +474,159 @@ const deleteTask = (index) => {
   background: none;
   border: none;
   color: #1976d2;
-  text-decoration: underline;
   cursor: pointer;
+  padding: 0;
   font-size: 12px;
-  padding: 0 5px;
+  transition: all 0.3s;
+}
+
+.btn-link:hover {
+  color: #42a5f5;
+  text-decoration: underline;
 }
 
 .logs-container {
-  padding: 0 !important;
-  background-color: #f5f7fa;
+  padding: 0;
+  border-bottom: 1px solid #ebeef5;
 }
 
 .task-logs {
-  padding: 10px 20px;
-  max-height: 400px;
-  overflow-y: auto;
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 4px;
+  margin: 5px 0;
 }
 
 .task-logs h4 {
-  margin-top: 5px;
-  margin-bottom: 10px;
-  font-weight: bold;
+  margin-top: 0;
+  margin-bottom: 15px;
   color: #333;
   font-size: 16px;
 }
 
 .batch-summary {
-  background-color: #e8f5e9;
+  background-color: #f0f0f0;
   padding: 10px;
   border-radius: 4px;
   margin-bottom: 15px;
-  font-size: 13px;
+  border-left: 3px solid #2196f3;
 }
 
 .highlight {
+  color: #1976d2;
   font-weight: bold;
-  color: #2196f3;
 }
 
 .batch-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+  margin-bottom: 20px;
 }
 
 .batch-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 5px;
-  border-bottom: 1px solid #e0e0e0;
+  padding: 8px 10px;
+  background-color: #e3f2fd;
+  border-radius: 4px 4px 0 0;
+  margin-top: 15px;
 }
 
 .batch-title {
-  font-size: 14px;
   font-weight: bold;
-  color: #333;
+  color: #0d47a1;
 }
 
 .batch-status {
-  padding: 2px 8px;
-  border-radius: 10px;
   font-size: 12px;
-  color: white;
+  font-weight: bold;
+  padding: 3px 8px;
+  border-radius: 3px;
 }
 
 .batch-status.success {
-  background-color: #4caf50;
+  background-color: #e8f5e9;
+  color: #2e7d32;
 }
 
 .batch-status.error {
-  background-color: #f44336;
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .batch-status.waiting {
-  background-color: #ff9800;
-  animation: pulsate 1.5s infinite alternate;
+  background-color: #fff8e1;
+  color: #ff8f00;
 }
 
 .batch-status.completed {
-  background-color: #2196f3;
+  background-color: #e8f5e9;
+  color: #388e3c;
 }
 
 .batch-status.processing {
-  background-color: #9c27b0;
-  animation: pulsate 1.5s infinite alternate;
+  background-color: #e3f2fd;
+  color: #1565c0;
 }
 
 .batch-logs {
-  padding-left: 10px;
-  border-left: 3px solid #e0e0e0;
+  background-color: #fff;
+  border-radius: 0 0 4px 4px;
+  border: 1px solid #e0e0e0;
+  border-top: none;
+  padding: 10px;
 }
 
 .log-item {
-  margin-bottom: 8px;
-  padding: 10px;
+  margin-bottom: 10px;
+  padding: 8px;
   border-radius: 4px;
-  background-color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background-color: #f5f5f5;
+}
+
+.log-item:last-child {
+  margin-bottom: 0;
+}
+
+.log-item.log-error {
+  background-color: #ffebee;
+}
+
+.log-item.log-success {
+  background-color: #e8f5e9;
+}
+
+.log-item.log-info,
+.log-item.log-batch-start,
+.log-item.log-batch-wait {
+  background-color: #e3f2fd;
+}
+
+.log-item.log-batch-waiting {
+  background-color: #fff8e1;
 }
 
 .log-header {
   display: flex;
+  justify-content: space-between;
   margin-bottom: 5px;
 }
 
 .log-time {
-  color: #606266;
   font-size: 12px;
-  margin-right: 10px;
+  color: #757575;
 }
 
 .log-type-badge {
-  padding: 2px 5px;
-  border-radius: 3px;
   font-size: 10px;
-  background-color: #e0e0e0;
-  color: #333;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: bold;
 }
 
-.log-type-badge.success {
-  background-color: #4caf50;
+.log-type-badge.info,
+.log-type-badge.batch-start,
+.log-type-badge.batch-wait {
+  background-color: #2196f3;
   color: white;
 }
 
@@ -576,13 +635,8 @@ const deleteTask = (index) => {
   color: white;
 }
 
-.log-type-badge.batch-start {
-  background-color: #2196f3;
-  color: white;
-}
-
-.log-type-badge.batch-wait {
-  background-color: #9c27b0;
+.log-type-badge.success {
+  background-color: #4caf50;
   color: white;
 }
 
@@ -592,90 +646,127 @@ const deleteTask = (index) => {
 }
 
 .log-content {
-  padding-left: 5px;
+  margin-top: 5px;
 }
 
 .log-message {
-  font-weight: bold;
-  margin-bottom: 5px;
+  color: #333;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .log-details {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #606266;
-  background-color: #f9f9f9;
+  background-color: rgba(255, 255, 255, 0.7);
   padding: 8px;
   border-radius: 4px;
+  margin-top: 5px;
+}
+
+.log-details.success {
+  border-left: 3px solid #4caf50;
+}
+
+.log-details.error {
+  border-left: 3px solid #f44336;
+}
+
+.log-details.waiting {
+  border-left: 3px solid #ff9800;
 }
 
 .detail-item {
   margin-bottom: 5px;
+  font-size: 13px;
+}
+
+.detail-item:last-child {
+  margin-bottom: 0;
 }
 
 .detail-label {
-  color: #909399;
+  font-weight: bold;
+  color: #616161;
   margin-right: 5px;
 }
 
 .detail-value {
-  font-weight: bold;
+  color: #333;
 }
 
 .detail-value.success {
-  color: #4caf50;
+  color: #2e7d32;
 }
 
 .detail-value.error {
-  color: #f44336;
+  color: #c62828;
 }
 
-.log-file {
-  font-style: italic;
-  color: #1976d2;
+.detail-value.log-file {
+  font-family: monospace;
+  background-color: #f0f0f0;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.detail-value.po-number {
+  color: #0d47a1;
+  font-weight: bold;
+  font-family: monospace;
+  background-color: #e3f2fd;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.detail-value.full-message {
+  display: block;
+  margin-top: 5px;
+  padding: 8px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.failed-reasons .detail-value {
+  display: block;
+  margin-top: 5px;
+  padding: 8px;
+  background-color: #ffebee;
+  border-radius: 4px;
+  color: #c62828;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .no-logs-message {
-  color: #909399;
+  color: #9e9e9e;
   font-style: italic;
-  padding: 10px;
+  text-align: center;
+  padding: 15px 0;
 }
 
 .summary-section {
   margin-top: 20px;
-  background-color: #e3f2fd;
+  background-color: #f5f5f5;
   border-radius: 4px;
   overflow: hidden;
 }
 
 .summary-header {
-  background-color: #2196f3;
+  background-color: #37474f;
   color: white;
-  padding: 8px 12px;
+  padding: 10px;
   font-weight: bold;
 }
 
 .summary-content {
-  padding: 10px;
-}
-
-.failed-reasons {
-  margin-top: 5px;
-  max-height: 60px;
-  overflow-y: auto;
-  background-color: #ffebee;
-  padding: 5px;
-  border-radius: 3px;
-  font-size: 11px;
-  border-left: 3px solid #f44336;
-}
-
-@keyframes pulsate {
-  0% {
-    opacity: 0.8;
-  }
-  100% {
-    opacity: 1;
-  }
+  padding: 15px;
 }
 </style>

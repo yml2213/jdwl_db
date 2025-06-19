@@ -150,10 +150,25 @@ export default {
       // 记录批次开始时间
       const startTime = new Date()
 
+      // 计算批次号和总批次数
+      let batchNumber = 1
+      let totalBatches = 1
+
+      // 如果是分批任务，尝试从任务信息中获取批次信息
+      if (task && task.批次编号 && task.总批次数) {
+        batchNumber = task.批次编号
+        totalBatches = task.总批次数
+      }
+
+      // 添加批次开始日志
       result.importLogs.push({
-        type: 'info',
-        message: `开始处理${skuList.length}个SKU`,
-        time: startTime.toLocaleString()
+        type: 'batch-start',
+        message: `开始处理第${batchNumber}/${totalBatches}批，共${skuList.length}个SKU`,
+        time: startTime.toLocaleString(),
+        timestamp: startTime.toLocaleTimeString(),
+        batchIndex: batchNumber,
+        totalBatches: totalBatches,
+        batchSize: skuList.length
       })
 
       // 更新任务状态为处理中
@@ -182,13 +197,34 @@ export default {
       result.message = uploadResult.message
       result.results.push(result.message)
 
+      // 添加处理结果日志
       result.importLogs.push({
         type: uploadResult.success ? 'success' : 'error',
         message: result.message,
         time: endTime.toLocaleString(),
+        timestamp: endTime.toLocaleTimeString(),
         successCount: uploadResult.processedCount || 0,
         failedCount: uploadResult.failedCount || 0,
-        processingTime
+        processingTime,
+        batchSize: skuList.length,
+        batchIndex: batchNumber,
+        totalBatches: totalBatches,
+        poNumber: uploadResult.poNumber || null,
+        fullMessage: uploadResult.message
+      })
+
+      // 添加批次完成日志
+      result.importLogs.push({
+        type: 'batch-wait',
+        message: `批次${batchNumber}/${totalBatches}处理完成，${uploadResult.success ? '成功' : '失败'}`,
+        time: endTime.toLocaleString(),
+        timestamp: endTime.toLocaleTimeString(),
+        batchIndex: batchNumber,
+        totalBatches: totalBatches,
+        processedCount: uploadResult.processedCount || 0,
+        failedCount: uploadResult.failedCount || 0,
+        remainingCount: 0,
+        waitTime: 0
       })
 
       // 更新任务状态 - 只使用成功或失败两种状态
@@ -337,6 +373,9 @@ export default {
         console.log('添加库存成功==========')
         console.log('生成单号:', response.resultMessage)
 
+        // 提取单号信息
+        const poNumber = response.resultMessage.match(/CPL\d+/) ? response.resultMessage.match(/CPL\d+/)[0] : '未知单号'
+
         // 将日志信息添加到window上下文，使UI可以访问
         if (!window.importLogs) {
           window.importLogs = []
@@ -345,16 +384,19 @@ export default {
           timestamp: new Date().toLocaleTimeString(),
           type: 'success',
           batchSize: goodsList.length,
-          message: `成功处理${goodsList.length}个SKU，${response.resultMessage}`
+          message: `成功处理${goodsList.length}个SKU，单号：${poNumber}`,
+          poNumber: poNumber,
+          fullMessage: response.resultMessage
         })
 
         return {
           success: true,
-          message: `添加库存成功，${response.resultMessage}`,
+          message: `添加库存成功，单号：${poNumber}`,
           processedCount: goodsList.length,
           failedCount: 0,
           skippedCount: 0,
-          data: response.resultData
+          data: response.resultData,
+          poNumber: poNumber
         }
       } else {
         // 失败响应
@@ -370,7 +412,8 @@ export default {
           timestamp: new Date().toLocaleTimeString(),
           type: 'error',
           batchSize: goodsList.length,
-          message: errorMessage
+          message: `失败：${errorMessage}`,
+          fullMessage: errorMessage
         })
 
         return {
