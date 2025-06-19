@@ -294,7 +294,7 @@ export default {
 
       // 将商品列表转换为JSON字符串
       const goodsJson = JSON.stringify(goodsList)
-      console.log('商品JSON:', goodsJson)
+      console.log('商品JSON:', goodsJson.length)
 
       // 创建FormData
       const formData = new FormData()
