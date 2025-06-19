@@ -13,7 +13,11 @@
       </tr>
     </thead>
     <tbody>
-      <tr v-for="(task, index) in tasks" :key="index" :class="{ 'expanded': expandedTasks.includes(index) }">
+      <tr
+        v-for="(task, index) in tasks"
+        :key="index"
+        :class="{ expanded: expandedTasks.includes(index) }"
+      >
         <td><input type="checkbox" v-model="selectedTasks" :value="index" /></td>
         <td>{{ task.sku }}</td>
         <td>{{ task.店铺 }}</td>
@@ -37,31 +41,35 @@
           <span v-else-if="task.状态 === '部分成功'" class="warning-text result-text">{{
             task.结果 || '部分成功'
           }}</span>
-          <button v-if="task.importLogs && task.importLogs.length > 0" 
-                  @click="toggleTaskLogs(index)" 
-                  class="btn-link">
+          <button
+            v-if="task.importLogs && task.importLogs.length > 0"
+            @click="toggleTaskLogs(index)"
+            class="btn-link"
+          >
             {{ expandedTasks.includes(index) ? '收起日志' : '查看日志' }}
           </button>
         </td>
         <td>
           <button
             class="btn btn-small btn-primary"
-            @click="$emit('execute-one', task, index)"
+            @click="executeOneTask(task, index)"
             v-if="task.状态 === '等待中' || task.状态 === '失败' || task.状态 === '暂存'"
           >
             执行
           </button>
-          <button class="btn btn-small btn-danger" @click="$emit('delete-task', index)">
-            删除
-          </button>
+          <button class="btn btn-small btn-danger" @click="deleteTask(index)">删除</button>
         </td>
       </tr>
       <!-- 日志展示行 -->
-      <tr v-for="(task, index) in tasks" :key="`log-${index}`" v-if="expandedTasks.includes(index) && task.importLogs">
+      <tr
+        v-for="(task, index) in tasks"
+        :key="`log-${index}`"
+        v-if="expandedTasks.includes(index) && task.importLogs"
+      >
         <td colspan="8" class="logs-container">
           <div class="task-logs">
             <h4>批次处理日志明细</h4>
-            
+
             <!-- 统计信息 -->
             <div class="batch-summary">
               <div v-if="getBatchCount(task.importLogs) > 0">
@@ -72,84 +80,92 @@
                 总结: {{ getSummaryLog(task.importLogs).message }}
               </div>
             </div>
-            
+
             <!-- 按批次分组显示日志 -->
             <div class="batch-groups">
               <template v-for="batchIndex in getBatchCount(task.importLogs)" :key="batchIndex">
                 <!-- 批次标题 -->
                 <div class="batch-header">
                   <div class="batch-title">批次 {{ batchIndex }}</div>
-                  <div v-if="getBatchStatus(task.importLogs, batchIndex)" 
-                       :class="['batch-status', getBatchStatus(task.importLogs, batchIndex)]">
+                  <div
+                    v-if="getBatchStatus(task.importLogs, batchIndex)"
+                    :class="['batch-status', getBatchStatus(task.importLogs, batchIndex)]"
+                  >
                     {{ getBatchStatusText(task.importLogs, batchIndex) }}
                   </div>
                 </div>
-                
+
                 <!-- 批次内的日志 -->
                 <div class="batch-logs">
-                  <div v-for="(log, logIndex) in getLogsForBatch(task.importLogs, batchIndex)" 
-                       :key="logIndex" 
-                       :class="['log-item', `log-${log.type}`]">
+                  <div
+                    v-for="(log, logIndex) in getLogsForBatch(task.importLogs, batchIndex)"
+                    :key="logIndex"
+                    :class="['log-item', `log-${log.type}`]"
+                  >
                     <div class="log-header">
                       <span class="log-time">{{ log.timestamp }}</span>
-                      <span class="log-type-badge" :class="log.type">{{ getLogTypeText(log.type) }}</span>
+                      <span class="log-type-badge" :class="log.type">{{
+                        getLogTypeText(log.type)
+                      }}</span>
                     </div>
                     <div class="log-content">
                       <div class="log-message">{{ log.message }}</div>
-                      
+
                       <!-- 批次开始信息 -->
                       <div v-if="log.type === 'batch-start'" class="log-details">
                         <div class="detail-item">
-                          <span class="detail-label">批次序号:</span> 
-                          <span class="detail-value">{{ log.batchIndex }}/{{ log.totalBatches }}</span>
+                          <span class="detail-label">批次序号:</span>
+                          <span class="detail-value"
+                            >{{ log.batchIndex }}/{{ log.totalBatches }}</span
+                          >
                         </div>
                         <div class="detail-item">
-                          <span class="detail-label">SKU数量:</span> 
+                          <span class="detail-label">SKU数量:</span>
                           <span class="detail-value highlight">{{ log.batchSize }}个</span>
                         </div>
                       </div>
-                      
+
                       <!-- 批次等待信息 -->
                       <div v-if="log.type === 'batch-wait'" class="log-details">
                         <div class="detail-item">
-                          <span class="detail-label">已处理:</span> 
-                          <span class="detail-value success">{{ log.processedCount }}个成功</span>, 
+                          <span class="detail-label">已处理:</span>
+                          <span class="detail-value success">{{ log.processedCount }}个成功</span>,
                           <span class="detail-value error">{{ log.failedCount }}个失败</span>
                         </div>
                         <div class="detail-item">
-                          <span class="detail-label">剩余SKU:</span> 
+                          <span class="detail-label">剩余SKU:</span>
                           <span class="detail-value">{{ log.remainingCount }}个</span>
                         </div>
                         <div class="detail-item">
-                          <span class="detail-label">等待时间:</span> 
+                          <span class="detail-label">等待时间:</span>
                           <span class="detail-value">{{ log.waitTime }}秒</span>
                         </div>
                       </div>
-                      
+
                       <!-- 成功信息 -->
                       <div v-if="log.type === 'success'" class="log-details success">
                         <div class="detail-item">
-                          <span class="detail-label">成功导入:</span> 
+                          <span class="detail-label">成功导入:</span>
                           <span class="detail-value highlight">{{ log.batchSize }}个SKU</span>
                         </div>
                         <div v-if="log.logFile" class="detail-item">
-                          <span class="detail-label">日志文件:</span> 
+                          <span class="detail-label">日志文件:</span>
                           <span class="detail-value log-file">{{ log.logFile }}</span>
                         </div>
                       </div>
-                      
+
                       <!-- 错误信息 -->
                       <div v-if="log.type === 'error'" class="log-details error">
                         <div class="detail-item">
-                          <span class="detail-label">错误原因:</span> 
+                          <span class="detail-label">错误原因:</span>
                           <span class="detail-value">{{ log.message }}</span>
                         </div>
                       </div>
-                      
+
                       <!-- 批次等待进行中 -->
                       <div v-if="log.type === 'batch-waiting'" class="log-details waiting">
                         <div class="detail-item">
-                          <span class="detail-label">等待状态:</span> 
+                          <span class="detail-label">等待状态:</span>
                           <span class="detail-value">剩余{{ log.remainingTime }}秒</span>
                         </div>
                       </div>
@@ -161,26 +177,37 @@
                 </div>
               </template>
             </div>
-            
+
             <!-- 总结信息 -->
             <div v-if="getSummaryLog(task.importLogs)" class="summary-section">
               <div class="summary-header">处理结果总结</div>
               <div class="summary-content">
                 <div class="detail-item">
-                  <span class="detail-label">总SKU数:</span> 
-                  <span class="detail-value">{{ getSummaryLog(task.importLogs).totalCount }}个</span>
+                  <span class="detail-label">总SKU数:</span>
+                  <span class="detail-value"
+                    >{{ getSummaryLog(task.importLogs).totalCount }}个</span
+                  >
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">成功处理:</span> 
-                  <span class="detail-value success">{{ getSummaryLog(task.importLogs).processedCount }}个</span>
+                  <span class="detail-label">成功处理:</span>
+                  <span class="detail-value success"
+                    >{{ getSummaryLog(task.importLogs).processedCount }}个</span
+                  >
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">失败处理:</span> 
-                  <span class="detail-value error">{{ getSummaryLog(task.importLogs).failedCount }}个</span>
+                  <span class="detail-label">失败处理:</span>
+                  <span class="detail-value error"
+                    >{{ getSummaryLog(task.importLogs).failedCount }}个</span
+                  >
                 </div>
-                <div v-if="getSummaryLog(task.importLogs).failedReasons" class="detail-item failed-reasons">
-                  <span class="detail-label">失败原因:</span> 
-                  <span class="detail-value">{{ getSummaryLog(task.importLogs).failedReasons }}</span>
+                <div
+                  v-if="getSummaryLog(task.importLogs).failedReasons"
+                  class="detail-item failed-reasons"
+                >
+                  <span class="detail-label">失败原因:</span>
+                  <span class="detail-value">{{
+                    getSummaryLog(task.importLogs).failedReasons
+                  }}</span>
                 </div>
               </div>
             </div>
@@ -205,7 +232,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['execute-one', 'delete-task'])
+const emit = defineEmits(['execute-one', 'delete-task'])
 
 const selectedTasks = ref([])
 const expandedTasks = ref([]) // 跟踪展开的任务
@@ -223,20 +250,23 @@ const toggleTaskLogs = (index) => {
 // 获取批次总数
 const getBatchCount = (logs) => {
   if (!logs || !Array.isArray(logs)) return 0
-  const batchStartLogs = logs.filter(log => log.type === 'batch-start')
-  return batchStartLogs.length > 0 ? Math.max(...batchStartLogs.map(log => log.batchIndex)) : 0
+  const batchStartLogs = logs.filter((log) => log.type === 'batch-start')
+  return batchStartLogs.length > 0 ? Math.max(...batchStartLogs.map((log) => log.batchIndex)) : 0
 }
 
 // 获取指定批次的所有日志
 const getLogsForBatch = (logs, batchIndex) => {
   if (!logs || !Array.isArray(logs)) return []
-  return logs.filter(log => 
-    (log.type === 'batch-start' && log.batchIndex === batchIndex) ||
-    (log.type === 'batch-wait' && log.batchIndex === batchIndex) ||
-    (log.type === 'batch-waiting' && log.batchIndex === batchIndex) ||
-    ((log.type === 'success' || log.type === 'error') && 
-     logs.some(l => l.type === 'batch-start' && l.batchIndex === batchIndex && 
-              l.batchSize === log.batchSize))
+  return logs.filter(
+    (log) =>
+      (log.type === 'batch-start' && log.batchIndex === batchIndex) ||
+      (log.type === 'batch-wait' && log.batchIndex === batchIndex) ||
+      (log.type === 'batch-waiting' && log.batchIndex === batchIndex) ||
+      ((log.type === 'success' || log.type === 'error') &&
+        logs.some(
+          (l) =>
+            l.type === 'batch-start' && l.batchIndex === batchIndex && l.batchSize === log.batchSize
+        ))
   )
 }
 
@@ -248,11 +278,11 @@ const hasLogsForBatch = (logs, batchIndex) => {
 // 获取批次状态
 const getBatchStatus = (logs, batchIndex) => {
   const batchLogs = getLogsForBatch(logs, batchIndex)
-  if (batchLogs.some(log => log.type === 'success')) return 'success'
-  if (batchLogs.some(log => log.type === 'error')) return 'error'
-  if (batchLogs.some(log => log.type === 'batch-waiting')) return 'waiting'
-  if (batchLogs.some(log => log.type === 'batch-wait')) return 'completed'
-  if (batchLogs.some(log => log.type === 'batch-start')) return 'processing'
+  if (batchLogs.some((log) => log.type === 'success')) return 'success'
+  if (batchLogs.some((log) => log.type === 'error')) return 'error'
+  if (batchLogs.some((log) => log.type === 'batch-waiting')) return 'waiting'
+  if (batchLogs.some((log) => log.type === 'batch-wait')) return 'completed'
+  if (batchLogs.some((log) => log.type === 'batch-start')) return 'processing'
   return ''
 }
 
@@ -260,33 +290,47 @@ const getBatchStatus = (logs, batchIndex) => {
 const getBatchStatusText = (logs, batchIndex) => {
   const status = getBatchStatus(logs, batchIndex)
   switch (status) {
-    case 'success': return '成功'
-    case 'error': return '失败'
-    case 'waiting': return '等待中'
-    case 'completed': return '已完成'
-    case 'processing': return '处理中'
-    default: return ''
+    case 'success':
+      return '成功'
+    case 'error':
+      return '失败'
+    case 'waiting':
+      return '等待中'
+    case 'completed':
+      return '已完成'
+    case 'processing':
+      return '处理中'
+    default:
+      return ''
   }
 }
 
 // 获取日志类型文本
 const getLogTypeText = (type) => {
   switch (type) {
-    case 'info': return '信息'
-    case 'batch-start': return '批次开始'
-    case 'batch-wait': return '批次完成'
-    case 'batch-waiting': return '等待中'
-    case 'success': return '成功'
-    case 'error': return '错误'
-    case 'summary': return '总结'
-    default: return type
+    case 'info':
+      return '信息'
+    case 'batch-start':
+      return '批次开始'
+    case 'batch-wait':
+      return '批次完成'
+    case 'batch-waiting':
+      return '等待中'
+    case 'success':
+      return '成功'
+    case 'error':
+      return '错误'
+    case 'summary':
+      return '总结'
+    default:
+      return type
   }
 }
 
 // 获取总结日志
 const getSummaryLog = (logs) => {
   if (!logs || !Array.isArray(logs)) return null
-  return logs.find(log => log.type === 'summary')
+  return logs.find((log) => log.type === 'summary')
 }
 
 const selectAll = computed({
@@ -297,6 +341,18 @@ const selectAll = computed({
     selectedTasks.value = value ? Array.from({ length: props.tasks.length }, (_, i) => i) : []
   }
 })
+
+// 执行单个任务
+const executeOneTask = (task, index) => {
+  console.log('执行任务:', index, task)
+  emit('execute-one', task, index)
+}
+
+// 删除单个任务
+const deleteTask = (index) => {
+  console.log('删除任务:', index)
+  emit('delete-task', index)
+}
 </script>
 
 <style scoped>

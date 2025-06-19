@@ -289,6 +289,10 @@ watch(
 
 // 组件挂载时，如果已登录则加载数据
 onMounted(() => {
+  // 设置全局方法，用于接收批次任务
+  window.addTaskToList = addTaskToList
+
+  // 加载店铺和仓库列表
   if (props.isLoggedIn) {
     loadShops()
     loadWarehouses()
@@ -355,6 +359,16 @@ const handleExecuteOneTask = async (task) => {
     console.error('执行任务失败:', error)
     alert(`执行任务失败: ${error.message || '未知错误'}`)
   }
+}
+
+// 添加任务到任务列表 - 用于批次任务
+const addTaskToList = (task) => {
+  if (!task) return
+  console.log('添加批次任务到任务列表:', task)
+  taskList.value.push(task)
+
+  // 触发添加任务事件
+  emit('add-task', task)
 }
 
 // 执行任务按钮点击处理
@@ -429,7 +443,7 @@ const handleAddTask = () => {
   // 为每个组创建一个任务
   skuGroups.forEach((group, index) => {
     const groupNumber = index + 1
-    taskList.value.push({
+    const task = {
       sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
       skuList: group, // 存储该组的所有SKU
       店铺: shopInfo ? shopInfo.shopName : '未选择',
@@ -438,15 +452,17 @@ const handleAddTask = () => {
       状态: '等待中',
       结果: '',
       选项: JSON.parse(JSON.stringify(form.value.options)),
-      importLogs: [{
-        type: 'batch-info',
-        message: `批次${groupNumber}/${skuGroups.length} - 包含${group.length}个SKU`,
-        timestamp: new Date().toLocaleString()
-      }]
-    })
-    
-    // 触发添加任务事件
-    emit('add-task', taskList.value[taskList.value.length - 1])
+      importLogs: [
+        {
+          type: 'batch-info',
+          message: `批次${groupNumber}/${skuGroups.length} - 包含${group.length}个SKU`,
+          timestamp: new Date().toLocaleString()
+        }
+      ]
+    }
+
+    // 添加任务到任务列表
+    addTaskToList(task)
   })
 
   // 不再自动清空输入框，改为手动清空
@@ -553,14 +569,14 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
     </div>
 
     <!-- 物流属性导入对话框 -->
-          <logistics-attributes-importer
+    <logistics-attributes-importer
       v-if="form.logisticsImport.showDialog"
       :skuList="form.sku.split(/\r?\n/).filter((line) => line.trim())"
       :waitTime="form.waitTime"
       @close="closeLogisticsImporter"
       @submit="submitLogisticsData"
     />
-    
+
     <!-- 商品简称导入组件 -->
     <div v-if="form.options.importProductNames" class="product-names-container">
       <product-name-importer />

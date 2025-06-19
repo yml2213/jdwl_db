@@ -180,15 +180,26 @@ export async function executeOneTask(task, shopInfo, options) {
 
         // 创建批次任务的回调函数，用于将批次任务添加到任务列表
         const createBatchTask = (batchTask) => {
-          if (!batchTask) return;
-          
-          console.log('创建批次任务', batchTask);
-          
+          if (!batchTask) return
+
+          console.log('创建批次任务', batchTask)
+
           // 将批次任务添加到任务列表
-          if (this.addTaskToList) {
-            this.addTaskToList(batchTask);
+          if (this && this.addTaskToList) {
+            this.addTaskToList(batchTask)
+          } else if (window.addTaskToList) {
+            window.addTaskToList(batchTask)
+          } else {
+            // 如果没有可用的添加任务方法，将批次任务信息添加到原任务的结果中
+            if (task) {
+              if (!task.batchTasks) {
+                task.batchTasks = []
+              }
+              task.batchTasks.push(batchTask)
+            }
+            console.warn('未找到添加任务方法，批次任务可能无法正确添加到任务列表')
           }
-        };
+        }
 
         // 使用启用库存商品分配功能模块，传入createBatchTask回调
         const warehouseResult = await importGoodsStockConfigFeature.execute(skuList, task, createBatchTask)
@@ -196,10 +207,10 @@ export async function executeOneTask(task, shopInfo, options) {
         // 将分批导入日志添加到任务中，用于UI展示
         if (warehouseResult.importLogs) {
           if (!task.importLogs) {
-            task.importLogs = [];
+            task.importLogs = []
           }
-          task.importLogs = task.importLogs.concat(warehouseResult.importLogs);
-          console.log(`添加${warehouseResult.importLogs.length}条导入日志到任务`);
+          task.importLogs = task.importLogs.concat(warehouseResult.importLogs)
+          console.log(`添加${warehouseResult.importLogs.length}条导入日志到任务`)
         }
 
         if (warehouseResult.success) {
@@ -234,15 +245,26 @@ export async function executeOneTask(task, shopInfo, options) {
 
         // 创建批次任务的回调函数，用于将批次任务添加到任务列表
         const createBatchTask = (batchTask) => {
-          if (!batchTask) return;
-          
-          console.log('创建批次任务', batchTask);
-          
+          if (!batchTask) return
+
+          console.log('创建批次任务', batchTask)
+
           // 将批次任务添加到任务列表
-          if (this.addTaskToList) {
-            this.addTaskToList(batchTask);
+          if (this && this.addTaskToList) {
+            this.addTaskToList(batchTask)
+          } else if (window.addTaskToList) {
+            window.addTaskToList(batchTask)
+          } else {
+            // 如果没有可用的添加任务方法，将批次任务信息添加到原任务的结果中
+            if (task) {
+              if (!task.batchTasks) {
+                task.batchTasks = []
+              }
+              task.batchTasks.push(batchTask)
+            }
+            console.warn('未找到添加任务方法，批次任务可能无法正确添加到任务列表')
           }
-        };
+        }
 
         // 使用启用京配打标生效功能模块，传入createBatchTask回调
         const jpSearchResult = await enableJpSearchFeature.execute(skuList, task, createBatchTask)
@@ -250,10 +272,10 @@ export async function executeOneTask(task, shopInfo, options) {
         // 将分批导入日志添加到任务中，用于UI展示
         if (jpSearchResult.importLogs) {
           if (!task.importLogs) {
-            task.importLogs = [];
+            task.importLogs = []
           }
-          task.importLogs = task.importLogs.concat(jpSearchResult.importLogs);
-          console.log(`添加${jpSearchResult.importLogs.length}条导入日志到任务`);
+          task.importLogs = task.importLogs.concat(jpSearchResult.importLogs)
+          console.log(`添加${jpSearchResult.importLogs.length}条导入日志到任务`)
         }
 
         if (jpSearchResult.success) {
@@ -290,15 +312,26 @@ export async function executeOneTask(task, shopInfo, options) {
 
         // 创建批次任务的回调函数，用于将批次任务添加到任务列表
         const createBatchTask = (batchTask) => {
-          if (!batchTask) return;
-          
-          console.log('创建批次任务', batchTask);
-          
+          if (!batchTask) return
+
+          console.log('创建批次任务', batchTask)
+
           // 将批次任务添加到任务列表
-          if (this.addTaskToList) {
-            this.addTaskToList(batchTask);
+          if (this && this.addTaskToList) {
+            this.addTaskToList(batchTask)
+          } else if (window.addTaskToList) {
+            window.addTaskToList(batchTask)
+          } else {
+            // 如果没有可用的添加任务方法，将批次任务信息添加到原任务的结果中
+            if (task) {
+              if (!task.batchTasks) {
+                task.batchTasks = []
+              }
+              task.batchTasks.push(batchTask)
+            }
+            console.warn('未找到添加任务方法，批次任务可能无法正确添加到任务列表')
           }
-        };
+        }
 
         // 使用添加库存功能模块，传入createBatchTask回调和库存数量
         const addInventoryResult = await addInventoryFeature.execute(skuList, task, createBatchTask, inventoryAmount)
@@ -306,10 +339,10 @@ export async function executeOneTask(task, shopInfo, options) {
         // 将分批导入日志添加到任务中，用于UI展示
         if (addInventoryResult.importLogs) {
           if (!task.importLogs) {
-            task.importLogs = [];
+            task.importLogs = []
           }
-          task.importLogs = task.importLogs.concat(addInventoryResult.importLogs);
-          console.log(`添加${addInventoryResult.importLogs.length}条导入日志到任务`);
+          task.importLogs = task.importLogs.concat(addInventoryResult.importLogs)
+          console.log(`添加${addInventoryResult.importLogs.length}条导入日志到任务`)
         }
 
         if (addInventoryResult.success) {
