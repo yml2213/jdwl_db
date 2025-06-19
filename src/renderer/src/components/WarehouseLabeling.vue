@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, provide } from 'vue'
+import { ref, computed, watch, onMounted, provide, onUnmounted } from 'vue'
 import {
   saveSelectedShop,
   getSelectedShop,
@@ -289,7 +289,10 @@ watch(
 
 // 组件挂载时，如果已登录则加载数据
 onMounted(() => {
-  // 设置全局方法，用于接收批次任务
+  // 暴露taskList到window对象，供其他模块访问
+  window.taskList = taskList.value
+
+  // 暴露addTaskToList方法到window对象，供批次处理使用
   window.addTaskToList = addTaskToList
 
   // 加载店铺和仓库列表
@@ -297,6 +300,12 @@ onMounted(() => {
     loadShops()
     loadWarehouses()
   }
+})
+
+// 确保在组件卸载时清理全局引用
+onUnmounted(() => {
+  window.taskList = null
+  window.addTaskToList = null
 })
 
 /**
@@ -365,7 +374,19 @@ const handleExecuteOneTask = async (task) => {
 const addTaskToList = (task) => {
   if (!task) return
   console.log('添加批次任务到任务列表:', task)
-  taskList.value.push(task)
+
+  // 检查是否是更新现有任务
+  const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
+  if (existingTaskIndex >= 0) {
+    // 更新现有任务
+    taskList.value[existingTaskIndex] = task
+  } else {
+    // 添加新任务
+    taskList.value.push(task)
+  }
+
+  // 更新window.taskList
+  window.taskList = taskList.value
 
   // 触发添加任务事件
   emit('add-task', task)

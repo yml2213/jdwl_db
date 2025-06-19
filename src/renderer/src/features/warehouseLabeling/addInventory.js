@@ -104,6 +104,14 @@ export default {
             if (typeof createBatchTask === 'function') {
               createBatchTask(batchTask)
             }
+
+            // 如果第一批次处理成功，自动处理下一批次
+            if (batchResult.success && i + 1 < batches.length) {
+              // 启动一个异步处理后续批次的函数
+              setTimeout(async () => {
+                await this._processRemainingBatches(batches, i + 1, task, createBatchTask, inventoryAmount)
+              }, 2000) // 等待2秒后开始处理下一批次
+            }
           }
         }
 
@@ -326,7 +334,7 @@ export default {
       const formDataEntries = []
       for (const [key, value] of formData.entries()) {
         formDataEntries.push([key, value])
-        console.log(`FormData字段: ${key} = ${value}`)
+        // console.log(`FormData字段: ${key} = ${value}`)
       }
 
       // 创建特殊标记对象，让requestHandler知道这是FormData
@@ -435,6 +443,94 @@ export default {
         skippedCount: 0,
         error
       }
+    }
+  },
+
+  /**
+   * 处理剩余的批次
+   * @param {Array} batches 所有批次数组
+   * @param {Number} startIndex 开始处理的批次索引
+   * @param {Object} task 原始任务对象
+   * @param {Function} createBatchTask 创建批次任务的回调函数
+   * @param {Number} inventoryAmount 库存数量
+   */
+  async _processRemainingBatches(batches, startIndex, task, createBatchTask, inventoryAmount) {
+    try {
+      // 逐个处理剩余的批次
+      for (let i = startIndex; i < batches.length; i++) {
+        const batchSkuList = batches[i]
+        const batchNumber = i + 1
+        const totalBatches = batches.length
+
+        console.log(`开始处理批次 ${batchNumber}/${totalBatches}`)
+
+        // 获取或创建批次任务
+        let batchTask = null
+
+        // 尝试在现有任务列表中查找该批次任务
+        if (window.taskList && Array.isArray(window.taskList)) {
+          batchTask = window.taskList.find(t =>
+            t.原始任务ID === task.id &&
+            t.批次编号 === batchNumber &&
+            t.总批次数 === totalBatches
+          )
+        }
+
+        // 如果找不到批次任务，创建新的批次任务
+        if (!batchTask) {
+          batchTask = {
+            id: `${task.id}-batch-${batchNumber}`,
+            sku: `${task.sku}-批次${batchNumber}/${totalBatches}`,
+            skuList: batchSkuList,
+            状态: '处理中',
+            创建时间: new Date().toISOString(),
+            原始任务ID: task.id,
+            批次编号: batchNumber,
+            总批次数: totalBatches,
+            选项: task.选项 || { useAddInventory: true },
+            结果: [],
+            importLogs: [{
+              type: 'info',
+              message: `批次${batchNumber}/${totalBatches} - 开始处理${batchSkuList.length}个SKU`,
+              time: new Date().toLocaleString()
+            }]
+          }
+        } else {
+          // 更新现有批次任务的状态
+          batchTask.状态 = '处理中'
+        }
+
+        // 通知UI更新
+        if (typeof createBatchTask === 'function') {
+          createBatchTask(batchTask)
+        }
+
+        // 处理当前批次
+        const batchResult = await this._processBatch(batchSkuList, batchTask, inventoryAmount)
+
+        // 更新批次任务状态
+        batchTask.状态 = batchResult.success ? '成功' : '失败'
+        batchTask.结果 = batchResult.results || []
+        batchTask.importLogs = batchResult.importLogs
+
+        // 通知UI更新
+        if (typeof createBatchTask === 'function') {
+          createBatchTask(batchTask)
+        }
+
+        // 如果处理失败，停止处理后续批次
+        if (!batchResult.success) {
+          console.error(`批次${batchNumber}/${totalBatches}处理失败，停止处理后续批次`)
+          break
+        }
+
+        // 如果不是最后一批，等待一段时间再处理下一批
+        if (i < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+    } catch (error) {
+      console.error('处理剩余批次出错:', error)
     }
   }
 } 

@@ -109,7 +109,7 @@ async function sendRequest(url, options = {}) {
           } else {
             // 处理普通字段
             formData.append(key, value)
-            console.log(`添加字段到FormData: ${key}, 值: ${value}`)
+            // console.log(`添加字段到FormData: ${key}, 值: ${value}`)
           }
         }
 

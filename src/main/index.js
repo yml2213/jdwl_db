@@ -47,6 +47,25 @@ function createWindow() {
   }
 }
 
+// 自定义开发者工具快捷键处理程序
+function setupDevToolsShortcuts(window) {
+  window.webContents.on('before-input-event', (event, input) => {
+    // 检测F12按键
+    if (input.key === 'F12' && !input.alt && !input.control && !input.meta && !input.shift) {
+      // 阻止默认的F12行为
+      event.preventDefault()
+
+      // 如果开发者工具已打开，则关闭
+      if (window.webContents.isDevToolsOpened()) {
+        window.webContents.closeDevTools()
+      } else {
+        // 在右侧打开开发者工具
+        window.webContents.openDevTools({ mode: 'right' })
+      }
+    }
+  })
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -54,11 +73,20 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+  // 监听窗口创建事件，设置自定义快捷键
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    // 注册自定义开发者工具快捷键
+    setupDevToolsShortcuts(window)
+
+    // 保留其他原有的快捷键监听
+    if (is.dev) {
+      optimizer.watchWindowShortcuts(window, {
+        // 禁用默认的F12行为，我们已经自定义了它
+        // 但保留其他快捷键
+        zoom: true,
+        escToCloseWindow: true
+      })
+    }
   })
 
   // IPC test
