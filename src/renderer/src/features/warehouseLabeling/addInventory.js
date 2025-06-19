@@ -38,24 +38,24 @@ export default {
         time: new Date().toLocaleString()
       })
 
-      // 如果SKU数量大于200，需要分批处理
-      if (skuList.length > 200) {
+      // 如果SKU数量大于500，需要分批处理
+      if (skuList.length > 500) {
         // 主任务标记为已分批
         if (task) {
           task.状态 = '已分批'
-          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 200)}个批次任务`]
+          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 500)}个批次任务`]
         }
 
         result.importLogs.push({
           type: 'warning',
-          message: `SKU数量(${skuList.length})超过200，已分拆为${Math.ceil(skuList.length / 200)}个批次任务`,
+          message: `SKU数量(${skuList.length})超过500，已分拆为${Math.ceil(skuList.length / 500)}个批次任务`,
           time: new Date().toLocaleString()
         })
 
-        // 将SKU列表分成多个批次，每批最多200个SKU
+        // 将SKU列表分成多个批次，每批最多500个SKU
         const batches = []
-        for (let i = 0; i < skuList.length; i += 200) {
-          batches.push(skuList.slice(i, i + 200))
+        for (let i = 0; i < skuList.length; i += 500) {
+          batches.push(skuList.slice(i, i + 500))
         }
 
         console.log(`已将SKU列表分成${batches.length}个批次`)
@@ -113,7 +113,7 @@ export default {
 
         return result
       } else {
-        // SKU数量不超过200，直接处理
+        // SKU数量不超过500，直接处理
         return await this._processBatch(skuList, task, inventoryAmount)
       }
     } catch (error) {
