@@ -27,7 +27,11 @@
         <span>启用京配打标生效</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.useAddInventory" />
+        <input
+          type="checkbox"
+          v-model="options.useAddInventory"
+          @change="handleAddInventoryChange"
+        />
         <span>添加库存</span>
       </label>
       <!-- <label class="checkbox-label">
@@ -39,10 +43,16 @@
         <span>导入商品简称</span>
       </label>
     </div>
-    
+
     <div class="inventory-container" v-if="options.useAddInventory">
       <label class="inventory-label">库存数量：</label>
-      <input type="number" v-model="options.inventoryAmount" min="1" max="10000" class="inventory-input" />
+      <input
+        type="number"
+        v-model="options.inventoryAmount"
+        min="1"
+        max="10000"
+        class="inventory-input"
+      />
     </div>
   </div>
 </template>
@@ -65,7 +75,7 @@ const props = defineProps({
       inventoryAmount: 1000,
       importTitle: false,
       importProductNames: false,
-      skipConfigErrors: true  // 默认启用跳过选项
+      skipConfigErrors: true // 默认启用跳过选项
     })
   }
 })
@@ -82,6 +92,14 @@ const handleImportPropsChange = (event) => {
   if (event.target.checked) {
     // 勾选"导入物流属性"时，弹出导入对话框
     openLogisticsImporter()
+  }
+}
+
+// 处理添加库存选项变更
+const handleAddInventoryChange = (event) => {
+  if (event.target.checked) {
+    // 勾选"添加库存"时，设置默认库存数量为1000
+    options.value.inventoryAmount = 1000
   }
 }
 </script>
