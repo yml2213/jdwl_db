@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
+import ReturnStorage from './components/ReturnStorage.vue'
 import { isLoggedIn } from './utils/cookieHelper'
 import {
   clearSelections,
@@ -132,9 +133,7 @@ onMounted(() => {
           <WarehouseLabeling :isLoggedIn="isUserLoggedIn" />
         </div>
         <div v-else-if="activeTab === '清库下标'">
-          <div class="feature-not-implemented">
-            <p>清库下标功能开发中...</p>
-          </div>
+          <ReturnStorage :isLoggedIn="isUserLoggedIn" />
         </div>
         <div v-else-if="activeTab === '退货入库'">
           <div class="feature-not-implemented">

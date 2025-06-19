@@ -1,110 +1,105 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, provide, onUnmounted } from 'vue'
+import {
+  saveSelectedShop,
+  getSelectedShop,
+  saveShopsList,
+  getShopsList
+} from '../utils/storageHelper'
+import { getShopList } from '../services/apiService'
+
+// 导入任务执行器和工具函数
+import { executeOneTask, executeTasks } from '../features/warehouseLabeling/taskExecutor'
+import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
+
+// 导入拆分的组件
+import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
+import TaskArea from './warehouse/TaskArea.vue'
 
 const props = defineProps({
-  shopsList: Array,
-  warehousesList: Array,
-  isLoadingShops: Boolean,
-  isLoadingWarehouses: Boolean,
-  shopLoadError: String,
-  warehouseLoadError: String
+  isLoggedIn: Boolean
 })
 
-const emit = defineEmits([
-  'shop-change',
-  'warehouse-change',
-  'add-task',
-  'execute-task',
-  'clear-tasks'
-])
+const emit = defineEmits(['shop-change', 'add-task', 'execute-task', 'clear-tasks'])
 
 // 表单数据
 const form = ref({
-  quickSelect: '',
+  inputType: 'single', // 'single' 或 'store'
   sku: '',
-  waitTime: 4,
   options: {
-    useMainData: true,
-    verifyBarcode: true,
-    autoAccept: true
+    clearStockAllocation: true,
+    cancelJdDeliveryTag: false
   },
-  returnQuantity: 1,
-  returnReason: '质量问题',
   selectedStore: '',
-  selectedWarehouse: '',
-  autoStart: false
+  autoStart: false,
+  enableAutoUpload: false,
+  fileImport: {
+    file: null,
+    fileName: '',
+    importing: false,
+    importError: '',
+    importSuccess: false
+  }
 })
 
 // 任务列表
 const taskList = ref([])
 
+// 店铺列表
+const shopsList = ref([])
+// 是否正在加载店铺列表
+const isLoadingShops = ref(false)
+// 店铺加载错误信息
+const shopLoadError = ref('')
+
 // 当前选中的店铺信息
 const currentShopInfo = computed(() => {
-  if (!form.value.selectedStore || !props.shopsList.length) return null
-  return props.shopsList.find((shop) => shop.shopNo === form.value.selectedStore)
+  if (!form.value.selectedStore || !shopsList.value.length) return null
+  return shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
 })
 
-// 当前选中的仓库信息
-const currentWarehouseInfo = computed(() => {
-  if (!form.value.selectedWarehouse || !props.warehousesList.length) return null
-  return props.warehousesList.find(
-    (warehouse) => warehouse.warehouseNo === form.value.selectedWarehouse
-  )
-})
+// 加载店铺列表
+const loadShops = async () => {
+  // 尝试从本地存储获取店铺列表
+  const cachedShops = getShopsList()
+  if (cachedShops && cachedShops.length > 0) {
+    shopsList.value = cachedShops
 
-// 添加任务方法
-const addTask = () => {
-  if (!form.value.sku) {
-    alert('请输入SKU')
+    // 设置默认选中的店铺（如果有缓存的选择）
+    const selectedShop = getSelectedShop()
+    if (selectedShop) {
+      form.value.selectedStore = selectedShop.shopNo
+    } else if (shopsList.value.length > 0) {
+      form.value.selectedStore = shopsList.value[0].shopNo
+    }
+
     return
   }
 
-  if (!form.value.selectedStore) {
-    alert('请选择店铺')
-    return
+  // 从服务器获取店铺列表
+  isLoadingShops.value = true
+  shopLoadError.value = ''
+
+  try {
+    // 获取店铺列表逻辑
+    const shops = await getShopList()
+
+    if (shops && shops.length > 0) {
+      shopsList.value = shops
+      saveShopsList(shops)
+
+      // 默认选中第一个店铺
+      form.value.selectedStore = shops[0].shopNo
+      saveSelectedShop(shops[0])
+    } else {
+      shopLoadError.value = '未找到任何店铺'
+    }
+  } catch (error) {
+    console.error('加载店铺失败:', error)
+    shopLoadError.value = `加载店铺失败: ${error.message || '未知错误'}`
+  } finally {
+    isLoadingShops.value = false
   }
-
-  if (!form.value.selectedWarehouse) {
-    alert('请选择仓库')
-    return
-  }
-
-  const shopInfo = currentShopInfo.value
-  const warehouseInfo = currentWarehouseInfo.value
-
-  taskList.value.push({
-    sku: form.value.sku,
-    数量: form.value.returnQuantity,
-    店铺: shopInfo ? shopInfo.shopName : form.value.selectedStore,
-    仓库: warehouseInfo ? warehouseInfo.warehouseName : form.value.selectedWarehouse,
-    创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    状态: '等待中'
-  })
-
-  // 不再自动清空输入框，改为手动清空
-  
-  // 通知父组件
-  emit('add-task')
-}
-
-// 导入方法
-const handleImport = () => {
-  if (!form.value.sku) {
-    alert('请输入SKU')
-    return
-  }
-
-  if (!form.value.selectedStore) {
-    alert('请选择店铺')
-    return
-  }
-
-  addTask()
-}
-
-// 执行任务
-const executeTask = () => {
-  emit('execute-task')
 }
 
 // 清空任务列表
@@ -113,229 +108,310 @@ const clearTasks = () => {
   emit('clear-tasks')
 }
 
+// 处理店铺选择变化
+const handleStoreChange = (shopNo) => {
+  if (!shopNo) return
+
+  const selectedShop = shopsList.value.find((shop) => shop.shopNo === shopNo)
+  if (selectedShop) {
+    saveSelectedShop(selectedShop)
+    emit('shop-change', selectedShop)
+  }
+}
+
 // 监听店铺选择变化
 watch(
   () => form.value.selectedStore,
   (newVal) => {
-    emit('shop-change', newVal)
+    handleStoreChange(newVal)
   }
 )
 
-// 监听仓库选择变化
+// 监听登录状态变化
 watch(
-  () => form.value.selectedWarehouse,
+  () => props.isLoggedIn,
   (newVal) => {
-    emit('warehouse-change', newVal)
+    if (newVal) {
+      loadShops()
+    }
+  },
+  { immediate: true }
+)
+
+// 组件挂载时，如果已登录则加载数据
+onMounted(() => {
+  // 暴露taskList到window对象，供其他模块访问
+  window.clearStorageTaskList = taskList.value
+
+  // 暴露addTaskToList方法到window对象，供批次处理使用
+  window.addClearStorageTaskToList = addTaskToList
+
+  // 加载店铺列表
+  if (props.isLoggedIn) {
+    loadShops()
   }
-)
+})
 
-// 初始化店铺和仓库选择
-watch(
-  () => props.shopsList,
-  (newList) => {
-    if (newList && newList.length > 0 && !form.value.selectedStore) {
-      form.value.selectedStore = newList[0].shopNo
-    }
-  },
-  { immediate: true }
-)
+// 确保在组件卸载时清理全局引用
+onUnmounted(() => {
+  window.clearStorageTaskList = null
+  window.addClearStorageTaskToList = null
+})
 
-watch(
-  () => props.warehousesList,
-  (newList) => {
-    if (newList && newList.length > 0 && !form.value.selectedWarehouse) {
-      form.value.selectedWarehouse = newList[0].warehouseNo
+// 执行单个任务
+const handleExecuteOneTask = async (task) => {
+  if (!task) return
+
+  // 获取店铺信息
+  const shopInfo = currentShopInfo.value
+
+  if (!shopInfo) {
+    alert('请选择店铺')
+    return
+  }
+
+  // 获取任务中存储的选项
+  const options = task.选项
+    ? JSON.parse(JSON.stringify(task.选项))
+    : JSON.parse(JSON.stringify(form.value.options))
+
+  // 使用任务执行器模块执行任务
+  try {
+    await executeOneTask(task, shopInfo, options)
+  } catch (error) {
+    console.error('执行任务失败:', error)
+    alert(`执行任务失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 添加任务到任务列表 - 用于批次任务
+const addTaskToList = (task) => {
+  if (!task) return
+  console.log('添加批次任务到任务列表:', task)
+
+  // 检查是否是更新现有任务
+  const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
+  if (existingTaskIndex >= 0) {
+    // 更新现有任务
+    taskList.value[existingTaskIndex] = task
+  } else {
+    // 添加新任务
+    taskList.value.push(task)
+  }
+
+  // 更新window.taskList
+  window.clearStorageTaskList = taskList.value
+
+  // 触发添加任务事件
+  emit('add-task', task)
+}
+
+// 执行任务按钮点击处理
+const executeTask = async () => {
+  // 过滤出所有等待中或暂存的任务
+  const tasksToExecute = taskList.value.filter(
+    (task) => task.状态 === '等待中' || task.状态 === '暂存'
+  )
+  if (tasksToExecute.length === 0) {
+    alert('没有等待中或暂存的任务')
+    return
+  }
+
+  // 获取店铺信息
+  const shopInfo = currentShopInfo.value
+  if (!shopInfo) {
+    alert('请选择店铺')
+    return
+  }
+
+  // 使用任务执行器执行所有任务
+  try {
+    const result = await executeTasks(
+      tasksToExecute,
+      shopInfo,
+      0, // 没有等待时间
+      null, // 没有禁用产品
+      form.value.options
+    )
+
+    // 显示执行结果
+    alert(result.message)
+  } catch (error) {
+    console.error('批量执行任务失败:', error)
+    alert(`批量执行任务失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 添加任务的处理函数
+const handleAddTask = () => {
+  // 获取当前店铺信息
+  const shopInfo = currentShopInfo.value
+
+  if (!shopInfo) {
+    alert('请选择店铺')
+    return
+  }
+
+  // 创建日期时间标记
+  const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+
+  // 根据输入类型处理
+  if (form.value.inputType === 'single') {
+    // 单个SKU输入模式
+    // 检查是否有输入的SKU
+    if (!form.value.sku.trim()) {
+      alert('请输入SKU')
+      return
     }
-  },
-  { immediate: true }
-)
+
+    const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
+    if (skuList.length === 0) {
+      alert('请输入有效的SKU')
+      return
+    }
+
+    // 将SKU列表按2000个一组进行分割
+    const BATCH_SIZE = 2000
+    const skuGroups = []
+    for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+      skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
+    }
+
+    // 为每个组创建一个任务
+    skuGroups.forEach((group, index) => {
+      const groupNumber = index + 1
+      const task = {
+        sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
+        skuList: group, // 存储该组的所有SKU
+        店铺: shopInfo ? shopInfo.shopName : '未选择',
+        创建时间: timestamp,
+        状态: '等待中',
+        结果: '',
+        选项: JSON.parse(JSON.stringify(form.value.options)),
+        importLogs: [
+          {
+            type: 'batch-info',
+            message: `批次${groupNumber}/${skuGroups.length} - 包含${group.length}个SKU`,
+            timestamp: new Date().toLocaleString()
+          }
+        ]
+      }
+
+      // 添加任务到任务列表
+      addTaskToList(task)
+    })
+  } else {
+    // 整店SKU模式
+    const task = {
+      sku: `整店操作 - ${shopInfo.shopName}`,
+      isWholeStore: true, // 标记为整店操作
+      店铺: shopInfo.shopName,
+      创建时间: timestamp,
+      状态: '等待中',
+      结果: '',
+      选项: JSON.parse(JSON.stringify(form.value.options)),
+      importLogs: [
+        {
+          type: 'batch-info',
+          message: `整店操作 - ${shopInfo.shopName}`,
+          timestamp: new Date().toLocaleString()
+        }
+      ]
+    }
+
+    // 添加任务到任务列表
+    addTaskToList(task)
+  }
+
+  // 如果启用了自动开始，自动执行任务
+  if (form.value.autoStart) {
+    executeTask()
+  }
+}
+
+// 处理文件变更的函数
+const handleFileChange = (file) => {
+  console.log('文件已变更', file.name)
+
+  if (!file || !file.name.endsWith('.txt')) {
+    alert('请选择有效的.txt文件')
+    return
+  }
+
+  // 读取txt文件内容
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const content = e.target.result
+    // 获取文件内容，按行分割并移除空行
+    const skuList = content.split(/\r?\n/).filter((line) => line.trim())
+    if (skuList.length > 0) {
+      // 将SKU列表设置到表单中
+      form.value.sku = skuList.join('\n')
+    } else {
+      alert('文件内容为空或格式不正确')
+    }
+  }
+  reader.onerror = () => {
+    alert('读取文件失败')
+  }
+  reader.readAsText(file)
+}
+
+// 清除文件选择的函数
+const handleClearFile = () => {
+  // 清除文件的实现
+  console.log('清除文件选择')
+}
+
+// 删除任务
+const handleDeleteTask = (index) => {
+  taskList.value.splice(index, 1)
+}
+
+// 使用provide向子组件提供数据和方法
+provide('form', form)
+provide('taskList', taskList)
+provide('shopsList', shopsList)
+provide('isLoadingShops', isLoadingShops)
+provide('shopLoadError', shopLoadError)
+provide('currentShopInfo', currentShopInfo)
+
+// 提供方法
+provide('handleAddTask', handleAddTask)
+provide('handleStoreChange', handleStoreChange)
+provide('handleFileChange', handleFileChange)
+provide('handleClearFile', handleClearFile)
+provide('executeTask', executeTask)
+provide('clearTasks', clearTasks)
+provide('handleExecuteOneTask', handleExecuteOneTask)
+provide('handleDeleteTask', handleDeleteTask)
+provide('getStatusClass', getStatusClass)
 </script>
 
 <template>
-  <div class="content-wrapper">
-    <!-- 左侧操作区域 -->
-    <div class="operation-area">
-      <div class="form-group">
-        <label class="form-label">快捷选择</label>
-        <div class="select-wrapper">
-          <select v-model="form.quickSelect" class="form-select">
-            <option value="">请选择快捷方式</option>
-          </select>
-        </div>
-      </div>
+  <div class="clear-storage" v-if="props.isLoggedIn">
+    <div class="content-wrapper">
+      <!-- 左侧操作区域 -->
+      <clear-storage-operation-area />
 
-      <div class="form-group">
-        <label class="form-label">输入SKU</label>
-        <div class="input-group">
-          <input
-            v-model="form.sku"
-            placeholder="请输入sku或导入sku"
-            class="form-input"
-            @keyup.enter="handleImport"
-          />
-          <button class="btn btn-primary" @click="handleImport">导入</button>
-          <button v-if="form.sku" class="btn btn-danger" @click="form.sku = ''">清空</button>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">退货数量</label>
-        <div class="input-number-group">
-          <button class="btn-dec" @click="form.returnQuantity > 1 ? form.returnQuantity-- : 1">
-            -
-          </button>
-          <input type="number" v-model="form.returnQuantity" min="1" class="form-input-number" />
-          <button class="btn-inc" @click="form.returnQuantity++">+</button>
-          <span class="unit">件</span>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">等待时间</label>
-        <div class="input-number-group">
-          <button class="btn-dec" @click="form.waitTime > 1 ? form.waitTime-- : 1">-</button>
-          <input type="number" v-model="form.waitTime" min="1" class="form-input-number" />
-          <button class="btn-inc" @click="form.waitTime++">+</button>
-          <span class="unit">秒</span>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">退货原因</label>
-        <div class="select-wrapper">
-          <select v-model="form.returnReason" class="form-select">
-            <option value="质量问题">质量问题</option>
-            <option value="商品损坏">商品损坏</option>
-            <option value="商品错误">商品错误</option>
-            <option value="其他原因">其他原因</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">功能选项</label>
-        <div class="checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="form.options.useMainData" />
-            <span>启用商品主数据</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="form.options.verifyBarcode" />
-            <span>验证商品条码</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="form.options.autoAccept" />
-            <span>自动接收退货</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">选择店铺</label>
-        <div class="select-wrapper">
-          <select v-model="form.selectedStore" class="form-select" :disabled="isLoadingShops">
-            <option value="" disabled>请选择店铺</option>
-            <option v-for="shop in shopsList" :key="shop.shopNo" :value="shop.shopNo">
-              {{ shop.shopName }}
-            </option>
-          </select>
-          <div v-if="isLoadingShops" class="loading-indicator">加载中...</div>
-          <div v-if="shopLoadError" class="error-message">{{ shopLoadError }}</div>
-          <div v-if="currentShopInfo" class="shop-info">
-            <small>店铺编号: {{ currentShopInfo.shopNo }}</small>
-            <small>类型: {{ currentShopInfo.typeName }} - {{ currentShopInfo.bizTypeName }}</small>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">选择仓库</label>
-        <div class="select-wrapper">
-          <select
-            v-model="form.selectedWarehouse"
-            class="form-select"
-            :disabled="isLoadingWarehouses"
-          >
-            <option value="" disabled>请选择仓库</option>
-            <option
-              v-for="warehouse in warehousesList"
-              :key="warehouse.warehouseNo"
-              :value="warehouse.warehouseNo"
-            >
-              {{ warehouse.warehouseName }}
-            </option>
-          </select>
-          <div v-if="isLoadingWarehouses" class="loading-indicator">加载中...</div>
-          <div v-if="warehouseLoadError" class="error-message">{{ warehouseLoadError }}</div>
-          <div v-if="currentWarehouseInfo" class="warehouse-info">
-            <small>仓库编号: {{ currentWarehouseInfo.warehouseNo }}</small>
-            <small>类型: {{ currentWarehouseInfo.warehouseTypeStr }}</small>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-default">保存快捷</button>
-        <button class="btn btn-success" @click="addTask">添加任务</button>
-      </div>
-    </div>
-
-    <!-- 右侧任务列表区域 -->
-    <div class="task-area">
-      <div class="task-header">
-        <div class="task-title">退货入库任务列表</div>
-        <div class="task-actions">
-          <label class="checkbox-label timing-checkbox">
-            <input type="checkbox" v-model="form.autoStart" />
-            <span>定时</span>
-          </label>
-          <button class="btn btn-primary" @click="executeTask">打开网页</button>
-          <button class="btn btn-success" @click="executeTask">执行任务</button>
-          <button class="btn btn-danger" @click="clearTasks">清空列表</button>
-        </div>
-      </div>
-
-      <div class="task-table-container">
-        <table class="task-table">
-          <thead>
-            <tr>
-              <th style="width: 40px"><input type="checkbox" /></th>
-              <th>SKU</th>
-              <th>数量</th>
-              <th>店铺</th>
-              <th>仓库</th>
-              <th>创建时间</th>
-              <th>状态</th>
-              <th>结果</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(task, index) in taskList" :key="index">
-              <td><input type="checkbox" /></td>
-              <td>{{ task.sku }}</td>
-              <td>{{ task.数量 }}</td>
-              <td>{{ task.店铺 }}</td>
-              <td>{{ task.仓库 }}</td>
-              <td>{{ task.创建时间 }}</td>
-              <td>
-                <span class="status-tag">{{ task.状态 }}</span>
-              </td>
-              <td>
-                <span v-if="task.状态 === '等待中'">等待执行...</span>
-              </td>
-              <td>
-                <button class="btn btn-small btn-danger" @click="taskList.splice(index, 1)">
-                  删除
-                </button>
-              </td>
-            </tr>
-            <tr v-if="taskList.length === 0">
-              <td colspan="9" class="no-data">No Data</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- 右侧任务列表区域 -->
+      <task-area
+        @execute="executeTask"
+        @clear="clearTasks"
+        @open-web="executeTask"
+        @execute-one="handleExecuteOneTask"
+        @delete-task="handleDeleteTask"
+      />
     </div>
   </div>
+  <div v-else class="login-required">请先登录</div>
 </template>
+
+<style scoped>
+/* 主内容布局 */
+.content-wrapper {
+  display: flex;
+  padding: 0;
+  height: calc(100vh - 120px);
+}
+</style>

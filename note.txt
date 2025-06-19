@@ -8,3 +8,7 @@ sku 查询 csg  cmg等信息   限制1000 一次
 
 库存导入的时候 限制 500   
 
+================================
+导入库存清零  间隔5分钟 
+{"resultCode":"0","resultMessage":"5分钟内不要频繁操作!"}
+{"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名良景-1750339979975.csv","resultCode":"1"}

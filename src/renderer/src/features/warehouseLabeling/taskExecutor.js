@@ -7,12 +7,10 @@ import importStoreProductsFeature from './importStoreProducts'
 import importLogisticsPropsFeature from './importLogisticsProperties'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
-import { enableShopProducts } from '../../services/apiService'
+import { enableShopProducts, clearStockAllocation, cancelJdDeliveryTag } from '../../services/apiService'
 import {
-  extractTaskSkuList,
-  updateTaskResult
+  extractTaskSkuList
 } from './utils/taskUtils'
-import addInventoryFeature from './addInventory'
 
 /**
  * 执行单个任务
@@ -42,6 +40,60 @@ export async function executeOneTask(task, shopInfo, options) {
   let hasFailures = false
 
   try {
+    // 清库下标：清空库存分配功能
+    if (options.clearStockAllocation === true) {
+      try {
+        console.log('执行[库存分配清零]功能，SKU:', task.sku)
+
+        // 提取SKU
+        const skuList = extractTaskSkuList(task)
+        if (skuList.length === 0) {
+          throw new Error('没有有效的SKU')
+        }
+
+        // 调用库存分配清零API
+        const result = await clearStockAllocation(skuList, shopInfo)
+
+        if (result.success) {
+          functionResults.push(`库存分配清零: 成功 - ${result.message}`)
+        } else {
+          functionResults.push(`库存分配清零: 失败 - ${result.message || '清零失败'}`)
+          hasFailures = true
+        }
+      } catch (error) {
+        functionResults.push(`库存分配清零: 失败 - ${error.message || '未知错误'}`)
+        console.error('库存分配清零失败:', error)
+        hasFailures = true
+      }
+    }
+
+    // 清库下标：取消京配打标功能
+    if (options.cancelJdDeliveryTag === true) {
+      try {
+        console.log('执行[取消京配打标]功能，SKU:', task.sku)
+
+        // 提取SKU
+        const skuList = extractTaskSkuList(task)
+        if (skuList.length === 0) {
+          throw new Error('没有有效的SKU')
+        }
+
+        // 调用取消京配打标API
+        const result = await cancelJdDeliveryTag(skuList, shopInfo)
+
+        if (result.success) {
+          functionResults.push(`取消京配打标: 成功 - ${result.message}`)
+        } else {
+          functionResults.push(`取消京配打标: 失败 - ${result.message || '取消失败'}`)
+          hasFailures = true
+        }
+      } catch (error) {
+        functionResults.push(`取消京配打标: 失败 - ${error.message || '未知错误'}`)
+        console.error('取消京配打标失败:', error)
+        hasFailures = true
+      }
+    }
+
     // 启用店铺商品功能 - 使用独立模块
     if (options.useStore === true) {
       try {
@@ -276,100 +328,30 @@ export async function executeOneTask(task, shopInfo, options) {
             functionResults.push(`启用京配打标生效: 成功`)
           }
         } else {
-          functionResults.push(`启用京配打标生效: 失败 - ${jpSearchResult.message}`)
+          functionResults.push(`启用京配打标生效: 失败 - ${jpSearchResult.message || '未知错误'}`)
           hasFailures = true
         }
       } catch (error) {
-        console.error('启用京配打标生效出错:', error)
+        console.error('启用京配打标生效失败:', error)
         functionResults.push(`启用京配打标生效: 失败 - ${error.message || '未知错误'}`)
         hasFailures = true
       }
     }
 
-    // 添加库存功能
-    if (options.useAddInventory === true) {
-      try {
-        console.log('执行[添加库存]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 获取库存数量
-        const inventoryAmount = options.inventoryAmount || 1000
-
-        // 创建批次任务的回调函数，用于将批次任务添加到任务列表
-        const createBatchTask = (batchTask) => {
-          if (!batchTask) return
-
-          console.log('创建批次任务', batchTask)
-
-          // 将批次任务添加到任务列表
-          if (this && this.addTaskToList) {
-            this.addTaskToList(batchTask)
-          } else if (window.addTaskToList) {
-            window.addTaskToList(batchTask)
-          } else {
-            // 如果没有可用的添加任务方法，将批次任务信息添加到原任务的结果中
-            if (task) {
-              if (!task.batchTasks) {
-                task.batchTasks = []
-              }
-              task.batchTasks.push(batchTask)
-            }
-            console.warn('未找到添加任务方法，批次任务可能无法正确添加到任务列表')
-          }
-        }
-
-        // 使用添加库存功能模块，传入createBatchTask回调和库存数量
-        const addInventoryResult = await addInventoryFeature.execute(skuList, task, createBatchTask, inventoryAmount)
-
-        // 将分批导入日志添加到任务中，用于UI展示
-        if (addInventoryResult.importLogs) {
-          if (!task.importLogs) {
-            task.importLogs = []
-          }
-          task.importLogs = task.importLogs.concat(addInventoryResult.importLogs)
-          console.log(`添加${addInventoryResult.importLogs.length}条导入日志到任务`)
-        }
-
-        if (addInventoryResult.success) {
-          // 检查是否是后台任务
-          if (addInventoryResult.message && addInventoryResult.message.includes('后台任务')) {
-            functionResults.push(`添加库存: 已提交后台任务，请稍后在任务日志中查看结果`)
-          } else {
-            functionResults.push(`添加库存: 成功`)
-          }
-        } else {
-          functionResults.push(`添加库存: 失败 - ${addInventoryResult.message}`)
-          hasFailures = true
-        }
-      } catch (error) {
-        console.error('添加库存出错:', error)
-        functionResults.push(`添加库存: 失败 - ${error.message || '未知错误'}`)
-        hasFailures = true
-      }
-    }
-
-    // 更新任务状态
-    updateTaskResult(task, functionResults, hasFailures)
+    // 更新任务的结果字段
+    task.结果 = hasFailures ? '执行失败' : '执行成功'
 
     return {
-      success: !hasFailures && functionResults.length > 0,
-      functionResults,
-      status: task.状态
+      success: !hasFailures,
+      message: functionResults.join('\n'),
+      results: functionResults
     }
   } catch (error) {
     console.error('执行任务失败:', error)
-    task.状态 = '失败'
-    task.结果 = error.message || '执行出错'
-
     return {
       success: false,
-      error: error.message || '未知错误',
-      status: '失败'
+      message: error.message || '未知错误',
+      results: []
     }
   }
 }
@@ -458,13 +440,20 @@ export async function executeTasks(
       // 处理状态
       task.状态 = '执行中'
 
-      // 执行任务
-      const result = await executeOneTask(task, shopInfo, taskOptions)
+      try {
+        // 执行任务
+        const result = await executeOneTask(task, shopInfo, taskOptions)
 
-      // 根据执行结果更新计数
-      if (result && result.success) {
-        successCount++
-      } else {
+        // 根据执行结果更新计数
+        if (result && result.success) {
+          successCount++
+        } else {
+          failureCount++
+        }
+      } catch (error) {
+        console.error('任务执行出错:', error)
+        task.状态 = '失败'
+        task.结果 = `执行出错: ${error.message || '未知错误'}`
         failureCount++
       }
 
@@ -496,4 +485,30 @@ export async function executeTasks(
     // 移除状态显示
     document.body.removeChild(statusDiv)
   }
+}
+
+/**
+ * 从任务中提取SKU列表
+ * @param {Object} task - 任务对象
+ * @returns {Array} SKU列表
+ */
+export function extractTaskSkuList(task) {
+  if (!task) return []
+
+  // 如果是整店操作，返回特殊标记
+  if (task.isWholeStore === true) {
+    return ['WHOLE_STORE']
+  }
+
+  // 如果已经有skuList，直接返回
+  if (task.skuList && Array.isArray(task.skuList) && task.skuList.length > 0) {
+    return task.skuList
+  }
+
+  // 否则从sku字段解析
+  if (task.sku && typeof task.sku === 'string') {
+    return task.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
+  }
+
+  return []
 }

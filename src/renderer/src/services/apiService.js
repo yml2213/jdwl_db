@@ -1237,3 +1237,135 @@ export async function getCMGBySkuList(skuList, applyInstoreQty = 1000) {
   }
 }
 
+/**
+ * 清空库存分配
+ * @param {Array} skuList - SKU列表
+ * @param {Object} shopInfo - 店铺信息
+ * @returns {Promise<Object>} 处理结果
+ */
+export async function clearStockAllocation(skuList, shopInfo) {
+  if (!skuList || skuList.length === 0) {
+    return { success: false, message: '没有提供SKU列表' }
+  }
+
+  if (!shopInfo || !shopInfo.shopNo) {
+    return { success: false, message: '没有提供店铺信息' }
+  }
+
+  // 检查是否是整店操作
+  const isWholeStore = skuList.length === 1 && skuList[0] === 'WHOLE_STORE'
+
+  console.log(`开始清空库存分配, 店铺: ${shopInfo.shopName}, ${isWholeStore ? '整店操作' : `SKU数量: ${skuList.length}`}`)
+  const url = `${BASE_URL}/inventory/clearStockAllocation.do`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 构建请求数据
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      shopNo: shopInfo.shopNo,
+      // 如果是整店操作，不传skus参数
+      ...(isWholeStore ? {} : { skus: skuList.join(',') }),
+      // 整店操作时，设置allSku参数为1
+      ...(isWholeStore ? { allSku: 1 } : {})
+    })
+
+    // 发送请求
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/inventory/inventoryManagement.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    if (response && response.success) {
+      return {
+        success: true,
+        message: isWholeStore ? `成功清空店铺 ${shopInfo.shopName} 的所有SKU库存分配` : `成功清空${skuList.length}个SKU的库存分配`
+      }
+    } else {
+      const errorMsg = response && response.message ? response.message : '未知错误'
+      return {
+        success: false,
+        message: `清空库存分配失败: ${errorMsg}`
+      }
+    }
+  } catch (error) {
+    console.error('清空库存分配失败:', error)
+    return {
+      success: false,
+      message: `清空库存分配时发生错误: ${error.message || '未知错误'}`
+    }
+  }
+}
+
+/**
+ * 取消京配打标
+ * @param {Array} skuList - SKU列表
+ * @param {Object} shopInfo - 店铺信息
+ * @returns {Promise<Object>} 处理结果
+ */
+export async function cancelJdDeliveryTag(skuList, shopInfo) {
+  if (!skuList || skuList.length === 0) {
+    return { success: false, message: '没有提供SKU列表' }
+  }
+
+  if (!shopInfo || !shopInfo.shopNo) {
+    return { success: false, message: '没有提供店铺信息' }
+  }
+
+  // 检查是否是整店操作
+  const isWholeStore = skuList.length === 1 && skuList[0] === 'WHOLE_STORE'
+
+  console.log(`开始取消京配打标, 店铺: ${shopInfo.shopName}, ${isWholeStore ? '整店操作' : `SKU数量: ${skuList.length}`}`)
+  const url = `${BASE_URL}/jdDelivery/cancelJdDeliveryTag.do`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 构建请求数据
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      shopNo: shopInfo.shopNo,
+      // 如果是整店操作，不传skus参数
+      ...(isWholeStore ? {} : { skus: skuList.join(',') }),
+      // 整店操作时，设置allSku参数为1
+      ...(isWholeStore ? { allSku: 1 } : {})
+    })
+
+    // 发送请求
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/jdDelivery/jdDeliveryManagement.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    if (response && response.success) {
+      return {
+        success: true,
+        message: isWholeStore ? `成功取消店铺 ${shopInfo.shopName} 的所有SKU京配打标` : `成功取消${skuList.length}个SKU的京配打标`
+      }
+    } else {
+      const errorMsg = response && response.message ? response.message : '未知错误'
+      return {
+        success: false,
+        message: `取消京配打标失败: ${errorMsg}`
+      }
+    }
+  } catch (error) {
+    console.error('取消京配打标失败:', error)
+    return {
+      success: false,
+      message: `取消京配打标时发生错误: ${error.message || '未知错误'}`
+    }
+  }
+}
+

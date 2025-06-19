@@ -16,7 +16,7 @@ export default {
   async execute(skuList, task, createBatchTask) {
     // 初始化日志
     if (!window.importLogs) {
-      window.importLogs = [];
+      window.importLogs = []
     }
 
     // 初始化返回结果
@@ -24,45 +24,45 @@ export default {
       success: false,
       message: '',
       importLogs: []
-    };
+    }
 
     try {
-      console.log(`开始处理SKU列表，总数：${skuList.length}`);
-      const startTime = new Date();
+      console.log(`开始处理SKU列表，总数：${skuList.length}`)
+      // const startTime = new Date();
 
       // 记录总SKU数
       result.importLogs.push({
         type: 'info',
         message: `开始处理，总SKU数：${skuList.length}`,
         time: new Date().toLocaleString()
-      });
+      })
 
       // 如果SKU数量大于2000，需要分批处理
       if (skuList.length > 2000) {
         // 主任务标记为已分批
         if (task) {
-          task.状态 = '已分批';
-          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 2000)}个批次任务`];
+          task.状态 = '已分批'
+          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 2000)}个批次任务`]
         }
 
         result.importLogs.push({
           type: 'warning',
           message: `SKU数量(${skuList.length})超过2000，已分拆为${Math.ceil(skuList.length / 2000)}个批次任务`,
           time: new Date().toLocaleString()
-        });
+        })
 
         // 将SKU列表分成多个批次，每批最多2000个SKU
-        const batches = [];
+        const batches = []
         for (let i = 0; i < skuList.length; i += 2000) {
-          batches.push(skuList.slice(i, i + 2000));
+          batches.push(skuList.slice(i, i + 2000))
         }
 
-        console.log(`已将SKU列表分成${batches.length}个批次`);
+        console.log(`已将SKU列表分成${batches.length}个批次`)
 
         // 为每个批次创建一个独立任务
         for (let i = 0; i < batches.length; i++) {
-          const batchSkuList = batches[i];
-          const batchNumber = i + 1;
+          const batchSkuList = batches[i]
+          const batchNumber = i + 1
 
           // 创建批次任务
           const batchTask = {
@@ -74,59 +74,59 @@ export default {
             原始任务ID: task.id,
             批次编号: batchNumber,
             总批次数: batches.length,
-            选项: task.选项 || {useWarehouse: true}, // 继承原任务选项
+            选项: task.选项 || { useWarehouse: true }, // 继承原任务选项
             结果: [],
             importLogs: [{
               type: 'info',
               message: `批次${batchNumber}/${batches.length} - 开始处理${batchSkuList.length}个SKU`,
               time: new Date().toLocaleString()
             }]
-          };
+          }
 
           // 使用回调函数添加批次任务到任务列表
           if (typeof createBatchTask === 'function') {
-            createBatchTask(batchTask);
+            createBatchTask(batchTask)
           }
 
           // 如果是第一个批次，立即开始处理
           if (i === 0) {
             // 处理第一个批次的SKU
-            const batchResult = await this._processBatch(batchSkuList, batchTask);
-            result.importLogs = result.importLogs.concat(batchResult.importLogs);
+            const batchResult = await this._processBatch(batchSkuList, batchTask)
+            result.importLogs = result.importLogs.concat(batchResult.importLogs)
 
             // 更新批次任务状态
-            batchTask.状态 = batchResult.success ? '成功' : '失败';
-            batchTask.结果 = batchResult.results || [];
-            batchTask.importLogs = batchResult.importLogs;
+            batchTask.状态 = batchResult.success ? '成功' : '失败'
+            batchTask.结果 = batchResult.results || []
+            batchTask.importLogs = batchResult.importLogs
 
             // 通知UI更新
             if (typeof createBatchTask === 'function') {
-              createBatchTask(batchTask);
+              createBatchTask(batchTask)
             }
           }
         }
 
         // 设置总体处理结果
-        result.success = true;
-        result.message = `已将任务分拆为${batches.length}个批次任务，第一批次已处理完成`;
+        result.success = true
+        result.message = `已将任务分拆为${batches.length}个批次任务，第一批次已处理完成`
 
-        return result;
+        return result
       } else {
         // SKU数量不超过2000，直接处理
-        return await this._processBatch(skuList, task);
+        return await this._processBatch(skuList, task)
       }
     } catch (error) {
-      console.error('处理SKU出错:', error);
+      console.error('处理SKU出错:', error)
 
-      result.success = false;
-      result.message = `处理失败: ${error.message || '未知错误'}`;
+      result.success = false
+      result.message = `处理失败: ${error.message || '未知错误'}`
       result.importLogs.push({
         type: 'error',
         message: `处理失败: ${error.message || '未知错误'}`,
         time: new Date().toLocaleString()
-      });
+      })
 
-      return result;
+      return result
     }
   },
 
@@ -142,41 +142,41 @@ export default {
       message: '',
       importLogs: [],
       results: []
-    };
+    }
 
     try {
       // 记录批次开始时间
-      const startTime = new Date();
+      const startTime = new Date()
 
       result.importLogs.push({
         type: 'info',
         message: `开始处理${skuList.length}个SKU`,
         time: startTime.toLocaleString()
-      });
+      })
 
       // 更新任务状态为处理中
       if (task) {
-        task.状态 = '处理中';
-        task.结果 = [`正在处理${skuList.length}个SKU`];
+        task.状态 = '处理中'
+        task.结果 = [`正在处理${skuList.length}个SKU`]
       }
 
       // 首先获取CSG列表
-      const csgList = await this.getCSGList(skuList);
+      const csgList = await this.getCSGList(skuList)
       if (!csgList || csgList.length === 0) {
-        throw new Error('获取CSG列表失败');
+        throw new Error('获取CSG列表失败')
       }
 
       // 实际处理SKU - 调用上传方法
-      const uploadResult = await this.uploadJpSearchData(csgList);
+      const uploadResult = await this.uploadJpSearchData(csgList)
 
       // 记录处理结果
-      const endTime = new Date();
-      const processingTime = (endTime - startTime) / 1000; // 秒
+      const endTime = new Date()
+      const processingTime = (endTime - startTime) / 1000 // 秒
 
       // 根据上传结果设置成功/失败状态
-      result.success = uploadResult.success;
-      result.message = uploadResult.message;
-      result.results.push(result.message);
+      result.success = uploadResult.success
+      result.message = uploadResult.message
+      result.results.push(result.message)
 
       result.importLogs.push({
         type: uploadResult.success ? 'success' : 'error',
@@ -185,37 +185,37 @@ export default {
         successCount: uploadResult.processedCount || 0,
         failedCount: uploadResult.failedCount || 0,
         processingTime
-      });
+      })
 
       // 更新任务状态 - 只使用成功或失败两种状态
       if (task) {
         // 如果服务器返回resultCode为1，就是成功
-        task.状态 = uploadResult.success ? '成功' : '失败';
-        task.结果 = result.results;
-        task.importLogs = result.importLogs;
+        task.状态 = uploadResult.success ? '成功' : '失败'
+        task.结果 = result.results
+        task.importLogs = result.importLogs
       }
 
-      return result;
+      return result
     } catch (error) {
-      console.error('处理批次出错:', error);
+      console.error('处理批次出错:', error)
 
-      result.success = false;
-      result.message = `批次处理失败: ${error.message || '未知错误'}`;
+      result.success = false
+      result.message = `批次处理失败: ${error.message || '未知错误'}`
       result.importLogs.push({
         type: 'error',
         message: result.message,
         time: new Date().toLocaleString()
-      });
-      result.results.push(result.message);
+      })
+      result.results.push(result.message)
 
       // 更新任务状态
       if (task) {
-        task.状态 = '失败';
-        task.结果 = result.results;
-        task.importLogs = result.importLogs;
+        task.状态 = '失败'
+        task.结果 = result.results
+        task.importLogs = result.importLogs
       }
 
-      return result;
+      return result
     }
   },
 
@@ -226,20 +226,20 @@ export default {
    */
   async getCSGList(skuList) {
     try {
-      const result = await getCSGListFromApi(skuList);
+      const result = await getCSGListFromApi(skuList)
 
       if (!result.success) {
-        throw new Error(result.message || '获取CSG列表失败');
+        throw new Error(result.message || '获取CSG列表失败')
       }
 
       if (!result.csgList || result.csgList.length === 0) {
-        throw new Error('未找到对应的CSG编号');
+        throw new Error('未找到对应的CSG编号')
       }
 
-      return result.csgList;
+      return result.csgList
     } catch (error) {
-      console.error('获取CSG列表失败:', error);
-      throw error;
+      console.error('获取CSG列表失败:', error)
+      throw error
     }
   },
 
@@ -251,7 +251,7 @@ export default {
   async uploadJpSearchData(csgList) {
     try {
       // 记录接收到的CSG批次信息
-      console.log(`处理批次CSG数量: ${csgList.length}`);
+      console.log(`处理批次CSG数量: ${csgList.length}`)
 
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies()
@@ -259,11 +259,11 @@ export default {
       const csrfToken = cookies.find((cookie) => cookie.name === 'csrfToken')?.value
 
       if (!csrfToken) {
-        throw new Error('未获取到csrfToken');
+        throw new Error('未获取到csrfToken')
       }
 
       console.log('获取到cookies:', cookieString ? '已获取' : '未获取')
-      console.log(`开始处理当前批次，共${csgList.length}个CSG，${csgList.length > 0 ? `第一个CSG: ${csgList[0]}, 最后一个CSG: ${csgList[csgList.length-1]}` : '无CSG'}`);
+      console.log(`开始处理当前批次，共${csgList.length}个CSG，${csgList.length > 0 ? `第一个CSG: ${csgList[0]}, 最后一个CSG: ${csgList[csgList.length - 1]}` : '无CSG'}`)
 
       // 创建Excel数据结构
       const data = this.createExcelData(csgList)
@@ -316,18 +316,18 @@ export default {
       // 解析响应结果
       if (response && response.resultCode == 1) {
         // 成功响应 - resultCode为1表示成功
-        console.log('启用京配打标生效成功==========');
+        console.log('启用京配打标生效成功==========')
 
         // 将日志信息添加到window上下文，使UI可以访问
         if (!window.importLogs) {
-          window.importLogs = [];
+          window.importLogs = []
         }
         window.importLogs.push({
           timestamp: new Date().toLocaleTimeString(),
           type: 'success',
           batchSize: csgList.length,
           message: `成功处理${csgList.length}个SKU`
-        });
+        })
 
         return {
           success: true,
@@ -339,20 +339,20 @@ export default {
         }
       } else {
         // 失败响应
-        let errorMessage = response?.resultMessage || response?.message || '启用京配打标生效失败，未知原因';
+        let errorMessage = response?.resultMessage || response?.message || '启用京配打标生效失败，未知原因'
 
-        console.error('京配打标生效失败:', errorMessage);
+        console.error('京配打标生效失败:', errorMessage)
 
         // 将错误信息添加到window上下文，使UI可以访问
         if (!window.importLogs) {
-          window.importLogs = [];
+          window.importLogs = []
         }
         window.importLogs.push({
           timestamp: new Date().toLocaleTimeString(),
           type: 'error',
           batchSize: csgList.length,
           message: errorMessage
-        });
+        })
 
         return {
           success: false,

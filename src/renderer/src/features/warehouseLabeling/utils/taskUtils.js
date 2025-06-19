@@ -9,6 +9,11 @@
  * @returns {Array<string>} 有效的SKU列表
  */
 export function extractTaskSkuList(task) {
+  // 如果是整店操作，返回特殊标记
+  if (task.isWholeStore === true) {
+    return ['WHOLE_STORE']
+  }
+
   // 如果是批量任务，使用存储的SKU列表
   let skuList = []
   if (task.skuList && Array.isArray(task.skuList)) {
@@ -109,15 +114,15 @@ export function updateTaskResult(task, functionResults, hasFailures) {
     return '失败'
   } else {
     // 检查是否有任何结果包含"失败"字样
-    const hasFailureMessage = functionResults.some(result => 
+    const hasFailureMessage = functionResults.some(result =>
       result.includes('失败') || result.includes('错误')
-    );
-    
+    )
+
     // 检查是否是后台任务（包含"请稍后在任务日志中查看结果"的消息）
     const isBackgroundTask = functionResults.some(result =>
       result.includes('请稍后在任务日志中查看结果')
-    );
-    
+    )
+
     if (hasFailureMessage || hasFailures) {
       task.状态 = '失败'
       task.结果 = functionResults.join('; ')
