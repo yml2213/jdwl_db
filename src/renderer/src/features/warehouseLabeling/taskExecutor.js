@@ -486,29 +486,3 @@ export async function executeTasks(
     document.body.removeChild(statusDiv)
   }
 }
-
-/**
- * 从任务中提取SKU列表
- * @param {Object} task - 任务对象
- * @returns {Array} SKU列表
- */
-export function extractTaskSkuList(task) {
-  if (!task) return []
-
-  // 如果是整店操作，返回特殊标记
-  if (task.isWholeStore === true) {
-    return ['WHOLE_STORE']
-  }
-
-  // 如果已经有skuList，直接返回
-  if (task.skuList && Array.isArray(task.skuList) && task.skuList.length > 0) {
-    return task.skuList
-  }
-
-  // 否则从sku字段解析
-  if (task.sku && typeof task.sku === 'string') {
-    return task.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
-  }
-
-  return []
-}

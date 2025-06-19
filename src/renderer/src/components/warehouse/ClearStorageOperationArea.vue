@@ -2,11 +2,15 @@
   <div class="operation-area">
     <div class="form-group">
       <label class="form-label">快捷选择</label>
-      <div class="select-wrapper">
-        <select v-model="form.inputType" class="form-select">
-          <option value="single">输入SKU</option>
-          <option value="store">整店SKU</option>
-        </select>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input type="radio" name="inputType" value="single" v-model="form.inputType" />
+          <span>输入SKU</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="inputType" value="store" v-model="form.inputType" />
+          <span>整店SKU</span>
+        </label>
       </div>
     </div>
 
@@ -71,6 +75,49 @@ watch(
   overflow-y: auto;
 }
 
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.radio-group {
+  display: flex;
+  gap: 20px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 16px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.radio-label:hover {
+  border-color: #2196f3;
+}
+
+.radio-label input[type='radio'] {
+  margin-right: 6px;
+}
+
+.radio-label input[type='radio']:checked + span {
+  color: #2196f3;
+  font-weight: 500;
+}
+
+.radio-label:has(input[type='radio']:checked) {
+  border-color: #2196f3;
+  background-color: rgba(33, 150, 243, 0.05);
+}
+
 .form-actions {
   display: flex;
   justify-content: center;
@@ -101,26 +148,5 @@ watch(
 
 .btn:hover {
   opacity: 0.9;
-}
-
-.select-wrapper {
-  position: relative;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.form-select {
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  outline: none;
-  height: 36px;
-  cursor: pointer;
-  background-color: white;
-}
-
-.form-select:focus {
-  border-color: #2196f3;
 }
 </style>
