@@ -1304,6 +1304,162 @@ export async function clearStockAllocation(skuList, shopInfo) {
 }
 
 /**
+ * 获取整店商品列表（CSG编号）
+ * @param {Object} shopInfo - 店铺信息
+ * @returns {Promise<Array>} 商品CSG列表
+ */
+export async function getShopGoodsList(shopInfo) {
+  if (!shopInfo || !shopInfo.shopNo || !shopInfo.shopId) {
+    console.error('获取整店商品列表失败: 店铺信息不完整', shopInfo)
+    return { success: false, message: '店铺信息不完整', csgList: [] }
+  }
+
+  console.log('开始获取整店商品列表, 店铺:', shopInfo.shopName)
+  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 初始化结果数组和分页参数
+    let allCsgItems = []
+    let currentStart = 0
+    let totalRecords = null
+    let hasMoreData = true
+    const pageSize = 100 // 每页获取100条记录
+
+    // 循环获取所有页的数据
+    while (hasMoreData) {
+      console.log(`获取整店商品列表, 当前起始位置: ${currentStart}, 每页数量: ${pageSize}`)
+
+      // 构建请求数据
+      const data = qs.stringify({
+        csrfToken: csrfToken,
+        ids: '',
+        shopId: shopInfo.shopId,
+        sellerId: shopInfo.sellerId || '',
+        deptId: shopInfo.deptId || '',
+        sellerNo: shopInfo.sellerNo || '',
+        deptNo: shopInfo.deptNo || '',
+        shopNo: shopInfo.shopNo,
+        spSource: '',
+        shopGoodsName: '',
+        isCombination: '',
+        barcode: '',
+        jdDeliver: '1', // 京配商品
+        sellerGoodsSigns: '',
+        spGoodsNos: '',
+        goodsNos: '',
+        isvGoodsNos: '',
+        status: '1', // 启用状态
+        originSend: '',
+        aoData: JSON.stringify([
+          { name: 'sEcho', value: 5 },
+          { name: 'iColumns', value: 14 },
+          { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+          { name: 'iDisplayStart', value: currentStart },
+          { name: 'iDisplayLength', value: pageSize },
+          { name: 'mDataProp_0', value: 0 },
+          { name: 'bSortable_0', value: false },
+          { name: 'mDataProp_1', value: 1 },
+          { name: 'bSortable_1', value: false },
+          { name: 'mDataProp_2', value: 'shopGoodsName' },
+          { name: 'bSortable_2', value: false },
+          { name: 'mDataProp_3', value: 'goodsNo' },
+          { name: 'bSortable_3', value: false },
+          { name: 'mDataProp_4', value: 'spGoodsNo' },
+          { name: 'bSortable_4', value: false },
+          { name: 'mDataProp_5', value: 'isvGoodsNo' },
+          { name: 'bSortable_5', value: false },
+          { name: 'mDataProp_6', value: 'shopGoodsNo' },
+          { name: 'bSortable_6', value: false },
+          { name: 'mDataProp_7', value: 'barcode' },
+          { name: 'bSortable_7', value: false },
+          { name: 'mDataProp_8', value: 'shopName' },
+          { name: 'bSortable_8', value: false },
+          { name: 'mDataProp_9', value: 'createTime' },
+          { name: 'bSortable_9', value: false },
+          { name: 'mDataProp_10', value: 10 },
+          { name: 'bSortable_10', value: false },
+          { name: 'mDataProp_11', value: 'isCombination' },
+          { name: 'bSortable_11', value: false },
+          { name: 'mDataProp_12', value: 'status' },
+          { name: 'bSortable_12', value: false },
+          { name: 'mDataProp_13', value: 13 },
+          { name: 'bSortable_13', value: false },
+          { name: 'iSortCol_0', value: 9 },
+          { name: 'sSortDir_0', value: 'desc' },
+          { name: 'iSortingCols', value: 1 }
+        ])
+      })
+
+      // 发送请求
+      const response = await fetchApi(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Origin': BASE_URL,
+          'Referer': `${BASE_URL}/goToMainIframe.do`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: data
+      })
+
+      // 处理响应
+      if (response && response.aaData) {
+        // 首次获取总记录数
+        if (totalRecords === null) {
+          totalRecords = response.iTotalRecords || 0
+          console.log(`查询到总共有${totalRecords}个商品`)
+        }
+
+        // 解析本页数据，提取CSG编号
+        const pageCsgItems = response.aaData
+          .filter(item => item.shopGoodsNo) // 只保留有CSG编号的商品
+          .map(item => item.shopGoodsNo)
+
+        // 合并到总结果中
+        allCsgItems = [...allCsgItems, ...pageCsgItems]
+
+        console.log(`当前已获取${allCsgItems.length}/${totalRecords}个CSG编号`)
+
+        // 判断是否还有更多数据
+        currentStart += response.aaData.length
+        hasMoreData = currentStart < totalRecords
+
+        // 如果没有更多数据或已获取所有记录，退出循环
+        if (!hasMoreData || allCsgItems.length >= totalRecords) {
+          break
+        }
+
+        // 添加短暂延迟避免频繁请求
+        if (hasMoreData) {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        }
+      } else {
+        // 如果响应异常，退出循环
+        console.warn('查询CSG编号响应异常:', response)
+        hasMoreData = false
+      }
+    }
+
+    console.log(`整店商品CSG编号查询完成，共获取${allCsgItems.length}个CSG编号`)
+
+    return {
+      success: true,
+      message: `成功获取${allCsgItems.length}个CSG编号`,
+      csgList: allCsgItems
+    }
+  } catch (error) {
+    console.error('获取整店商品列表失败:', error)
+    return {
+      success: false,
+      message: `获取整店商品列表失败: ${error.message || '未知错误'}`,
+      csgList: []
+    }
+  }
+}
+
+/**
  * 取消京配打标
  * @param {Array} skuList - SKU列表
  * @param {Object} shopInfo - 店铺信息
@@ -1365,6 +1521,117 @@ export async function cancelJdDeliveryTag(skuList, shopInfo) {
     return {
       success: false,
       message: `取消京配打标时发生错误: ${error.message || '未知错误'}`
+    }
+  }
+}
+
+/**
+ * 根据店铺名称获取完整的店铺信息
+ * @param {string} shopName - 店铺名称
+ * @returns {Promise<Object>} 店铺信息
+ */
+export async function getShopInfoByName(shopName) {
+  if (!shopName) {
+    console.error('获取店铺信息失败: 未提供店铺名称')
+    return { success: false, message: '未提供店铺名称', shopInfo: null }
+  }
+
+  console.log('开始根据店铺名称获取店铺信息:', shopName)
+  const url = `${BASE_URL}/shop/queryShopList.do?rand=${Math.random()}`
+  const csrfToken = await getCsrfToken()
+
+  try {
+    // 构建请求数据
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      shopNo: '',
+      deptId: '',
+      type: '',
+      spSource: '',
+      bizType: '',
+      isvShopNo: '',
+      sourceChannel: '',
+      status: '1', // 启用状态
+      iDisplayStart: '0',
+      iDisplayLength: '100', // 获取更多店铺
+      remark: '',
+      shopName: shopName, // 使用店铺名称查询
+      jdDeliverStatus: '',
+      originSend: '',
+      aoData: JSON.stringify([
+        { name: 'sEcho', value: 1 },
+        { name: 'iColumns', value: 11 },
+        { name: 'sColumns', value: ',,,,,,,,,,' },
+        { name: 'iDisplayStart', value: 0 },
+        { name: 'iDisplayLength', value: 100 },
+        { name: 'mDataProp_0', value: 0 },
+        { name: 'bSortable_0', value: false },
+        { name: 'mDataProp_1', value: 1 },
+        { name: 'bSortable_1', value: false },
+        { name: 'mDataProp_2', value: 'shopNo' },
+        { name: 'bSortable_2', value: true },
+        { name: 'mDataProp_3', value: 'shopName' },
+        { name: 'bSortable_3', value: true },
+        { name: 'mDataProp_4', value: 'spShopNo' },
+        { name: 'bSortable_4', value: true },
+        { name: 'mDataProp_5', value: 'statusName' },
+        { name: 'bSortable_5', value: true },
+        { name: 'mDataProp_6', value: 'bizTypeName' },
+        { name: 'bSortable_6', value: true },
+        { name: 'mDataProp_7', value: 'typeName' },
+        { name: 'bSortable_7', value: true },
+        { name: 'mDataProp_8', value: 'spSourceName' },
+        { name: 'bSortable_8', value: true },
+        { name: 'mDataProp_9', value: 'deptName' },
+        { name: 'bSortable_9', value: true },
+        { name: 'mDataProp_10', value: 10 },
+        { name: 'bSortable_10', value: false },
+        { name: 'iSortCol_0', value: 2 },
+        { name: 'sSortDir_0', value: 'desc' },
+        { name: 'iSortingCols', value: 1 }
+      ])
+    })
+
+    // 发送请求
+    const response = await fetchApi(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Origin': BASE_URL,
+        'Referer': `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: data
+    })
+
+    console.log('店铺查询响应:', response)
+
+    // 处理响应
+    if (response && response.aaData && response.aaData.length > 0) {
+      // 找到匹配的店铺
+      const matchedShop = response.aaData.find(shop => shop.shopName === shopName) || response.aaData[0]
+      
+      console.log('找到店铺信息:', matchedShop)
+      
+      return {
+        success: true,
+        message: '成功获取店铺信息',
+        shopInfo: matchedShop
+      }
+    } else {
+      console.error('未找到匹配的店铺:', shopName)
+      return {
+        success: false,
+        message: `未找到店铺: ${shopName}`,
+        shopInfo: null
+      }
+    }
+  } catch (error) {
+    console.error('获取店铺信息失败:', error)
+    return {
+      success: false,
+      message: `获取店铺信息失败: ${error.message || '未知错误'}`,
+      shopInfo: null
     }
   }
 }

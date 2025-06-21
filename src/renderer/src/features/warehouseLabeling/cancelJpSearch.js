@@ -1,6 +1,6 @@
 import { getAllCookies, getRequestHeaders } from '../../utils/cookieHelper'
 import * as XLSX from 'xlsx'
-import { getCSGList as getCSGListFromApi } from '../../services/apiService'
+import { getCSGList as getCSGListFromApi, getShopGoodsList, getShopInfoByName } from '../../services/apiService'
 
 export default {
   name: 'cancelJpSearch',
@@ -54,6 +54,27 @@ export default {
         return await this._processWholeStoreCancelJpSearch(task)
       } else {
         console.log('执行SKU列表取消京配打标操作')
+        
+        // 检查是否是批次任务
+        const isBatchTask = task && task.原始任务ID && task.批次编号
+        
+        if (isBatchTask) {
+          console.log(`处理批次任务: ${task.批次编号}/${task.总批次数}`)
+          
+          // 如果是批次任务，直接处理SKU列表
+          const batchResult = await this._processBatch(skuList, task)
+          
+          // 更新批次任务状态
+          if (task) {
+            task.状态 = batchResult.success ? '成功' : '失败'
+            task.结果 = batchResult.results || []
+            task.importLogs = batchResult.cancelJpSearchLogs  // 使用importLogs作为统一的日志属性名
+            task.cancelJpSearchLogs = batchResult.cancelJpSearchLogs
+          }
+          
+          return batchResult
+        }
+        
         // 如果SKU数量大于2000，需要分批处理
         if (skuList.length > 2000) {
           // 主任务标记为已分批
@@ -93,6 +114,8 @@ export default {
               总批次数: batches.length,
               选项: task.选项 || { cancelJpSearch: true }, // 继承原任务选项
               结果: [],
+              店铺信息: task.店铺信息, // 传递店铺信息
+              事业部信息: task.事业部信息, // 传递事业部信息
               cancelJpSearchLogs: [{
                 type: 'info',
                 message: `批次${batchNumber}/${batches.length} - 开始处理${batchSkuList.length}个SKU`,
@@ -111,11 +134,11 @@ export default {
               const batchResult = await this._processBatch(batchSkuList, batchTask)
               result.cancelJpSearchLogs = result.cancelJpSearchLogs.concat(batchResult.cancelJpSearchLogs)
 
-                    // 更新批次任务状态
-      batchTask.状态 = batchResult.success ? '成功' : '失败'
-      batchTask.结果 = batchResult.results || []
-      batchTask.importLogs = batchResult.cancelJpSearchLogs  // 使用importLogs作为统一的日志属性名
-      batchTask.cancelJpSearchLogs = batchResult.cancelJpSearchLogs
+              // 更新批次任务状态
+              batchTask.状态 = batchResult.success ? '成功' : '失败'
+              batchTask.结果 = batchResult.results || []
+              batchTask.importLogs = batchResult.cancelJpSearchLogs  // 使用importLogs作为统一的日志属性名
+              batchTask.cancelJpSearchLogs = batchResult.cancelJpSearchLogs
 
               // 通知UI更新
               if (typeof createBatchTask === 'function') {
@@ -178,37 +201,162 @@ export default {
         task.结果 = [`正在执行整店取消京配打标`]
       }
       
-      // 获取店铺信息
+      // 获取店铺信息和事业部信息
       const shopInfo = task.店铺信息 || {}
+      const deptInfo = task.事业部信息 || {}
+      
       console.log('整店取消京配打标 - 店铺信息:', shopInfo)
+      console.log('整店取消京配打标 - 店铺信息详细内容:', JSON.stringify(shopInfo))
+      console.log('整店取消京配打标 - 事业部信息:', deptInfo)
+      console.log('整店取消京配打标 - 事业部信息详细内容:', JSON.stringify(deptInfo))
       
       if (!shopInfo.shopNo) {
         throw new Error('未提供店铺信息，无法执行整店取消京配打标')
       }
+      
+      // 合并店铺和事业部信息
+      const completeShopInfo = {
+        ...shopInfo,
+        deptId: deptInfo.id || '',
+        deptNo: deptInfo.deptNo || '',
+        sellerId: deptInfo.sellerId || '',
+        sellerNo: deptInfo.sellerNo || ''
+      }
+      
+      console.log('整店取消京配打标 - 合并后的完整信息:', completeShopInfo)
 
-      // 调用整店取消京配打标API
-      console.log('调用整店取消京配打标API')
-      const cancelResult = await this._callCancelJpSearchAPI(['WHOLE_STORE'], shopInfo)
+      // 获取整店CSG列表
+      result.cancelJpSearchLogs.push({
+        type: 'info',
+        message: `正在获取整店商品CSG编号...`,
+        time: new Date().toLocaleString()
+      })
       
-      // 记录处理结果
-      const endTime = new Date()
-      const processingTime = (endTime - startTime) / 1000 // 秒
+      // 调用API获取整店商品CSG列表
+      const csgListResult = await getShopGoodsList(completeShopInfo)
       
-      // 根据结果设置成功/失败状态
-      result.success = cancelResult.success
-      result.message = cancelResult.message
-      result.results.push(result.message)
+      if (!csgListResult.success || !csgListResult.csgList || csgListResult.csgList.length === 0) {
+        throw new Error(`获取整店商品CSG列表失败: ${csgListResult.message || '未找到商品'}`)
+      }
+      
+      const csgList = csgListResult.csgList
       
       result.cancelJpSearchLogs.push({
-        type: cancelResult.success ? 'success' : 'error',
-        message: result.message,
-        time: endTime.toLocaleString(),
-        processingTime
+        type: 'success',
+        message: `成功获取整店商品CSG列表，共${csgList.length}个商品`,
+        time: new Date().toLocaleString()
       })
+      
+      // 判断是否需要分批处理
+      if (csgList.length > 5000) {
+        result.cancelJpSearchLogs.push({
+          type: 'warning',
+          message: `商品数量(${csgList.length})超过5000，需要分批处理`,
+          time: new Date().toLocaleString()
+        })
+        
+        // 将CSG列表分成多个批次，每批最多5000个
+        const batches = []
+        for (let i = 0; i < csgList.length; i += 5000) {
+          batches.push(csgList.slice(i, i + 5000))
+        }
+        
+        console.log(`已将整店CSG列表分成${batches.length}个批次`)
+        
+        // 记录分批信息
+        result.cancelJpSearchLogs.push({
+          type: 'info',
+          message: `已将整店CSG列表分成${batches.length}个批次，开始逐批处理`,
+          time: new Date().toLocaleString()
+        })
+        
+        // 逐批处理
+        let successCount = 0
+        let failedCount = 0
+        
+        for (let i = 0; i < batches.length; i++) {
+          const batchCsgList = batches[i]
+          const batchNumber = i + 1
+          
+          result.cancelJpSearchLogs.push({
+            type: 'info',
+            message: `开始处理第${batchNumber}/${batches.length}批，包含${batchCsgList.length}个商品`,
+            time: new Date().toLocaleString()
+          })
+          
+          // 处理当前批次
+          const batchResult = await this.uploadCancelJpSearchData(batchCsgList)
+          
+          if (batchResult.success) {
+            successCount += batchCsgList.length
+            result.cancelJpSearchLogs.push({
+              type: 'success',
+              message: `第${batchNumber}/${batches.length}批处理成功: ${batchResult.message}`,
+              time: new Date().toLocaleString()
+            })
+          } else {
+            failedCount += batchCsgList.length
+            result.cancelJpSearchLogs.push({
+              type: 'error',
+              message: `第${batchNumber}/${batches.length}批处理失败: ${batchResult.message}`,
+              time: new Date().toLocaleString()
+            })
+          }
+          
+          // 添加短暂延迟避免频繁请求
+          if (i < batches.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+          }
+        }
+        
+        // 设置总体处理结果
+        const endTime = new Date()
+        const processingTime = (endTime - startTime) / 1000 // 秒
+        
+        if (failedCount === 0) {
+          result.success = true
+          result.message = `整店取消京配打标成功，共处理${csgList.length}个商品，耗时${processingTime.toFixed(1)}秒`
+        } else if (successCount > 0) {
+          result.success = true
+          result.message = `整店取消京配打标部分成功，成功${successCount}个，失败${failedCount}个，耗时${processingTime.toFixed(1)}秒`
+        } else {
+          result.success = false
+          result.message = `整店取消京配打标失败，所有${csgList.length}个商品处理失败，耗时${processingTime.toFixed(1)}秒`
+        }
+        
+      } else {
+        // 商品数量不超过5000，直接处理
+        result.cancelJpSearchLogs.push({
+          type: 'info',
+          message: `商品数量(${csgList.length})不超过5000，直接处理`,
+          time: new Date().toLocaleString()
+        })
+        
+        // 直接上传处理
+        const uploadResult = await this.uploadCancelJpSearchData(csgList)
+        
+        // 记录处理结果
+        const endTime = new Date()
+        const processingTime = (endTime - startTime) / 1000 // 秒
+        
+        // 根据上传结果设置成功/失败状态
+        result.success = uploadResult.success
+        result.message = uploadResult.message
+        
+        result.cancelJpSearchLogs.push({
+          type: uploadResult.success ? 'success' : 'error',
+          message: result.message,
+          time: endTime.toLocaleString(),
+          processingTime
+        })
+      }
+      
+      // 添加处理结果到结果数组
+      result.results.push(result.message)
       
       // 更新任务状态
       if (task) {
-        task.状态 = cancelResult.success ? '成功' : '失败'
+        task.状态 = result.success ? '成功' : '失败'
         task.结果 = result.results
         task.importLogs = result.cancelJpSearchLogs  // 使用importLogs作为统一的日志属性名
         task.cancelJpSearchLogs = result.cancelJpSearchLogs
@@ -352,39 +500,6 @@ export default {
   },
 
   /**
-   * 调用取消京配打标API
-   * @param {Array<string>} skuList - SKU列表
-   * @param {Object} shopInfo - 店铺信息
-   * @returns {Promise<Object>} 处理结果
-   */
-  async _callCancelJpSearchAPI(skuList, shopInfo) {
-    try {
-      const isWholeStore = skuList.length === 1 && skuList[0] === 'WHOLE_STORE'
-      
-      // 调用API
-      const result = await window.api.cancelJdDeliveryTag(skuList, shopInfo)
-      
-      if (result.success) {
-        return {
-          success: true,
-          message: isWholeStore ? `成功取消整店京配打标` : `成功取消${skuList.length}个SKU的京配打标`
-        }
-      } else {
-        return {
-          success: false,
-          message: result.message || '取消京配打标失败'
-        }
-      }
-    } catch (error) {
-      console.error('调用取消京配打标API失败:', error)
-      return {
-        success: false,
-        message: `取消京配打标失败: ${error.message || '未知错误'}`
-      }
-    }
-  },
-
-  /**
    * 上传取消京配打标数据
    * @param {Array<string>} csgList - CSG列表
    * @returns {Promise<Object>} 上传结果
@@ -474,112 +589,8 @@ export default {
       console.error('上传取消京配打标数据失败:', error)
       return {
         success: false,
-        message: `上传失败: ${error.message || '未知错误'}`,
-        failedCount: csgList.length
+        message: `上传取消京配打标数据失败: ${error.message || '未知错误'}`
       }
-    }
-  },
-
-  /**
-   * 创建Excel数据
-   * @param {Array<string>} csgList - CSG列表
-   * @returns {Array<Array<string>>} Excel数据
-   */
-  createExcelData(csgList) {
-    // 表头 - 确保格式与要求一致
-    const header = ['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）']
-
-    // 数据行
-    const rows = csgList.map(csg => [csg, '0'])
-
-    // 返回包含表头的数据
-    return [header, ...rows]
-  },
-
-  /**
-   * 将数据转换为Excel文件
-   * @param {Array<Array<string>>} data - Excel数据
-   * @returns {Promise<File>} Excel文件
-   */
-  async convertToExcelFile(data) {
-    // 创建工作表
-    const ws = XLSX.utils.aoa_to_sheet(data)
-
-    // 创建工作簿并添加工作表
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-
-    // 设置一些常用的单元格样式
-    if (!wb.Workbook) wb.Workbook = {}
-    if (!wb.Workbook.Sheets) wb.Workbook.Sheets = {}
-    if (!wb.Workbook.Sheets['Sheet1']) wb.Workbook.Sheets['Sheet1'] = {}
-
-    // 指定xls格式生成Excel二进制数据
-    const excelBinary = XLSX.write(wb, {
-      bookType: 'xls',
-      type: 'binary',
-      compression: true,
-      bookSST: false
-    })
-
-    // 将二进制字符串转换为ArrayBuffer
-    const buf = new ArrayBuffer(excelBinary.length)
-    const view = new Uint8Array(buf)
-    for (let i = 0; i < excelBinary.length; i++) {
-      view[i] = excelBinary.charCodeAt(i) & 0xff
-    }
-
-    console.log('Excel文件生成完成，大小:', buf.byteLength, 'bytes')
-
-    // 创建File对象
-    return new File([buf], 'updateShopGoodsJpSearchImportTemplate.xls', {
-      type: 'application/vnd.ms-excel'
-    })
-  },
-
-  /**
-   * 序列化FormData对象
-   * @param {FormData} formData - FormData对象
-   * @returns {Promise<Object>} 序列化后的FormData对象
-   */
-  async serializeFormData(formData) {
-    const entries = []
-
-    // 遍历FormData中的每个字段
-    for (const pair of formData.entries()) {
-      const [key, value] = pair
-
-      // 如果是文件，需要特殊处理
-      if (value instanceof File || value instanceof Blob) {
-        // 转换文件为ArrayBuffer
-        const buffer = await value.arrayBuffer()
-
-        // 创建序列化文件对象
-        entries.push([
-          key,
-          {
-            _isFile: true,
-            name: value.name,
-            type: value.type,
-            size: value.size,
-            lastModified: value instanceof File ? value.lastModified : null,
-            data: Array.from(new Uint8Array(buffer)) // 将ArrayBuffer转换为数组
-          }
-        ])
-      } else {
-        // 普通字段直接添加
-        entries.push([key, value])
-      }
-    }
-
-    console.log('序列化FormData完成，包含', entries.length, '个字段')
-
-    // 返回序列化的FormData对象
-    return {
-      _isFormData: true,
-      entries,
-      // 注意: 对于大量SKU处理，增加超时时间至120秒
-      timeout: 120000
     }
   }
-} 
+}
