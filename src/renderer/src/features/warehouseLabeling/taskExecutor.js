@@ -111,7 +111,6 @@ export async function executeOneTask(task, shopInfo, options = {}) {
  * 批量执行任务
  * @param {Array} waitingTasks - 等待中的任务列表
  * @param {Object} shopInfo - 店铺信息
- * @param {Number} waitTime - 任务间等待时间（秒）
  * @param {Object} disabledProductsState - 停用商品状态对象
  * @param {Object} defaultOptions - 默认功能选项，如果任务中没有选项将使用此默认值
  * @returns {Promise<Object>} 执行结果
@@ -119,7 +118,6 @@ export async function executeOneTask(task, shopInfo, options = {}) {
 export async function executeTasks(
   waitingTasks,
   shopInfo,
-  waitTime,
   disabledProductsState,
   defaultOptions
 ) {
@@ -208,10 +206,9 @@ export async function executeTasks(
         failureCount++
       }
 
-      // 如果不是最后一个任务，且设置了等待时间，则等待指定时间
-      if (taskIndex < waitingTasks.length - 1 && waitTime > 0) {
-        updateTaskStatus(statusDiv, `等待${waitTime}秒后处理下一个任务...`)
-        await new Promise((resolve) => setTimeout(resolve, waitTime * 1000))
+      // 如果不是最后一个任务，则继续处理下一个
+      if (taskIndex < waitingTasks.length - 1) {
+        updateTaskStatus(statusDiv, `准备处理下一个任务...`)
       }
     }
 

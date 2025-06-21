@@ -42,7 +42,6 @@ const emit = defineEmits([
 const form = ref({
   quickSelect: '',
   sku: '',
-  waitTime: 5,
   options: {
     importStore: true,
     useStore: true,
@@ -430,7 +429,6 @@ const executeTask = async () => {
     const result = await executeTasks(
       tasksToExecute,
       shopInfo,
-      form.value.waitTime,
       form.value.disabledProducts,
       form.value.options
     )

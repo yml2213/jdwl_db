@@ -86,64 +86,109 @@ export async function getShopList(deptId) {
 
   console.log('获取店铺列表, csrfToken:', csrfToken ? '已获取' : '未获取')
 
-  // 构建请求数据
-  const data = qs.stringify({
-    csrfToken: csrfToken,
-    shopNo: '',
-    deptId: deptId,
-    type: '',
-    spSource: '',
-    bizType: '',
-    isvShopNo: '',
-    sourceChannel: '',
-    status: '1', // 启用状态
-    iDisplayStart: '0',
-    iDisplayLength: '50', // 获取更多店铺
-    remark: '',
-    shopName: '',
-    jdDeliverStatus: '',
-    originSend: '',
-    aoData: '0,50'
-  })
+  // 使用分页方式获取所有店铺
+  let allShops = []
+  let currentStart = 0
+  const pageSize = 100 // 每页请求的数量，增大以减少请求次数
+  let totalRecords = null
+  let hasMoreData = true
 
-  try {
-    console.log('发送店铺列表请求')
-    const response = await fetchApi(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      body: data
+  // 循环获取所有页的店铺数据
+  while (hasMoreData) {
+    console.log(`获取店铺列表分页数据: 起始位置=${currentStart}, 每页数量=${pageSize}`)
+
+    // 构建aoData参数
+    const aoDataStr = `${currentStart},${pageSize}`
+
+    // 构建请求数据
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      shopNo: '',
+      deptId: deptId,
+      type: '',
+      spSource: '',
+      bizType: '',
+      isvShopNo: '',
+      sourceChannel: '',
+      status: '1', // 启用状态
+      iDisplayStart: String(currentStart),
+      iDisplayLength: String(pageSize),
+      remark: '',
+      shopName: '',
+      jdDeliverStatus: '',
+      originSend: '',
+      aoData: aoDataStr
     })
 
-    console.log('店铺列表响应:', response ? '获取成功' : '未获取数据')
+    try {
+      console.log(`发送店铺列表请求: 页码=${currentStart/pageSize + 1}`)
+      const response = await fetchApi(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}/goToMainIframe.do`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: data
+      })
 
-    // 处理响应数据，提取店铺列表
-    if (response && response.aaData) {
-      console.log('获取到店铺数量:', response.aaData.length)
+      // 处理响应数据
+      if (response && response.aaData) {
+        // 首次获取时记录总记录数
+        if (totalRecords === null) {
+          totalRecords = response.iTotalRecords || 0
+          console.log(`店铺总数量: ${totalRecords}`)
+        }
 
-      // 转换为更简单的数据结构
-      return response.aaData.map((shop) => ({
-        id: shop.id,
-        shopNo: shop.shopNo,
-        shopName: shop.shopName,
-        spShopNo: shop.spShopNo,
-        status: shop.statusName,
-        bizTypeName: shop.bizTypeName,
-        typeName: shop.typeName,
-        spSourceName: shop.spSourceName
-      }))
-    } else {
-      console.error('响应数据格式不正确:', response)
-      return []
+        // 处理本页的店铺数据
+        const pageShops = response.aaData.map((shop) => ({
+          id: shop.id,
+          shopNo: shop.shopNo,
+          shopName: shop.shopName,
+          spShopNo: shop.spShopNo,
+          status: shop.statusName,
+          bizTypeName: shop.bizTypeName,
+          typeName: shop.typeName,
+          spSourceName: shop.spSourceName,
+          deptId: shop.deptId,
+          deptName: shop.deptName,
+          sellerId: shop.sellerId,
+          sellerNo: shop.sellerNo,
+          jdDeliver: shop.jdDeliver,
+          jdDeliverStatus: shop.jdDeliverStatus
+        }))
+
+        // 合并到总结果中
+        allShops = [...allShops, ...pageShops]
+
+        console.log(`当前已获取店铺: ${allShops.length}/${totalRecords}`)
+
+        // 判断是否还有更多数据
+        currentStart += response.aaData.length
+        hasMoreData = currentStart < totalRecords
+
+        // 如果没有更多数据或已获取所有记录，退出循环
+        if (!hasMoreData || allShops.length >= totalRecords) {
+          break
+        }
+
+        // 添加短暂延迟避免频繁请求
+        if (hasMoreData) {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        }
+      } else {
+        console.error('响应数据格式不正确:', response)
+        hasMoreData = false
+      }
+    } catch (error) {
+      console.error(`获取店铺列表页码${currentStart/pageSize + 1}失败:`, error)
+      hasMoreData = false
     }
-  } catch (error) {
-    console.error('获取店铺列表失败:', error)
-    return []
   }
+
+  console.log(`店铺列表获取完成，共获取${allShops.length}个店铺`)
+  return allShops
 }
 
 /**

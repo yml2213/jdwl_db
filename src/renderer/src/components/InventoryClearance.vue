@@ -29,7 +29,6 @@ const emit = defineEmits([
 const form = ref({
   mode: 'sku', // 'sku' or 'whole_store'
   sku: '',
-  waitTime: 5,
   options: {
     clearStockAllocation: true,
     cancelJpSearch: false
@@ -239,18 +238,29 @@ const handleAddTask = () => {
 
 // 执行任务
 const handleExecuteTasks = async () => {
-  const tasksToExecute = taskList.value.filter(task => task.状态 === '等待中' || task.状态 === '暂存')
-  if (tasksToExecute.length === 0) {
+  if (taskList.value.length === 0) {
     alert('没有待执行的任务')
     return
   }
+
   const shopInfo = currentShopInfo.value
   if (!shopInfo) {
     alert('请选择店铺')
     return
   }
+
+  console.log('开始执行任务列表, 数量:', taskList.value.length)
+
+  // 过滤出等待中的任务
+  const tasksToExecute = taskList.value.filter(task => task.状态 === '等待中')
+  if (tasksToExecute.length === 0) {
+    alert('没有等待中的任务')
+    return
+  }
+
   try {
-    await executeTasks(tasksToExecute, shopInfo, form.value.waitTime, {}, form.value.options)
+    // 执行任务
+    await executeTasks(tasksToExecute, shopInfo, {}, form.value.options)
   } catch (error) {
     alert(`执行任务失败: ${error.message}`)
   }
