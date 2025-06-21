@@ -42,9 +42,39 @@ const currentWarehouse = computed(() => getSelectedWarehouse())
 // 调试信息面板是否显示
 const showDebugPanel = ref(false)
 
+// 复制提示状态
+const copyTip = ref({
+  show: false,
+  section: '',
+  timer: null
+})
+
 // 切换调试面板显示状态
 const toggleDebugPanel = () => {
   showDebugPanel.value = !showDebugPanel.value
+}
+
+// 复制到剪贴板
+const copyToClipboard = (text, section) => {
+  const tempInput = document.createElement('input')
+  tempInput.value = text
+  document.body.appendChild(tempInput)
+  tempInput.select()
+  document.execCommand('copy')
+  document.body.removeChild(tempInput)
+  
+  // 显示复制成功提示
+  if (copyTip.value.timer) {
+    clearTimeout(copyTip.value.timer)
+  }
+  
+  copyTip.value = {
+    show: true,
+    section: section,
+    timer: setTimeout(() => {
+      copyTip.value.show = false
+    }, 2000)
+  }
 }
 
 // 组件挂载时检查登录状态
@@ -63,6 +93,20 @@ onMounted(() => {
     handleLogout()
   })
 })
+
+// 选择JSON内容
+const selectJsonContent = (event) => {
+  const pre = event.target
+  if (pre && pre.tagName === 'PRE') {
+    const text = pre.textContent
+    if (text) {
+      // 获取父元素的标题作为部分名称
+      const sectionHeader = pre.parentElement.querySelector('.section-header h4')
+      const sectionName = sectionHeader ? sectionHeader.textContent : ''
+      copyToClipboard(text, sectionName)
+    }
+  }
+}
 </script>
 
 <template>
@@ -86,23 +130,39 @@ onMounted(() => {
     <div v-if="isDev && showDebugPanel" class="debug-panel">
       <h3>当前用户数据 (localStorage)</h3>
       <div class="debug-section">
-        <h4>供应商信息</h4>
-        <pre v-if="currentVendor">{{ JSON.stringify(currentVendor, null, 2) }}</pre>
+        <div class="section-header">
+          <h4>供应商信息</h4>
+          <button v-if="currentVendor" @click="copyToClipboard(JSON.stringify(currentVendor, null, 2), '供应商')" class="copy-btn">复制</button>
+          <span v-if="copyTip.show && copyTip.section === '供应商'" class="copy-tip">✓ 已复制</span>
+        </div>
+        <pre v-if="currentVendor" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentVendor, null, 2) }}</pre>
         <div v-else class="empty-data">未选择供应商</div>
       </div>
       <div class="debug-section">
-        <h4>事业部信息</h4>
-        <pre v-if="currentDepartment">{{ JSON.stringify(currentDepartment, null, 2) }}</pre>
+        <div class="section-header">
+          <h4>事业部信息</h4>
+          <button v-if="currentDepartment" @click="copyToClipboard(JSON.stringify(currentDepartment, null, 2), '事业部')" class="copy-btn">复制</button>
+          <span v-if="copyTip.show && copyTip.section === '事业部'" class="copy-tip">✓ 已复制</span>
+        </div>
+        <pre v-if="currentDepartment" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentDepartment, null, 2) }}</pre>
         <div v-else class="empty-data">未选择事业部</div>
       </div>
       <div class="debug-section">
-        <h4>店铺信息</h4>
-        <pre v-if="currentShop">{{ JSON.stringify(currentShop, null, 2) }}</pre>
+        <div class="section-header">
+          <h4>店铺信息</h4>
+          <button v-if="currentShop" @click="copyToClipboard(JSON.stringify(currentShop, null, 2), '店铺')" class="copy-btn">复制</button>
+          <span v-if="copyTip.show && copyTip.section === '店铺'" class="copy-tip">✓ 已复制</span>
+        </div>
+        <pre v-if="currentShop" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentShop, null, 2) }}</pre>
         <div v-else class="empty-data">未选择店铺</div>
       </div>
       <div class="debug-section">
-        <h4>仓库信息</h4>
-        <pre v-if="currentWarehouse">{{ JSON.stringify(currentWarehouse, null, 2) }}</pre>
+        <div class="section-header">
+          <h4>仓库信息</h4>
+          <button v-if="currentWarehouse" @click="copyToClipboard(JSON.stringify(currentWarehouse, null, 2), '仓库')" class="copy-btn">复制</button>
+          <span v-if="copyTip.show && copyTip.section === '仓库'" class="copy-tip">✓ 已复制</span>
+        </div>
+        <pre v-if="currentWarehouse" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentWarehouse, null, 2) }}</pre>
         <div v-else class="empty-data">未选择仓库</div>
       </div>
     </div>
@@ -269,6 +329,8 @@ body {
   padding: 15px;
   border-bottom: 1px solid #37474f;
   overflow-x: auto;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .debug-panel h3 {
@@ -282,6 +344,7 @@ body {
   padding: 10px;
   background-color: #37474f;
   border-radius: 4px;
+  position: relative;
 }
 
 .debug-section h4 {
@@ -303,5 +366,67 @@ body {
 .empty-data {
   color: #ff9800;
   font-style: italic;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.copy-btn {
+  background-color: #673ab7;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.3s;
+}
+
+.copy-btn:hover {
+  background-color: #7e57c2;
+}
+
+.json-display {
+  background-color: #1c2731;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #8bc34a;
+  user-select: all;
+  cursor: pointer;
+  position: relative;
+}
+
+.json-display::after {
+  content: '点击复制';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.json-display:hover::after {
+  opacity: 1;
+}
+
+.copy-tip {
+  margin-left: 10px;
+  color: #8bc34a;
+  font-size: 12px;
+  font-weight: bold;
 }
 </style>
