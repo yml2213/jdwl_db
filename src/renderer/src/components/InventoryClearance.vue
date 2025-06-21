@@ -161,6 +161,13 @@ const handleAddTask = () => {
     return
   }
 
+  // 获取事业部信息
+  const deptInfo = getSelectedDepartment()
+  if (!deptInfo) {
+    alert('未找到事业部信息')
+    return
+  }
+
   if (!form.value.options.clearStockAllocation && !form.value.options.cancelJpSearch) {
     alert('请至少选择一个功能选项')
     return
@@ -183,7 +190,9 @@ const handleAddTask = () => {
       创建时间: timestamp,
       状态: '等待中',
       结果: '',
-      选项: wholeStoreOptions
+      选项: wholeStoreOptions,
+      店铺信息: shopInfo,
+      事业部信息: deptInfo
     }
     addTaskToList(task)
     console.log('添加整店任务成功:', task)
@@ -207,7 +216,9 @@ const handleAddTask = () => {
         创建时间: timestamp,
         状态: '等待中',
         结果: '',
-        选项: JSON.parse(JSON.stringify(form.value.options))
+        选项: JSON.parse(JSON.stringify(form.value.options)),
+        店铺信息: shopInfo,
+        事业部信息: deptInfo
       }
       addTaskToList(task)
       console.log(`添加批次${i / BATCH_SIZE + 1}任务成功, 包含${batch.length}个SKU`)

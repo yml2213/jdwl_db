@@ -111,6 +111,19 @@ export async function executeOneTask(task, shopInfo, options) {
 
         // 添加店铺信息到任务中
         task.店铺信息 = shopInfo
+        
+        // 如果任务中已有事业部信息，则使用它，否则从参数中获取
+        if (!task.事业部信息) {
+          // 从localStorage获取事业部信息
+          const { getSelectedDepartment } = require('../../utils/storageHelper')
+          const deptInfo = getSelectedDepartment()
+          if (deptInfo) {
+            task.事业部信息 = deptInfo
+            console.log('从localStorage获取并添加事业部信息到任务中:', deptInfo)
+          } else {
+            console.warn('未找到事业部信息')
+          }
+        }
 
         // 使用取消京配打标功能模块处理整店操作
         const cancelResult = await cancelJpSearchFeature.execute(['WHOLE_STORE'], task, window.addTaskToList)
