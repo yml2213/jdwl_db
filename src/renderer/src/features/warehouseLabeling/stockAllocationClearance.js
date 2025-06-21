@@ -174,8 +174,8 @@ export default {
         throw new Error('未提供店铺信息，无法执行整店清零');
       }
 
-      // 调用整店清零API
-      const clearanceResult = await this.uploadStockAllocationClearanceData(['WHOLE_STORE'], shopInfo);
+      // 调用整店清零API - 优先使用直接API调用
+      const clearanceResult = await this._callResetGoodsStockRatioAPI(shopInfo);
       
       // 记录处理结果
       const endTime = new Date();
@@ -184,10 +184,11 @@ export default {
       // 根据上传结果设置成功/失败状态
       result.success = clearanceResult.success;
       result.message = clearanceResult.message;
+      result.isTimeLimit = clearanceResult.isTimeLimit; // 传递频率限制标记
       result.results.push(result.message);
       
       result.clearanceLogs.push({
-        type: clearanceResult.success ? 'success' : 'error',
+        type: clearanceResult.success ? 'success' : (clearanceResult.isTimeLimit ? 'warning' : 'error'),
         message: result.message,
         time: endTime.toLocaleString(),
         processingTime
@@ -195,8 +196,14 @@ export default {
       
       // 更新任务状态
       if (task) {
-        task.状态 = clearanceResult.success ? '成功' : '失败';
-        task.结果 = result.results;
+        // 检查是否是频率限制错误
+        if (!clearanceResult.success && clearanceResult.isTimeLimit) {
+          task.状态 = '频率限制';
+          task.结果 = result.message;
+        } else {
+          task.状态 = clearanceResult.success ? '成功' : '失败';
+          task.结果 = result.results;
+        }
         task.clearanceLogs = result.clearanceLogs;
       }
       
@@ -553,6 +560,103 @@ export default {
         processedCount: 0,
         failedCount: isWholeStore ? 'all' : skuList.length,
         error
+      }
+    }
+  },
+
+  /**
+   * 调用resetGoodsStockRatio API（整店清零）
+   * @param {Object} shopInfo 店铺信息
+   * @returns {Object} API调用结果
+   */
+  async _callResetGoodsStockRatioAPI(shopInfo) {
+    try {
+      // 获取所有cookies并构建cookie字符串
+      const cookies = await getAllCookies()
+      const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+      
+      // 从cookie中获取csrfToken
+      const csrfTokenCookie = cookies.find(cookie => cookie.name === 'csrfToken')
+      const csrfToken = csrfTokenCookie ? csrfTokenCookie.value : ''
+      
+      if (!csrfToken) {
+        console.error('未找到csrfToken，无法执行整店清零')
+        return {
+          success: false,
+          message: '未找到csrfToken，无法执行整店清零'
+        }
+      }
+      
+      // 从shopInfo中提取shopId
+      const shopId = shopInfo.id || shopInfo.shopNo.replace('CSP00', '')
+      
+      // 获取当前选择的部门信息
+      const department = getSelectedDepartment() || {}
+      const deptId = department.id || department.deptNo.replace('CBU', '')
+      
+      if (!shopId || !deptId) {
+        console.error('店铺ID或部门ID无效，无法执行整店清零')
+        return {
+          success: false,
+          message: '店铺ID或部门ID无效，无法执行整店清零'
+        }
+      }
+
+      console.log(`执行整店清零API调用，店铺ID: ${shopId}, 部门ID: ${deptId}, csrfToken: ${csrfToken}`)
+      
+      // 构建请求URL
+      const url = `https://o.jdl.com/goodsStockConfig/resetGoodsStockRatio.do?csrfToken=${csrfToken}&shopId=${shopId}&deptId=${deptId}&_r=${Math.random()}`
+      
+      // 发送请求
+      const response = await window.api.sendRequest(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+          'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'priority': 'u=1, i',
+          'referer': 'https://o.jdl.com/goToMainIframe.do',
+          'sec-ch-ua': '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
+          'x-requested-with': 'XMLHttpRequest',
+          'Cookie': cookieString
+        }
+      })
+
+      console.log('整店清零API响应:', response)
+
+      // 检查响应 - 注意这个API的成功响应是resultCode为1，而不是success字段
+      if (response && (response.resultCode === 1 || response.resultCode === '1' || response.resultMessage === '操作成功！')) {
+        return {
+          success: true,
+          message: `成功清空店铺 ${shopInfo.shopName} 的所有SKU库存分配`
+        }
+      } else {
+        // 检查是否是频率限制错误
+        let isTimeLimit = false
+        let errorMsg = response && response.resultMessage ? response.resultMessage : '未知错误'
+        
+        if (errorMsg.includes('5分钟内不要频繁操作')) {
+          isTimeLimit = true
+          errorMsg = '5分钟内不要频繁操作！'
+        }
+        
+        return {
+          success: false,
+          message: errorMsg,
+          isTimeLimit: isTimeLimit
+        }
+      }
+    } catch (error) {
+      console.error('调用整店清零API失败:', error)
+      return {
+        success: false,
+        message: `API调用失败: ${error.message || '未知错误'}`
       }
     }
   },
