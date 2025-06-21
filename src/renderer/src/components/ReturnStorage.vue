@@ -9,8 +9,8 @@ import {
 import { getShopList } from '../services/apiService'
 
 // 导入任务执行器和工具函数
-import { executeOneTask, executeTasks } from '../features/warehouseLabeling/taskExecutor'
 import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
+import { executeReturnStorage } from '../features/warehouseLabeling/returnStorage'
 
 // 导入拆分的组件
 import TaskArea from './warehouse/TaskArea.vue'
@@ -158,11 +158,27 @@ const handleExecuteOneTask = async (task) => {
     return
   }
 
-  // 使用任务执行器模块执行任务
+  // 使用专用的退货入库执行器执行任务
   try {
-    await executeOneTask(task, shopInfo)
+    // 更新任务状态
+    task.状态 = '执行中'
+    task.结果 = '正在处理...'
+    
+    // 执行退货入库流程
+    const result = await executeReturnStorage(task, shopInfo)
+    
+    // 根据执行结果更新任务状态
+    if (result.success) {
+      task.状态 = '成功'
+    } else {
+      task.状态 = '失败'
+    }
+    
+    task.结果 = result.message
   } catch (error) {
     console.error('执行任务失败:', error)
+    task.状态 = '失败'
+    task.结果 = `执行失败: ${error.message || '未知错误'}`
     alert(`执行任务失败: ${error.message || '未知错误'}`)
   }
 }
@@ -207,15 +223,40 @@ const executeTask = async () => {
     return
   }
 
-  // 使用任务执行器执行所有任务
+  // 批量执行退货入库任务
   try {
-    const result = await executeTasks(
-      tasksToExecute,
-      shopInfo
-    )
+    let successCount = 0
+    let failureCount = 0
+    
+    // 逐个执行任务
+    for (const task of tasksToExecute) {
+      try {
+        // 更新任务状态
+        task.状态 = '执行中'
+        task.结果 = '正在处理...'
+        
+        // 执行退货入库流程
+        const result = await executeReturnStorage(task, shopInfo)
+        
+        if (result.success) {
+          successCount++
+          task.状态 = '成功'
+        } else {
+          failureCount++
+          task.状态 = '失败'
+        }
+        
+        task.结果 = result.message
+      } catch (error) {
+        console.error(`任务执行失败: ${task.orderNumber}`, error)
+        failureCount++
+        task.状态 = '失败'
+        task.结果 = `执行失败: ${error.message || '未知错误'}`
+      }
+    }
 
     // 显示执行结果
-    alert(result.message)
+    alert(`任务执行完成: 成功 ${successCount} 个, 失败 ${failureCount} 个`)
   } catch (error) {
     console.error('批量执行任务失败:', error)
     alert(`批量执行任务失败: ${error.message || '未知错误'}`)
@@ -233,7 +274,7 @@ const importFromClipboard = async () => {
   }
 }
 
-// 添加任务的处理函数
+  // 添加任务的处理函数
 const handleAddTask = () => {
   // 验证必填项
   if (!form.value.orderNumber.trim()) {
@@ -241,11 +282,8 @@ const handleAddTask = () => {
     return;
   }
 
-  if (!form.value.returnReason.trim()) {
-    alert('请输入退货原因');
-    return;
-  }
-
+  // 退货原因不是必填项
+  
   // 获取当前店铺信息
   const shopInfo = currentShopInfo.value
   if (!shopInfo) {
@@ -325,8 +363,9 @@ provide('importFromClipboard', importFromClipboard)
         </div>
         
         <div class="form-group">
-          <label class="form-label">退货原因:</label>
-          <input type="text" v-model="form.returnReason" placeholder="请输入退货原因" class="reason-input" />
+          <label class="form-label">退货原因: <span class="optional-label">(可选)</span></label>
+          <input type="text" v-model="form.returnReason" placeholder="可选填写退货原因" class="reason-input" />
+          <div class="form-tip">退货原因可以为空，如有特殊情况可填写</div>
         </div>
         
         <div class="form-group">
@@ -435,5 +474,18 @@ provide('importFromClipboard', importFromClipboard)
 /* 按钮悬停效果 */
 .btn:hover {
   opacity: 0.9;
+}
+
+.optional-label {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+}
+
+.form-tip {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.2;
 }
 </style>
