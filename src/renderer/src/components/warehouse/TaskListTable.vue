@@ -38,9 +38,27 @@
           <span v-else-if="task.状态 === '频率限制'" class="warning-text result-text">{{
             task.结果 || '5分钟内不要频繁操作'
           }}</span>
-          <span v-else-if="task.状态 === '失败'" class="error-text result-text">{{
-            task.结果 || '失败'
-          }}</span>
+          <div v-else-if="task.状态 === '失败'" class="error-container">
+            <span class="error-text result-text">
+              <span v-if="task.errorCode" class="error-code">[错误码: {{ task.errorCode }}]</span>
+              {{ task.结果 || '失败' }}
+            </span>
+            <button 
+              v-if="task.结果 && task.结果.length > 30" 
+              @click="toggleErrorDetail(index)" 
+              class="btn-link error-toggle"
+            >
+              {{ isErrorExpanded(index) ? '收起' : '详情' }}
+            </button>
+            <div v-if="isErrorExpanded(index)" class="error-details">
+              <div class="error-detail-title">错误详情:</div>
+              <div class="error-detail-content">{{ task.结果 || '失败' }}</div>
+              <div v-if="task.errorData" class="error-detail-data">
+                <div class="error-detail-title">额外信息:</div>
+                <pre>{{ typeof task.errorData === 'object' ? JSON.stringify(task.errorData, null, 2) : task.errorData }}</pre>
+              </div>
+            </div>
+          </div>
           <span v-else-if="task.状态 === '部分成功'" class="warning-text result-text">{{
             task.结果 || '部分成功'
           }}</span>
@@ -275,6 +293,22 @@ const emit = defineEmits(['execute-one', 'delete-task'])
 
 const selectedTasks = ref([])
 const expandedTasks = ref([]) // 跟踪展开的任务
+const expandedErrors = ref([]) // 跟踪展开的错误详情
+
+// 切换错误详情显示
+const toggleErrorDetail = (index) => {
+  const position = expandedErrors.value.indexOf(index)
+  if (position > -1) {
+    expandedErrors.value.splice(position, 1)
+  } else {
+    expandedErrors.value.push(index)
+  }
+}
+
+// 判断错误详情是否展开
+const isErrorExpanded = (index) => {
+  return expandedErrors.value.includes(index)
+}
 
 // 计算属性：获取需要展示日志的任务索引
 const tasksWithExpandedLogs = computed(() => {
@@ -437,6 +471,73 @@ const deleteTask = (index) => {
 /* 为长文本优化显示 */
 .result-text {
   max-width: 320px;
+}
+
+.error-container {
+  position: relative;
+}
+
+.error-toggle {
+  background: none;
+  border: none;
+  color: #2196f3;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #2196f3;
+}
+
+.error-details {
+  margin-top: 5px;
+  padding: 8px 12px;
+  background-color: #ffebee;
+  border: 1px solid #ffcdd2;
+  border-radius: 4px;
+  color: #d32f2f;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.error-code {
+  background-color: #ff5252;
+  color: white;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  margin-right: 5px;
+}
+
+.error-detail-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.error-detail-content {
+  margin-bottom: 10px;
+}
+
+.error-detail-data {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #ffcdd2;
+}
+
+.error-detail-data pre {
+  background-color: #fff5f5;
+  padding: 5px;
+  border-radius: 3px;
+  margin: 0;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.result-text {
   white-space: normal;
   word-break: break-word;
   line-height: 1.4;

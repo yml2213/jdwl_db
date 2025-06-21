@@ -224,10 +224,23 @@ export async function submitReturnStorage(soNo, deptNo, reason, goodsItems) {
         message: response.msg || '退货入库申请提交成功'
       }
     } else {
-      return {
-        success: false,
-        data: response,
-        message: response.msg || '退货入库申请提交失败'
+      // 处理不同错误码的情况
+      if (response && response.resultCode === 2) {
+        // 退货单已存在的情况，可能是重复提交
+        return {
+          success: false,
+          data: response,
+          message: `退货单已存在: ${response.resultData || ''}，${response.resultMessage || ''}`,
+          errorCode: response.resultCode
+        }
+      } else {
+        return {
+          success: false,
+          data: response,
+          // 优先使用resultMessage，再尝试msg字段
+          message: response?.resultMessage || response?.msg || '退货入库申请提交失败',
+          errorCode: response?.resultCode
+        }
       }
     }
   } catch (error) {
@@ -288,14 +301,41 @@ export async function executeReturnStorage(task, shopInfo) {
       task.结果 = submitResult.message
       return { success: true, message: submitResult.message }
     } else {
+      // 失败情况 - 记录更多错误详情以便显示
       task.状态 = '失败'
       task.结果 = submitResult.message
-      return { success: false, message: submitResult.message }
+      
+      // 添加额外的错误信息
+      if (submitResult.errorCode) {
+        task.errorCode = submitResult.errorCode
+      }
+      
+      // 保存额外数据以便在详情中显示
+      if (submitResult.data && typeof submitResult.data === 'object') {
+        task.errorData = submitResult.data
+      }
+      
+      return { 
+        success: false, 
+        message: submitResult.message,
+        errorCode: submitResult.errorCode,
+        errorData: submitResult.data
+      }
     }
   } catch (error) {
     console.error('执行退货入库任务失败:', error)
     task.状态 = '失败'
     task.结果 = `执行失败: ${error.message || '未知错误'}`
-    return { success: false, message: task.结果 }
+    
+    // 添加详细的错误信息
+    if (error.stack) {
+      task.errorData = error.stack
+    }
+    
+    return { 
+      success: false, 
+      message: task.结果,
+      errorData: error.stack
+    }
   }
 } 
