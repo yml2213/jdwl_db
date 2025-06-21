@@ -13,7 +13,6 @@ import { executeOneTask, executeTasks } from '../features/warehouseLabeling/task
 import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
 
 // 导入拆分的组件
-import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
 const props = defineProps({
@@ -24,22 +23,11 @@ const emit = defineEmits(['shop-change', 'add-task', 'execute-task', 'clear-task
 
 // 表单数据
 const form = ref({
-  inputType: 'single', // 'single' 或 'store'
-  sku: '',
-  options: {
-    clearStockAllocation: true,
-    cancelJdDeliveryTag: false
-  },
+  orderNumber: '',
+  year: new Date().getFullYear().toString(),
+  returnReason: '',
   selectedStore: '',
-  autoStart: false,
-  enableAutoUpload: false,
-  fileImport: {
-    file: null,
-    fileName: '',
-    importing: false,
-    importError: '',
-    importSuccess: false
-  }
+  autoStart: false
 })
 
 // 任务列表
@@ -141,10 +129,10 @@ watch(
 // 组件挂载时，如果已登录则加载数据
 onMounted(() => {
   // 暴露taskList到window对象，供其他模块访问
-  window.clearStorageTaskList = taskList.value
+  window.returnStorageTaskList = taskList.value
 
   // 暴露addTaskToList方法到window对象，供批次处理使用
-  window.addClearStorageTaskToList = addTaskToList
+  window.addReturnStorageTaskToList = addTaskToList
 
   // 加载店铺列表
   if (props.isLoggedIn) {
@@ -154,8 +142,8 @@ onMounted(() => {
 
 // 确保在组件卸载时清理全局引用
 onUnmounted(() => {
-  window.clearStorageTaskList = null
-  window.addClearStorageTaskToList = null
+  window.returnStorageTaskList = null
+  window.addReturnStorageTaskToList = null
 })
 
 // 执行单个任务
@@ -170,24 +158,19 @@ const handleExecuteOneTask = async (task) => {
     return
   }
 
-  // 获取任务中存储的选项
-  const options = task.选项
-    ? JSON.parse(JSON.stringify(task.选项))
-    : JSON.parse(JSON.stringify(form.value.options))
-
   // 使用任务执行器模块执行任务
   try {
-    await executeOneTask(task, shopInfo, options)
+    await executeOneTask(task, shopInfo)
   } catch (error) {
     console.error('执行任务失败:', error)
     alert(`执行任务失败: ${error.message || '未知错误'}`)
   }
 }
 
-// 添加任务到任务列表 - 用于批次任务
+// 添加任务到任务列表
 const addTaskToList = (task) => {
   if (!task) return
-  console.log('添加批次任务到任务列表:', task)
+  console.log('添加任务到任务列表:', task)
 
   // 检查是否是更新现有任务
   const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
@@ -200,7 +183,7 @@ const addTaskToList = (task) => {
   }
 
   // 更新window.taskList
-  window.clearStorageTaskList = taskList.value
+  window.returnStorageTaskList = taskList.value
 
   // 触发添加任务事件
   emit('add-task', task)
@@ -228,10 +211,7 @@ const executeTask = async () => {
   try {
     const result = await executeTasks(
       tasksToExecute,
-      shopInfo,
-      0, // 没有等待时间
-      null, // 没有禁用产品
-      form.value.options
+      shopInfo
     )
 
     // 显示执行结果
@@ -242,11 +222,32 @@ const executeTask = async () => {
   }
 }
 
+// 从剪贴板导入
+const importFromClipboard = async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    form.value.orderNumber = text.trim();
+  } catch (err) {
+    console.error('无法读取剪贴板内容:', err);
+    alert('无法读取剪贴板内容');
+  }
+}
+
 // 添加任务的处理函数
 const handleAddTask = () => {
+  // 验证必填项
+  if (!form.value.orderNumber.trim()) {
+    alert('请输入订单号');
+    return;
+  }
+
+  if (!form.value.returnReason.trim()) {
+    alert('请输入退货原因');
+    return;
+  }
+
   // 获取当前店铺信息
   const shopInfo = currentShopInfo.value
-
   if (!shopInfo) {
     alert('请选择店铺')
     return
@@ -255,112 +256,30 @@ const handleAddTask = () => {
   // 创建日期时间标记
   const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
-  // 根据输入类型处理
-  if (form.value.inputType === 'single') {
-    // 单个SKU输入模式
-    // 检查是否有输入的SKU
-    if (!form.value.sku.trim()) {
-      alert('请输入SKU')
-      return
-    }
-
-    const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
-    if (skuList.length === 0) {
-      alert('请输入有效的SKU')
-      return
-    }
-
-    // 将SKU列表按2000个一组进行分割
-    const BATCH_SIZE = 2000
-    const skuGroups = []
-    for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
-      skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
-    }
-
-    // 为每个组创建一个任务
-    skuGroups.forEach((group, index) => {
-      const groupNumber = index + 1
-      const task = {
-        sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
-        skuList: group, // 存储该组的所有SKU
-        店铺: shopInfo ? shopInfo.shopName : '未选择',
-        创建时间: timestamp,
-        状态: '等待中',
-        结果: '',
-        选项: JSON.parse(JSON.stringify(form.value.options)),
-        importLogs: [
-          {
-            type: 'batch-info',
-            message: `批次${groupNumber}/${skuGroups.length} - 包含${group.length}个SKU`,
-            timestamp: new Date().toLocaleString()
-          }
-        ]
-      }
-
-      // 添加任务到任务列表
-      addTaskToList(task)
-    })
-  } else {
-    // 整店SKU模式
-    const task = {
-      sku: `整店操作 - ${shopInfo.shopName}`,
-      isWholeStore: true, // 标记为整店操作
-      店铺: shopInfo.shopName,
-      创建时间: timestamp,
-      状态: '等待中',
-      结果: '',
-      选项: JSON.parse(JSON.stringify(form.value.options)),
-      importLogs: [
-        {
-          type: 'batch-info',
-          message: `整店操作 - ${shopInfo.shopName}`,
-          timestamp: new Date().toLocaleString()
-        }
-      ]
-    }
-
-    // 添加任务到任务列表
-    addTaskToList(task)
+  // 创建新任务
+  const task = {
+    id: `return-storage-${Date.now()}`,
+    orderNumber: form.value.orderNumber.trim(),
+    year: form.value.year,
+    returnReason: form.value.returnReason,
+    店铺: shopInfo.shopName,
+    创建时间: timestamp,
+    状态: '等待中',
+    结果: '',
+    店铺信息: shopInfo
   }
+
+  // 添加任务到任务列表
+  addTaskToList(task)
+
+  // 清空表单
+  form.value.orderNumber = '';
+  form.value.returnReason = '';
 
   // 如果启用了自动开始，自动执行任务
   if (form.value.autoStart) {
     executeTask()
   }
-}
-
-// 处理文件变更的函数
-const handleFileChange = (file) => {
-  console.log('文件已变更', file.name)
-
-  if (!file || !file.name.endsWith('.txt')) {
-    alert('请选择有效的.txt文件')
-    return
-  }
-
-  // 读取txt文件内容
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const content = e.target.result
-    // 获取文件内容，按行分割并移除空行
-    const skuList = content.split(/\r?\n/).filter((line) => line.trim())
-    if (skuList.length > 0) {
-      // 将SKU列表设置到表单中
-      form.value.sku = skuList.join('\n')
-    } else {
-      alert('文件内容为空或格式不正确')
-    }
-  }
-  reader.onerror = () => {
-    alert('读取文件失败')
-  }
-  reader.readAsText(file)
-}
-
-// 清除文件选择的函数
-const handleClearFile = () => {
-  // 清除文件的实现
-  console.log('清除文件选择')
 }
 
 // 删除任务
@@ -379,20 +298,41 @@ provide('currentShopInfo', currentShopInfo)
 // 提供方法
 provide('handleAddTask', handleAddTask)
 provide('handleStoreChange', handleStoreChange)
-provide('handleFileChange', handleFileChange)
-provide('handleClearFile', handleClearFile)
 provide('executeTask', executeTask)
 provide('clearTasks', clearTasks)
 provide('handleExecuteOneTask', handleExecuteOneTask)
 provide('handleDeleteTask', handleDeleteTask)
 provide('getStatusClass', getStatusClass)
+provide('importFromClipboard', importFromClipboard)
 </script>
 
 <template>
-  <div class="clear-storage" v-if="props.isLoggedIn">
+  <div class="return-storage" v-if="props.isLoggedIn">
     <div class="content-wrapper">
       <!-- 左侧操作区域 -->
-      <clear-storage-operation-area />
+      <div class="operation-area">
+        <div class="form-group">
+          <label class="form-label">输入单号:</label>
+          <div class="input-with-button">
+            <input type="text" v-model="form.orderNumber" placeholder="请输入订单号或导入订单号" />
+            <button class="btn btn-clipboard" @click="importFromClipboard">从剪贴板导入</button>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">年份:</label>
+          <input type="text" v-model="form.year" class="year-input" />
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">退货原因:</label>
+          <input type="text" v-model="form.returnReason" placeholder="请输入退货原因" class="reason-input" />
+        </div>
+        
+        <div class="form-group">
+          <button class="btn btn-add-task" @click="handleAddTask">添加任务</button>
+        </div>
+      </div>
 
       <!-- 右侧任务列表区域 -->
       <task-area
@@ -408,10 +348,92 @@ provide('getStatusClass', getStatusClass)
 </template>
 
 <style scoped>
-/* 主内容布局 */
+.return-storage {
+  height: 100%;
+}
+
 .content-wrapper {
   display: flex;
-  padding: 0;
   height: calc(100vh - 120px);
+}
+
+.operation-area {
+  flex: 0 0 350px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  overflow-y: auto;
+  border-right: 1px solid #dee2e6;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.input-with-button {
+  display: flex;
+}
+
+.input-with-button input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px 0 0 4px;
+  outline: none;
+}
+
+.btn-clipboard {
+  background-color: #409eff;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+}
+
+.year-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  outline: none;
+}
+
+.reason-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  outline: none;
+}
+
+.btn-add-task {
+  width: 100%;
+  background-color: #67c23a;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.login-required {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 18px;
+  color: #909399;
+}
+
+/* 按钮悬停效果 */
+.btn:hover {
+  opacity: 0.9;
 }
 </style>
