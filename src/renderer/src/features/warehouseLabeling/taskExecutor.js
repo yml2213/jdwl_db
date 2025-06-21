@@ -13,6 +13,7 @@ import { enableShopProducts, clearStockAllocation, cancelJdDeliveryTag } from '.
 import {
   extractTaskSkuList
 } from './utils/taskUtils'
+import { getSelectedDepartment } from '../../utils/storageHelper'
 
 /**
  * 执行单个任务
@@ -43,7 +44,6 @@ export async function executeOneTask(task, shopInfo, options = {}) {
     let taskDeptInfo = task.事业部信息
     if (!taskDeptInfo) {
       // 如果任务没有事业部信息，尝试从localStorage获取
-      const { getSelectedDepartment } = require('../../utils/storageHelper')
       taskDeptInfo = getSelectedDepartment()
       console.log('从localStorage获取事业部信息:', taskDeptInfo)
       // 将获取到的事业部信息保存到任务中
