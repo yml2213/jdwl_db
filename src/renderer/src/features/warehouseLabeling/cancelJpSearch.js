@@ -614,8 +614,113 @@ export default {
       console.error('上传取消京配打标数据失败:', error)
       return {
         success: false,
-        message: `上传取消京配打标数据失败: ${error.message || '未知错误'}`
+        message: `上传失败: ${error.message || '未知错误'}`,
+        failedCount: csgList.length
       }
     }
-  }
+  },
+
+  /**
+   * 创建Excel数据
+   * @param {Array<string>} csgList - CSG列表
+   * @returns {Array<Array<string>>} Excel数据
+   */
+  createExcelData(csgList) {
+    // 表头 - 确保格式与要求一致
+    const header = ['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）']
+
+    // 数据行
+    const rows = csgList.map(csg => [csg, '0'])
+
+    // 返回包含表头的数据
+    return [header, ...rows]
+  },
+
+  /**
+   * 将数据转换为Excel文件
+   * @param {Array<Array<string>>} data - Excel数据
+   * @returns {Promise<File>} Excel文件
+   */
+  async convertToExcelFile(data) {
+    // 创建工作表
+    const ws = XLSX.utils.aoa_to_sheet(data)
+
+    // 创建工作簿并添加工作表
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+
+    // 设置一些常用的单元格样式
+    if (!wb.Workbook) wb.Workbook = {}
+    if (!wb.Workbook.Sheets) wb.Workbook.Sheets = {}
+    if (!wb.Workbook.Sheets['Sheet1']) wb.Workbook.Sheets['Sheet1'] = {}
+
+    // 指定xls格式生成Excel二进制数据
+    const excelBinary = XLSX.write(wb, {
+      bookType: 'xls',
+      type: 'binary',
+      compression: true,
+      bookSST: false
+    })
+
+    // 将二进制字符串转换为ArrayBuffer
+    const buf = new ArrayBuffer(excelBinary.length)
+    const view = new Uint8Array(buf)
+    for (let i = 0; i < excelBinary.length; i++) {
+      view[i] = excelBinary.charCodeAt(i) & 0xff
+    }
+
+    console.log('Excel文件生成完成，大小:', buf.byteLength, 'bytes')
+
+    // 创建File对象
+    return new File([buf], 'updateShopGoodsJpSearchImportTemplate.xls', {
+      type: 'application/vnd.ms-excel'
+    })
+  },
+
+    /**
+   * 序列化FormData对象
+   * @param {FormData} formData - FormData对象
+   * @returns {Promise<Object>} 序列化后的FormData对象
+   */
+    async serializeFormData(formData) {
+      const entries = []
+  
+      // 遍历FormData中的每个字段
+      for (const pair of formData.entries()) {
+        const [key, value] = pair
+  
+        // 如果是文件，需要特殊处理
+        if (value instanceof File || value instanceof Blob) {
+          // 转换文件为ArrayBuffer
+          const buffer = await value.arrayBuffer()
+  
+          // 创建序列化文件对象
+          entries.push([
+            key,
+            {
+              _isFile: true,
+              name: value.name,
+              type: value.type,
+              size: value.size,
+              lastModified: value instanceof File ? value.lastModified : null,
+              data: Array.from(new Uint8Array(buffer)) // 将ArrayBuffer转换为数组
+            }
+          ])
+        } else {
+          // 普通字段直接添加
+          entries.push([key, value])
+        }
+      }
+  
+      console.log('序列化FormData完成，包含', entries.length, '个字段')
+  
+      // 返回序列化的FormData对象
+      return {
+        _isFormData: true,
+        entries,
+        // 注意: 对于大量SKU处理，增加超时时间至120秒
+        timeout: 120000
+      }
+    }
+
 }
