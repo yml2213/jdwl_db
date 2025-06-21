@@ -87,30 +87,63 @@ async function sendRequest(url, options = {}) {
         const FormData = require('form-data')
         const formData = new FormData()
 
-        // 从传入的序列化FormData中获取数据
-        const formEntries = Object.entries(options.body)
-        console.log('FormData entries:', formEntries)
+        // 从传入的序列化FormData中获取entries数组
+        const { entries } = options.body
+        console.log('FormData entries类型:', typeof entries)
 
-        // 处理每个表单项
-        for (const [key, value] of formEntries) {
-          if (key === '_isFormData') continue; // 跳过标记字段
-
-          // 检查是否是文件对象
-          if (value && typeof value === 'object' && value.name && value.data) {
-            // 处理文件：从数组数据中创建buffer
-            const fileBuffer = Buffer.from(value.data)
-            formData.append(key, fileBuffer, {
-              filename: value.name,
-              contentType: value.type || 'application/octet-stream'
-            })
-            console.log(
-              `添加文件到FormData: ${key}, 文件名: ${value.name}, 大小: ${fileBuffer.length} bytes`
-            )
-          } else {
-            // 处理普通字段
-            formData.append(key, value)
-            console.log(`添加字段到FormData: ${key}, 值: ${value}`)
+        if (Array.isArray(entries)) {
+          // 处理数组格式的entries
+          console.log('处理数组格式的FormData entries, 长度:', entries.length)
+          
+          for (const entry of entries) {
+            if (!Array.isArray(entry) || entry.length !== 2) {
+              console.error('无效的FormData entry格式:', entry)
+              continue
+            }
+            
+            const [key, value] = entry
+            
+            // 检查是否是文件对象
+            if (value && typeof value === 'object' && value._isFile) {
+              // 处理文件：从数组数据中创建buffer
+              const fileBuffer = Buffer.from(value.data)
+              formData.append(key, fileBuffer, {
+                filename: value.name,
+                contentType: value.type || 'application/octet-stream'
+              })
+              console.log(
+                `添加文件到FormData: ${key}, 文件名: ${value.name}, 大小: ${fileBuffer.length} bytes`
+              )
+            } else {
+              // 处理普通字段
+              formData.append(key, value)
+              console.log(`添加字段到FormData: ${key}, 值: ${value}`)
+            }
           }
+        } else if (typeof entries === 'object') {
+          // 处理对象格式的entries
+          console.log('处理对象格式的FormData entries')
+          
+          for (const [key, value] of Object.entries(entries)) {
+            // 检查是否是文件对象
+            if (value && typeof value === 'object' && value._isFile) {
+              // 处理文件：从数组数据中创建buffer
+              const fileBuffer = Buffer.from(value.data)
+              formData.append(key, fileBuffer, {
+                filename: value.name,
+                contentType: value.type || 'application/octet-stream'
+              })
+              console.log(
+                `添加文件到FormData: ${key}, 文件名: ${value.name}, 大小: ${fileBuffer.length} bytes`
+              )
+            } else {
+              // 处理普通字段
+              formData.append(key, value)
+              console.log(`添加字段到FormData: ${key}, 值: ${value}`)
+            }
+          }
+        } else {
+          throw new Error('不支持的FormData格式')
         }
 
         // 使用FormData的getHeaders方法获取正确的headers

@@ -1,4 +1,4 @@
-import { getAllCookies } from '../../utils/cookieHelper'
+import { getAllCookies, getRequestHeaders } from '../../utils/cookieHelper'
 import * as XLSX from 'xlsx'
 import { getCSGList as getCSGListFromApi } from '../../services/apiService'
 
@@ -408,20 +408,37 @@ export default {
         throw new Error('无法获取csrfToken')
       }
 
+      console.log('准备上传Excel文件:', excelFile.name, excelFile.size, 'bytes')
+
       // 创建FormData
       const formData = new FormData()
       formData.append('csrfToken', csrfToken)
       formData.append('updateShopGoodsJpSearchListFile', excelFile, 'updateShopGoodsJpSearchImportTemplate.xls')
 
+      // 检查FormData内容
+      console.log('FormData已创建，包含以下字段:')
+      for (const pair of formData.entries()) {
+        console.log(
+          pair[0],
+          ':',
+          pair[1] instanceof File ? `文件对象 (${pair[1].name}, ${pair[1].size} bytes)` : pair[1]
+        )
+      }
+
       // 序列化FormData
       const serializedFormData = await this.serializeFormData(formData)
 
+      // 获取包含Cookie的请求头
+      const headers = await getRequestHeaders()
+
       // 发送请求
+      console.log('发送取消京配打标请求...')
       const response = await window.api.sendRequest(
         'https://o.jdl.com/shopGoods/importUpdateShopGoodsJpSearch.do?_r=' + Math.random(),
         {
           method: 'POST',
           headers: {
+            ...headers,
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
             'cache-control': 'no-cache',
@@ -469,8 +486,8 @@ export default {
    * @returns {Array<Array<string>>} Excel数据
    */
   createExcelData(csgList) {
-    // 表头
-    const header = ['店铺商品编号（CSG编码）', '是否京配（0-否，1-是）']
+    // 表头 - 确保格式与要求一致
+    const header = ['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）']
 
     // 数据行
     const rows = csgList.map(csg => [csg, '0'])
@@ -492,11 +509,17 @@ export default {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
 
-    // 生成Excel二进制数据
+    // 设置一些常用的单元格样式
+    if (!wb.Workbook) wb.Workbook = {}
+    if (!wb.Workbook.Sheets) wb.Workbook.Sheets = {}
+    if (!wb.Workbook.Sheets['Sheet1']) wb.Workbook.Sheets['Sheet1'] = {}
+
+    // 指定xls格式生成Excel二进制数据
     const excelBinary = XLSX.write(wb, {
       bookType: 'xls',
       type: 'binary',
-      compression: true
+      compression: true,
+      bookSST: false
     })
 
     // 将二进制字符串转换为ArrayBuffer
@@ -505,6 +528,8 @@ export default {
     for (let i = 0; i < excelBinary.length; i++) {
       view[i] = excelBinary.charCodeAt(i) & 0xff
     }
+
+    console.log('Excel文件生成完成，大小:', buf.byteLength, 'bytes')
 
     // 创建File对象
     return new File([buf], 'updateShopGoodsJpSearchImportTemplate.xls', {
@@ -547,10 +572,14 @@ export default {
       }
     }
 
+    console.log('序列化FormData完成，包含', entries.length, '个字段')
+
     // 返回序列化的FormData对象
     return {
       _isFormData: true,
-      entries
+      entries,
+      // 注意: 对于大量SKU处理，增加超时时间至120秒
+      timeout: 120000
     }
   }
 } 
