@@ -22,6 +22,14 @@
         @delete-task="(index) => $emit('delete-task', index)"
         @enable-products="(products) => $emit('enable-products', products)"
       />
+      <div v-if="taskList && taskList.length === 0" class="no-tasks">
+        <p>无任务数据，请先添加任务</p>
+        <p>任务数据状态: {{ JSON.stringify({
+          propsTask: props.taskList ? '有数据' : '无数据',
+          injectedTask: injectedTaskList.value ? '有数据' : '无数据',
+          combined: taskList.length
+        }) }}</p>
+      </div>
     </div>
 
     <div class="task-footer">
@@ -34,14 +42,14 @@
 </template>
 
 <script setup>
-import { inject, computed } from 'vue'
+import { inject, computed, ref } from 'vue'
 import TabPanel from './TabPanel.vue'
 
-// 接收任务列表作为props
+// 接收任务列表作为props或从注入中获取
 const props = defineProps({
   taskList: {
     type: Array,
-    default: () => []
+    default: null // 改为null允许我们检查是否传入了prop
   },
   getStatusClass: {
     type: Function,
@@ -53,6 +61,18 @@ const props = defineProps({
 const logs = inject('logs', [])
 const disabledProducts = inject('disabledProducts', { items: [], checking: false })
 const form = inject('form')
+const injectedTaskList = inject('taskList', ref([]))
+
+// 使用prop中的taskList，如果没有则使用注入的taskList
+const taskList = computed(() => {
+  console.log('TaskArea computed taskList:', { 
+    hasPropsList: !!props.taskList, 
+    propsListLength: props.taskList?.length ?? 'N/A',
+    hasInjectedList: !!injectedTaskList.value,
+    injectedListLength: injectedTaskList.value?.length ?? 'N/A'
+  })
+  return props.taskList || injectedTaskList.value
+})
 
 // 从表单数据中提取需要的值
 const autoStart = computed({
@@ -148,5 +168,12 @@ defineEmits(['execute', 'clear', 'open-web', 'execute-one', 'delete-task', 'enab
 
 .btn:hover {
   opacity: 0.9;
+}
+
+.no-tasks {
+  padding: 20px;
+  text-align: center;
+  color: #909399;
+  font-size: 14px;
 }
 </style>

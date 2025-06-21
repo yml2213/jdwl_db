@@ -33,7 +33,7 @@
 
     <div class="form-actions">
       <button class="btn btn-default">保存快捷</button>
-      <button class="btn btn-success" @click="handleAddTask">添加任务</button>
+      <button class="btn btn-success" @click="handleAddTaskClick">添加任务</button>
     </div>
   </div>
 </template>
@@ -60,6 +60,18 @@ const handleStoreChange = inject('handleStoreChange')
 const handleWarehouseChange = inject('handleWarehouseChange')
 const handleFileChange = inject('handleFileChange')
 const handleClearFile = inject('handleClearFile')
+
+// 添加任务按钮点击处理函数
+const handleAddTaskClick = () => {
+  console.log('OperationArea: 添加任务按钮被点击')
+  // 确保handleAddTask存在
+  if (typeof handleAddTask === 'function') {
+    handleAddTask()
+  } else {
+    console.error('handleAddTask 函数未正确注入')
+    alert('系统错误：添加任务功能不可用')
+  }
+}
 </script>
 
 <style scoped>

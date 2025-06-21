@@ -375,14 +375,29 @@ const addTaskToList = (task) => {
   if (!task) return
   console.log('添加批次任务到任务列表:', task)
 
-  // 检查是否是更新现有任务
-  const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
-  if (existingTaskIndex >= 0) {
-    // 更新现有任务
-    taskList.value[existingTaskIndex] = task
-  } else {
-    // 添加新任务
-    taskList.value.push(task)
+  try {
+    // 检查是否是更新现有任务
+    const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
+    if (existingTaskIndex >= 0) {
+      // 更新现有任务
+      taskList.value[existingTaskIndex] = task
+      console.log('更新现有任务成功，索引:', existingTaskIndex)
+    } else {
+      // 添加新任务
+      taskList.value.push(task)
+      console.log('添加新任务成功，当前任务数量:', taskList.value.length)
+      console.log('当前任务列表状态:', JSON.stringify({
+        type: typeof taskList.value,
+        isArray: Array.isArray(taskList.value),
+        length: taskList.value.length,
+        firstTask: taskList.value.length > 0 ? taskList.value[0].id : 'none'
+      }))
+    }
+    
+    // 强制更新任务列表引用，以确保变更被检测到
+    taskList.value = [...taskList.value]
+  } catch (error) {
+    console.error('添加任务到列表时出错:', error)
   }
 
   // 更新window.taskList
@@ -430,6 +445,8 @@ const executeTask = async () => {
 
 // 添加任务的处理函数
 const handleAddTask = () => {
+  console.log('添加任务按钮被点击')
+  
   // 检查是否有输入的SKU
   if (!form.value.sku.trim()) {
     alert('请输入SKU')
@@ -464,7 +481,9 @@ const handleAddTask = () => {
   // 为每个组创建一个任务
   skuGroups.forEach((group, index) => {
     const groupNumber = index + 1
+    const taskId = `task-${Date.now()}-${Math.floor(Math.random() * 10000)}`
     const task = {
+      id: taskId, // 添加唯一ID
       sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
       skuList: group, // 存储该组的所有SKU
       店铺: shopInfo ? shopInfo.shopName : '未选择',
@@ -539,7 +558,15 @@ const handleOpenLogisticsImporter = () => {
 
 // 使用provide向子组件提供数据和方法
 provide('form', form)
-provide('taskList', taskList)
+provide('taskList', computed(() => {
+  console.log('Providing taskList:', JSON.stringify({
+    type: typeof taskList.value,
+    isArray: Array.isArray(taskList.value),
+    length: taskList.value.length,
+    hasItems: taskList.value.length > 0
+  }))
+  return taskList.value
+}))
 provide('shopsList', shopsList)
 provide('isLoadingShops', isLoadingShops)
 provide('shopLoadError', shopLoadError)
@@ -580,6 +607,7 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
 
       <!-- 右侧任务列表区域 -->
       <task-area
+        :task-list="taskList.value"
         @execute="executeTask"
         @clear="clearTasks"
         @open-web="executeTask"
