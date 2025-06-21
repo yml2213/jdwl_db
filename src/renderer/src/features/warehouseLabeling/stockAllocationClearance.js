@@ -557,6 +557,10 @@ export default {
    * @returns {Array<Array<any>>} Excel数据
    */
   createExcelData(skuList, shopInfo) {
+    // 获取当前选择的部门信息
+    const department = getSelectedDepartment() || {}
+    const deptNo = department.deptNo || '' // 事业部编码，如CBU22010232593780
+    
     // 表头行，按照图片要求的顺序排列
     const headers = [
       '事业部编码',
@@ -567,22 +571,33 @@ export default {
       '库存比例/数值',
       '仓库编号'
     ]
+    
+    // 第二行说明文字
+    const descriptions = [
+      'CBU开头的事业部编码',
+      'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
+      '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
+      'CSP开头的店铺编码',
+      '纯数值\n1-独占\n2-共享\n3-固定值',
+      '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100\n库存方式为固定值时，填写',
+      '可空，只有在库存管理方式为3-固定值时，该取仓库编码，若为空则按全部仓库执行'
+    ]
 
     // 数据行 - 库存分配清零时，库存比例/数值设为0
     const rows = skuList.map((sku) => {
       return [
-        '', // 事业部编码（设为空）
-        '', // 主商品编码（CMG开头，设为空）
+        deptNo, // 事业部编码（CBU开头）
+        '', // 主商品编码（CMG开头）
         sku, // 商家商品标识（SKU）
-        shopInfo.shopNo, // 店铺编码
-        1, // 库存管理方式（默认为1-独占）
+        shopInfo.shopNo, // 店铺编码（CSP开头）
+        1, // 库存管理方式（1-独占）
         0, // 库存比例/数值（清零时设为0）
-        '' // 仓库编号（设为空）
+        '' // 仓库编号（可为空）
       ]
     })
 
-    // 合并表头和数据行
-    return [headers, ...rows]
+    // 合并表头、说明文字和数据行
+    return [headers, descriptions, ...rows]
   },
 
   /**
@@ -628,7 +643,9 @@ export default {
    */
   async serializeFormData(formData) {
     try {
-      const serialized = {}
+      const serialized = {
+        _isFormData: true // 添加标记，表明这是序列化的FormData
+      }
       
       for (const [key, value] of formData.entries()) {
         if (value instanceof File) {
@@ -640,9 +657,11 @@ export default {
             size: value.size,
             data: Array.from(new Uint8Array(arrayBuffer))
           }
+          console.log(`序列化文件: ${key}, 名称: ${value.name}, 大小: ${value.size}字节`)
         } else {
           // 处理普通值
           serialized[key] = value
+          console.log(`序列化字段: ${key}, 值: ${value}`)
         }
       }
       

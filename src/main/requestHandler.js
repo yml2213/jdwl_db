@@ -88,15 +88,15 @@ async function sendRequest(url, options = {}) {
         const formData = new FormData()
 
         // 从传入的序列化FormData中获取数据
-        const formEntries = options.body.entries || []
+        const formEntries = Object.entries(options.body)
         console.log('FormData entries:', formEntries)
 
         // 处理每个表单项
-        for (const entry of formEntries) {
-          const [key, value] = entry
+        for (const [key, value] of formEntries) {
+          if (key === '_isFormData') continue; // 跳过标记字段
 
           // 检查是否是文件对象
-          if (value && value._isFile) {
+          if (value && typeof value === 'object' && value.name && value.data) {
             // 处理文件：从数组数据中创建buffer
             const fileBuffer = Buffer.from(value.data)
             formData.append(key, fileBuffer, {
@@ -109,7 +109,7 @@ async function sendRequest(url, options = {}) {
           } else {
             // 处理普通字段
             formData.append(key, value)
-            // console.log(`添加字段到FormData: ${key}, 值: ${value}`)
+            console.log(`添加字段到FormData: ${key}, 值: ${value}`)
           }
         }
 
