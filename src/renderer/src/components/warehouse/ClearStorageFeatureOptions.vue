@@ -7,7 +7,7 @@
         <span>库存分配清零</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.cancelJdDeliveryTag" />
+        <input type="checkbox" v-model="options.cancelJpSearch" />
         <span>取消京配打标</span>
       </label>
     </div>
@@ -22,7 +22,7 @@ const props = defineProps({
     type: Object,
     default: () => ({
       clearStockAllocation: true,
-      cancelJdDeliveryTag: false
+      cancelJpSearch: false
     })
   }
 })

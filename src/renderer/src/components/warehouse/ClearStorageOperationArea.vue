@@ -32,7 +32,7 @@
           库存分配清零
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" v-model="form.options.cancelJdDeliveryTag" />
+          <input type="checkbox" v-model="form.options.cancelJpSearch" />
           取消京配打标
         </label>
       </div>

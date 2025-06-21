@@ -32,7 +32,7 @@ const form = ref({
   waitTime: 5,
   options: {
     clearStockAllocation: true,
-    cancelJdDeliveryTag: false
+    cancelJpSearch: false
   },
   selectedStore: '',
   autoStart: false
@@ -116,12 +116,16 @@ watch(() => props.isLoggedIn, (newVal) => {
 
 // 添加任务到列表的公共方法
 const addTaskToList = (task) => {
+  console.log('添加任务到列表:', task)
   const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
   if (existingTaskIndex >= 0) {
+    console.log('更新已存在的任务:', existingTaskIndex)
     taskList.value[existingTaskIndex] = task
   } else {
+    console.log('添加新任务到列表')
     taskList.value.push(task)
   }
+  console.log('当前任务列表长度:', taskList.value.length)
   window.taskList = taskList.value
   emit('add-task', task)
 }
@@ -157,7 +161,7 @@ const handleAddTask = () => {
     return
   }
 
-  if (!form.value.options.clearStockAllocation && !form.value.options.cancelJdDeliveryTag) {
+  if (!form.value.options.clearStockAllocation && !form.value.options.cancelJpSearch) {
     alert('请至少选择一个功能选项')
     return
   }
@@ -165,6 +169,12 @@ const handleAddTask = () => {
   const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
   if (form.value.mode === 'whole_store') {
+    // 为整店操作创建特殊的选项对象，将清零和取消京配打标转换为整店操作选项
+    const wholeStoreOptions = {
+      wholeStoreClearance: form.value.options.clearStockAllocation,
+      wholeCancelJpSearch: form.value.options.cancelJpSearch
+    }
+    
     const task = {
       id: `whole-store-${Date.now()}`,
       sku: '整店操作',
@@ -173,7 +183,7 @@ const handleAddTask = () => {
       创建时间: timestamp,
       状态: '等待中',
       结果: '',
-      选项: JSON.parse(JSON.stringify(form.value.options))
+      选项: wholeStoreOptions
     }
     addTaskToList(task)
     console.log('添加整店任务成功:', task)

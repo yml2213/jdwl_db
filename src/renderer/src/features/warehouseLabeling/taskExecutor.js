@@ -8,6 +8,7 @@ import importLogisticsPropsFeature from './importLogisticsProperties'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
 import stockAllocationClearanceFeature from './stockAllocationClearance'
+import cancelJpSearchFeature from './cancelJpSearch'
 import { enableShopProducts, clearStockAllocation, cancelJdDeliveryTag } from '../../services/apiService'
 import {
   extractTaskSkuList
@@ -103,8 +104,32 @@ export async function executeOneTask(task, shopInfo, options) {
       }
     }
 
-    // 清库下标：取消京配打标功能
-    if (options.cancelJdDeliveryTag === true) {
+    // 整店取消京配打标功能
+    if (options.wholeCancelJpSearch === true) {
+      try {
+        console.log('执行[整店取消京配打标]功能')
+
+        // 添加店铺信息到任务中
+        task.店铺信息 = shopInfo
+
+        // 使用取消京配打标功能模块处理整店操作
+        const cancelResult = await cancelJpSearchFeature.execute(['WHOLE_STORE'], task, window.addTaskToList)
+
+        if (cancelResult.success) {
+          functionResults.push(`整店取消京配打标: 成功 - ${cancelResult.message}`)
+        } else {
+          functionResults.push(`整店取消京配打标: 失败 - ${cancelResult.message || '取消失败'}`)
+          hasFailures = true
+        }
+      } catch (error) {
+        functionResults.push(`整店取消京配打标: 失败 - ${error.message || '未知错误'}`)
+        console.error('整店取消京配打标失败:', error)
+        hasFailures = true
+      }
+    }
+
+    // 取消京配打标功能
+    if (options.cancelJpSearch === true) {
       try {
         console.log('执行[取消京配打标]功能，SKU:', task.sku)
 
@@ -114,13 +139,16 @@ export async function executeOneTask(task, shopInfo, options) {
           throw new Error('没有有效的SKU')
         }
 
-        // 调用取消京配打标API
-        const result = await cancelJdDeliveryTag(skuList, shopInfo)
+        // 添加店铺信息到任务中
+        task.店铺信息 = shopInfo
 
-        if (result.success) {
-          functionResults.push(`取消京配打标: 成功 - ${result.message}`)
+        // 使用取消京配打标功能模块
+        const cancelResult = await cancelJpSearchFeature.execute(skuList, task, window.addTaskToList)
+
+        if (cancelResult.success) {
+          functionResults.push(`取消京配打标: 成功 - ${cancelResult.message}`)
         } else {
-          functionResults.push(`取消京配打标: 失败 - ${result.message || '取消失败'}`)
+          functionResults.push(`取消京配打标: 失败 - ${cancelResult.message || '取消失败'}`)
           hasFailures = true
         }
       } catch (error) {

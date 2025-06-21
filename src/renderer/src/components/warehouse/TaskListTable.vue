@@ -21,7 +21,7 @@
         <td><input type="checkbox" v-model="selectedTasks" :value="index" /></td>
         <td>{{ task.sku }}</td>
         <td>{{ task.店铺 }}</td>
-        <td>{{ task.仓库 }}</td>
+        <td>{{ task.仓库 || '' }}</td>
         <td>{{ task.创建时间 }}</td>
         <td>
           <status-tag :status="task.状态" />
