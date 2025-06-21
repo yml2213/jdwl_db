@@ -15,7 +15,7 @@
 
     <div class="task-table-container">
       <tab-panel
-        :tasks="tasks"
+        :tasks="taskList"
         :logs="logs"
         :disabled-products="disabledProducts"
         @execute-one="(task, index) => $emit('execute-one', task, index)"
@@ -37,10 +37,21 @@
 import { inject, computed } from 'vue'
 import TabPanel from './TabPanel.vue'
 
+// 接收任务列表作为props
+const props = defineProps({
+  taskList: {
+    type: Array,
+    default: () => []
+  },
+  getStatusClass: {
+    type: Function,
+    default: () => ''
+  }
+})
+
 // 注入数据
-const tasks = inject('taskList')
-const logs = inject('logs')
-const disabledProducts = inject('disabledProducts')
+const logs = inject('logs', [])
+const disabledProducts = inject('disabledProducts', { items: [], checking: false })
 const form = inject('form')
 
 // 从表单数据中提取需要的值

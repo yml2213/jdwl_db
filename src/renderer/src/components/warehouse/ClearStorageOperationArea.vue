@@ -25,7 +25,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">功能选项</label>
+      <label class="form-label">功能选项 <span class="required-tip">(必选至少一项)</span></label>
       <div class="checkbox-group">
         <label class="checkbox-label">
           <input type="checkbox" v-model="form.options.clearStockAllocation" />
@@ -44,7 +44,7 @@
         :shops="shopsList"
         :loading="isLoadingShops"
         :error="shopLoadError"
-        @change="handleStoreChange"
+        @change="$emit('shop-change', $event)"
       />
     </div>
     
@@ -64,7 +64,6 @@ const shopsList = inject('shopsList')
 const isLoadingShops = inject('isLoadingShops')
 const shopLoadError = inject('shopLoadError')
 const handleAddTask = inject('handleAddTask')
-const handleStoreChange = inject('handleStoreChange')
 const handleFileChange = inject('handleFileChange')
 </script>
 
@@ -111,5 +110,10 @@ const handleFileChange = inject('handleFileChange')
 }
 .btn-primary:hover {
   background-color: #0056b3;
+}
+.required-tip {
+  color: #dc3545;
+  font-size: 0.8rem;
+  font-weight: normal;
 }
 </style>

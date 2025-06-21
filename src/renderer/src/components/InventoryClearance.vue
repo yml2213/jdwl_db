@@ -46,6 +46,19 @@ const shopsList = ref([])
 const isLoadingShops = ref(false)
 const shopLoadError = ref('')
 
+// 日志和停用商品状态
+const logs = ref([])
+const disabledProducts = ref({
+  items: [],
+  checking: false,
+  enabling: false,
+  checkError: '',
+  enableError: '',
+  currentBatch: 0,
+  totalBatches: 0,
+  progress: '初始化...'
+})
+
 // 当前选中的店铺信息
 const currentShopInfo = computed(() => {
   if (!form.value.selectedStore || !shopsList.value.length) return null
@@ -130,6 +143,14 @@ onUnmounted(() => {
 
 // 添加任务
 const handleAddTask = () => {
+  console.log('添加任务开始 - 当前状态:', {
+    店铺: currentShopInfo.value?.shopName,
+    SKU模式: form.value.mode,
+    SKU内容: form.value.sku ? (form.value.sku.length > 50 ? form.value.sku.substring(0, 50) + '...' : form.value.sku) : '空',
+    功能选项: form.value.options,
+    任务列表长度: taskList.value.length
+  })
+
   const shopInfo = currentShopInfo.value
   if (!shopInfo) {
     alert('请选择店铺')
@@ -155,12 +176,15 @@ const handleAddTask = () => {
       选项: JSON.parse(JSON.stringify(form.value.options))
     }
     addTaskToList(task)
+    console.log('添加整店任务成功:', task)
   } else {
     const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
     if (skuList.length === 0) {
       alert('请输入有效的SKU')
       return
     }
+    
+    console.log('处理SKU列表, 数量:', skuList.length, '前5个SKU:', skuList.slice(0, 5))
     
     const BATCH_SIZE = 2000
     for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
@@ -176,6 +200,7 @@ const handleAddTask = () => {
         选项: JSON.parse(JSON.stringify(form.value.options))
       }
       addTaskToList(task)
+      console.log(`添加批次${i / BATCH_SIZE + 1}任务成功, 包含${batch.length}个SKU`)
     }
   }
 
@@ -212,9 +237,21 @@ const handleExecuteOneTask = async (task) => {
   await executeOneTask(task, shopInfo, task.选项)
 }
 
-const handleStoreChange = (shopNo) => {
-  const selectedShop = shopsList.value.find((shop) => shop.shopNo === shopNo)
-  if (selectedShop) {
+// 监听店铺选择变化，并保存店铺信息
+watch(() => form.value.selectedStore, (newShopNo) => {
+  if (newShopNo) {
+    const selectedShop = shopsList.value.find(shop => shop.shopNo === newShopNo)
+    if (selectedShop) {
+      saveSelectedShop(selectedShop)
+      emit('shop-change', selectedShop)
+    }
+  }
+})
+
+// 处理店铺选择变更事件
+const handleShopChange = (selectedShop) => {
+  if (selectedShop && selectedShop.shopNo) {
+    form.value.selectedStore = selectedShop.shopNo
     saveSelectedShop(selectedShop)
     emit('shop-change', selectedShop)
   }
@@ -244,20 +281,21 @@ provide('shopsList', shopsList)
 provide('isLoadingShops', isLoadingShops)
 provide('shopLoadError', shopLoadError)
 provide('handleAddTask', handleAddTask)
-provide('handleStoreChange', handleStoreChange)
 provide('handleFileChange', handleFileChange)
+provide('logs', logs)
+provide('disabledProducts', disabledProducts)
 </script>
 
 <template>
   <div class="inventory-clearance" v-if="props.isLoggedIn">
-    <div class="content-wrapper">
-      <ClearStorageOperationArea />
-      <TaskArea
+    <div class="clearance-container">
+      <ClearStorageOperationArea @shop-change="handleShopChange" />
+      <TaskArea 
         :task-list="taskList"
         @execute="handleExecuteTasks"
-        @clear="clearTasks"
         @execute-one="handleExecuteOneTask"
         @delete-task="handleDeleteTask"
+        @clear="clearTasks"
         :get-status-class="getStatusClass"
       />
     </div>
@@ -269,12 +307,16 @@ provide('handleFileChange', handleFileChange)
 .inventory-clearance {
   height: 100%;
 }
-.content-wrapper {
+.clearance-container {
   display: flex;
   height: calc(100vh - 120px);
 }
 .login-required {
-  text-align: center;
-  margin-top: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: calc(100vh - 120px);
+  font-size: 20px;
+  color: #909399;
 }
 </style>
