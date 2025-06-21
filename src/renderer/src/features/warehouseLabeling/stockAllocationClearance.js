@@ -754,29 +754,41 @@ export default {
    */
   async serializeFormData(formData) {
     try {
-      const serialized = {
-        _isFormData: true // 添加标记，表明这是序列化的FormData
-      }
+      const entries = []
       
-      for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          // 处理文件
+      // 遍历FormData中的每个字段
+      for (const pair of formData.entries()) {
+        const [key, value] = pair
+        
+        // 检查是否是文件对象
+        if (value instanceof File || value instanceof Blob) {
+          // 处理文件：从文件中读取ArrayBuffer
           const arrayBuffer = await value.arrayBuffer()
-          serialized[key] = {
-            name: value.name,
-            type: value.type,
-            size: value.size,
-            data: Array.from(new Uint8Array(arrayBuffer))
-          }
+          entries.push([
+            key,
+            {
+              _isFile: true,
+              name: value.name,
+              type: value.type,
+              size: value.size,
+              lastModified: value instanceof File ? value.lastModified : null,
+              data: Array.from(new Uint8Array(arrayBuffer)) // 将ArrayBuffer转换为数组
+            }
+          ])
           console.log(`序列化文件: ${key}, 名称: ${value.name}, 大小: ${value.size}字节`)
         } else {
-          // 处理普通值
-          serialized[key] = value
+          // 处理普通字段
+          entries.push([key, value])
           console.log(`序列化字段: ${key}, 值: ${value}`)
         }
       }
       
-      return serialized
+      // 返回序列化的FormData对象，确保包含entries数组
+      return {
+        _isFormData: true,
+        entries,
+        timeout: 120000 // 设置更长的超时时间，与cancelJpSearch.js保持一致
+      }
     } catch (error) {
       console.error('序列化FormData失败:', error)
       throw new Error(`序列化FormData失败: ${error.message}`)
