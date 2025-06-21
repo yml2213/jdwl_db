@@ -268,21 +268,28 @@ export default {
       // 根据上传结果设置成功/失败状态
       result.success = uploadResult.success;
       result.message = uploadResult.message;
+      result.isTimeLimit = uploadResult.isTimeLimit; // 传递频率限制标记
       result.results.push(result.message);
       
       result.clearanceLogs.push({
-        type: uploadResult.success ? 'success' : 'error',
+        type: uploadResult.success ? 'success' : (uploadResult.isTimeLimit ? 'warning' : 'error'),
         message: result.message,
         time: endTime.toLocaleString(),
         successCount: uploadResult.processedCount || 0,
-        failureCount: uploadResult.failedCount || 0,
+        failedCount: uploadResult.failedCount || 0,
         processingTime
       });
       
       // 更新任务状态
       if (task) {
-        task.状态 = uploadResult.success ? '成功' : '失败';
-        task.结果 = result.results;
+        // 检查是否是频率限制错误
+        if (!uploadResult.success && uploadResult.isTimeLimit) {
+          task.状态 = '频率限制';
+          task.结果 = result.message;
+        } else {
+          task.状态 = uploadResult.success ? '成功' : '失败';
+          task.结果 = result.results;
+        }
         task.clearanceLogs = result.clearanceLogs;
       }
       
@@ -426,7 +433,7 @@ export default {
           
           // 如果是5分钟限制的错误，修改错误信息格式
           if (response?.resultMessage?.includes('5分钟内不要频繁操作') || response?.message?.includes('5分钟内不要频繁操作')) {
-            errorMessage = '库存分配清零: 已失败 - 5分钟内不要频繁操作！';
+            errorMessage = '5分钟内不要频繁操作！';
             isTimeLimit = true;
           }
 

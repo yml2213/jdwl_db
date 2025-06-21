@@ -35,6 +35,9 @@
           <span v-else-if="task.状态 === '成功'" class="result-text">{{
             task.结果 || '成功'
           }}</span>
+          <span v-else-if="task.状态 === '频率限制'" class="warning-text result-text">{{
+            task.结果 || '5分钟内不要频繁操作'
+          }}</span>
           <span v-else-if="task.状态 === '失败'" class="error-text result-text">{{
             task.结果 || '失败'
           }}</span>

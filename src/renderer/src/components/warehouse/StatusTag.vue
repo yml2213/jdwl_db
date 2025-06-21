@@ -25,6 +25,8 @@ const statusClass = computed(() => {
       return 'success'
     case '失败':
       return 'failure'
+    case '频率限制':
+      return 'rate-limited'
     case '部分成功':
       return 'partial-success'
     case '暂存':
@@ -37,6 +39,9 @@ const statusClass = computed(() => {
 const displayText = computed(() => {
   if (props.status === '分批处理中') {
     return '分批处理中'
+  }
+  if (props.status === '频率限制') {
+    return '频率限制'
   }
   return props.status
 })
@@ -72,6 +77,10 @@ const displayText = computed(() => {
 
 .failure {
   background-color: #f56c6c;
+}
+
+.rate-limited {
+  background-color: #ff9900;
 }
 
 .partial-success {

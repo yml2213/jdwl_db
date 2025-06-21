@@ -61,8 +61,16 @@ export async function executeOneTask(task, shopInfo, options) {
         if (clearanceResult.success) {
           functionResults.push(`库存分配清零: 成功 - ${clearanceResult.message}`)
         } else {
-          functionResults.push(`库存分配清零: 失败 - ${clearanceResult.message || '清零失败'}`)
-          hasFailures = true
+          // 检查是否是频繁操作错误
+          if (clearanceResult.isTimeLimit) {
+            functionResults.push(`库存分配清零: 失败 - ${clearanceResult.message || '5分钟内不要频繁操作！'}`)
+            // 更新任务状态为特殊状态
+            task.状态 = '频率限制'
+            task.结果 = clearanceResult.message || '5分钟内不要频繁操作！'
+          } else {
+            functionResults.push(`库存分配清零: 失败 - ${clearanceResult.message || '清零失败'}`)
+            hasFailures = true
+          }
         }
       } catch (error) {
         functionResults.push(`库存分配清零: 失败 - ${error.message || '未知错误'}`)

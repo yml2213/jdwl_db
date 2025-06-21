@@ -158,6 +158,8 @@ export function getStatusClass(status) {
       return 'partial-success'
     case '暂存':
       return 'temp-saved'
+    case '频率限制':
+      return 'rate-limited'
     default:
       return ''
   }
