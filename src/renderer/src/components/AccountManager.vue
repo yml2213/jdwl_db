@@ -140,6 +140,11 @@ const updateLoginStatus = async () => {
   if (isLoggedIn.value) {
     updateUsername()
     loadSavedSelections()
+    
+    // 如果登录成功但尚未选择供应商和事业部，自动显示选择弹窗
+    if (!hasSelected.value) {
+      showSelectionModal.value = true
+    }
   }
 }
 
@@ -192,6 +197,9 @@ const handleDepartmentSelected = (department) => {
 
   // 关闭选择弹窗
   closeSelectionModal()
+  
+  // 刷新整个页面，确保数据正确加载
+  window.location.reload()
 }
 
 // 事件监听器

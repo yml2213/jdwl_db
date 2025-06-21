@@ -99,7 +99,12 @@ const warehouseLoadError = ref('')
 // 当前选中的店铺信息
 const currentShopInfo = computed(() => {
   if (!form.value.selectedStore || !shopsList.value.length) return null
-  return shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
+  const shopInfo = shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
+  // 保存当前店铺信息到全局变量，供其他模块使用
+  if (shopInfo) {
+    window.currentShopInfo = shopInfo
+  }
+  return shopInfo
 })
 
 // 当前选中的仓库信息
@@ -466,30 +471,34 @@ const handleAddTask = () => {
     return
   }
 
-  // 创建日期时间标记
-  const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+      // 创建日期时间标记
+    const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
-  // 将SKU列表按2000个一组进行分割
-  const BATCH_SIZE = 2000
-  const skuGroups = []
-  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
-    skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
-  }
+    // 将SKU列表按2000个一组进行分割
+    const BATCH_SIZE = 2000
+    const skuGroups = []
+    for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+      skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
+    }
+    
+    // 记录任务选项
+    console.log('添加任务时的表单选项:', JSON.stringify(form.value.options))
 
-  // 为每个组创建一个任务
-  skuGroups.forEach((group, index) => {
-    const groupNumber = index + 1
-    const taskId = `task-${Date.now()}-${Math.floor(Math.random() * 10000)}`
-    const task = {
-      id: taskId, // 添加唯一ID
-      sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
-      skuList: group, // 存储该组的所有SKU
-      店铺: shopInfo ? shopInfo.shopName : '未选择',
-      仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
-      创建时间: timestamp,
-      状态: '等待中',
-      结果: '',
-      选项: JSON.parse(JSON.stringify(form.value.options)),
+    // 为每个组创建一个任务
+    skuGroups.forEach((group, index) => {
+      const groupNumber = index + 1
+      const taskId = `task-${Date.now()}-${Math.floor(Math.random() * 10000)}`
+      const task = {
+        id: taskId, // 添加唯一ID
+        sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
+        skuList: group, // 存储该组的所有SKU
+        店铺: shopInfo ? shopInfo.shopName : '未选择',
+        仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
+        创建时间: timestamp,
+        状态: '等待中',
+        结果: '',
+        选项: JSON.parse(JSON.stringify(form.value.options)), // 确保是深拷贝
+        店铺信息: shopInfo, // 存储完整的店铺信息对象
       importLogs: [
         {
           type: 'batch-info',

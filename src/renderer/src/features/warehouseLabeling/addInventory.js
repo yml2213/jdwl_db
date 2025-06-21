@@ -15,6 +15,13 @@ export default {
    * @returns {Object} 执行结果
    */
   async execute(skuList, task, createBatchTask, inventoryAmount = 1000) {
+    console.log('addInventory.execute被调用，库存数量:', inventoryAmount)
+    
+    // 如果有任务选项中的库存数量，优先使用
+    if (task && task.选项 && task.选项.inventoryAmount) {
+      inventoryAmount = task.选项.inventoryAmount
+      console.log('从任务选项中获取库存数量:', inventoryAmount)
+    }
     // 初始化日志
     if (!window.importLogs) {
       window.importLogs = []
@@ -66,7 +73,7 @@ export default {
           const batchNumber = i + 1
 
           // 创建批次任务
-          const batchTask = {
+          const           batchTask = {
             id: `${task.id}-batch-${batchNumber}`,
             sku: `${task.sku}-批次${batchNumber}/${batches.length}`,
             skuList: batchSkuList,
@@ -75,7 +82,7 @@ export default {
             原始任务ID: task.id,
             批次编号: batchNumber,
             总批次数: batches.length,
-            选项: task.选项 || { useAddInventory: true }, // 继承原任务选项
+            选项: task.选项 ? JSON.parse(JSON.stringify(task.选项)) : { useAddInventory: true, inventoryAmount: inventoryAmount }, // 深拷贝原任务选项
             结果: [],
             importLogs: [{
               type: 'info',
@@ -487,7 +494,7 @@ export default {
             原始任务ID: task.id,
             批次编号: batchNumber,
             总批次数: totalBatches,
-            选项: task.选项 || { useAddInventory: true },
+            选项: task.选项 ? JSON.parse(JSON.stringify(task.选项)) : { useAddInventory: true, inventoryAmount: inventoryAmount },
             结果: [],
             importLogs: [{
               type: 'info',

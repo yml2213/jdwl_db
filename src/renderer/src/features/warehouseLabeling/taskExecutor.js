@@ -34,11 +34,35 @@ export async function executeOneTask(task, shopInfo, options = {}) {
   task.状态 = '执行中'
 
   try {
+    console.log('============ 任务执行开始 ============')
+    console.log('任务ID:', task.id)
+    console.log('任务SKU:', task.sku)
+    console.log('任务选项:', JSON.stringify(task.选项 || options || {}))
+    
     // 确保任务有选项对象
     const taskOptions = task.选项 || options || {}
+    console.log('处理后的任务选项:', taskOptions)
+    
+    // 打印每个选项的值
+    console.log('选项 - importStore (导入店铺商品):', taskOptions.importStore ? '启用' : '未启用')
+    console.log('选项 - useStore (启用店铺商品):', taskOptions.useStore ? '启用' : '未启用')
+    console.log('选项 - importProps (导入物流属性):', taskOptions.importProps ? '启用' : '未启用')
+    console.log('选项 - useMainData (添加库存):', taskOptions.useMainData ? '启用' : '未启用')
+    console.log('选项 - useAddInventory (添加库存):', taskOptions.useAddInventory ? '启用' : '未启用')
+    console.log('选项 - inventoryAmount (库存数量):', taskOptions.inventoryAmount || '默认1000')
+    console.log('选项 - useWarehouse (启用商品库存分配):', taskOptions.useWarehouse ? '启用' : '未启用')
+    console.log('选项 - useJdEffect (启用京配打标):', taskOptions.useJdEffect ? '启用' : '未启用')
+    console.log('选项 - cancelJpSearch (取消京配打标):', taskOptions.cancelJpSearch ? '启用' : '未启用')
+    console.log('选项 - clearStockAllocation (库存分配清零):', taskOptions.clearStockAllocation ? '启用' : '未启用')
     
     // 确保任务有店铺信息
     const taskShopInfo = task.店铺信息 || shopInfo
+    
+    // 如果shopInfo是对象但不是正确的shopInfo格式，尝试从task中获取店铺名称并获取详细信息
+    if (shopInfo && typeof shopInfo === 'object' && !shopInfo.shopNo && task.店铺) {
+      console.log('获取到的shopInfo不完整，尝试从任务店铺名称获取店铺信息:', task.店铺)
+      // 这里可以添加获取完整店铺信息的逻辑
+    }
     
     // 确保任务有事业部信息
     let taskDeptInfo = task.事业部信息
@@ -78,6 +102,127 @@ export async function executeOneTask(task, shopInfo, options = {}) {
     } else {
       // 执行普通SKU列表任务
       
+      // 执行入仓打标功能 - 导入店铺商品
+      if (taskOptions.importStore) {
+        console.log('执行入仓打标 - 导入店铺商品功能')
+        const importStoreModule = await import('./importStoreProducts.js')
+        const result = await importStoreModule.default.execute(task.skuList, task)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = task.importLogs || []
+        task.importLogs.push({
+          type: 'import-result',
+          message: `导入店铺商品结果: ${result.message}`,
+          timestamp: new Date().toLocaleString()
+        })
+      }
+      
+      // 执行入仓打标功能 - 启用店铺商品
+      if (taskOptions.useStore) {
+        console.log('执行入仓打标 - 启用店铺商品功能')
+        const enableStoreModule = await import('./enableStoreProducts.js')
+        const result = await enableStoreModule.default.execute(task.skuList, task)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = task.importLogs || []
+        task.importLogs.push({
+          type: 'enable-result',
+          message: `启用店铺商品结果: ${result.message}`,
+          timestamp: new Date().toLocaleString()
+        })
+      }
+      
+      // 执行入仓打标功能 - 导入物流属性
+      if (taskOptions.importProps) {
+        console.log('执行入仓打标 - 导入物流属性功能')
+        const importLogisticsModule = await import('./importLogisticsProperties.js')
+        const result = await importLogisticsModule.default.execute(task.skuList, task)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = task.importLogs || []
+        task.importLogs.push({
+          type: 'props-result',
+          message: `导入物流属性结果: ${result.message}`,
+          timestamp: new Date().toLocaleString()
+        })
+      }
+      
+      // 执行启用京配打标生效
+      if (taskOptions.useJdEffect) {
+        console.log('执行启用京配打标生效功能')
+        const enableJpSearchModule = await import('./enableJpSearch.js')
+        const result = await enableJpSearchModule.default.execute(task.skuList, task, (batchTask) => {
+          // 如果有创建批次任务的回调函数，可以在这里调用
+          if (window.addTaskToList && typeof window.addTaskToList === 'function') {
+            window.addTaskToList(batchTask)
+          }
+        })
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = task.importLogs || []
+        task.importLogs.push({
+          type: 'jpSearch-result',
+          message: `启用京配打标结果: ${result.message}`,
+          timestamp: new Date().toLocaleString()
+        })
+      }
+      
+      // 执行启用商品库存分配功能
+      if (taskOptions.useWarehouse) {
+        console.log('执行启用商品库存分配功能')
+        const importGoodsStockConfigModule = await import('./importGoodsStockConfig.js')
+        const result = await importGoodsStockConfigModule.default.execute(task.skuList, task, (batchTask) => {
+          // 如果有创建批次任务的回调函数，可以在这里调用
+          if (window.addTaskToList && typeof window.addTaskToList === 'function') {
+            window.addTaskToList(batchTask)
+          }
+        })
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = task.importLogs || []
+        task.importLogs.push({
+          type: 'stockConfig-result',
+          message: `启用商品库存分配结果: ${result.message}`,
+          timestamp: new Date().toLocaleString()
+        })
+      }
+      
+      // 执行添加库存功能
+      if (taskOptions.useMainData || taskOptions.useAddInventory) {
+        console.log('执行添加库存功能')
+        const addInventoryModule = await import('./addInventory.js')
+        // 获取库存数量参数
+        const inventoryAmount = taskOptions.inventoryAmount || 1000
+        console.log(`使用库存数量: ${inventoryAmount}`)
+        
+        const result = await addInventoryModule.default.execute(task.skuList, task, (batchTask) => {
+          // 如果有创建批次任务的回调函数，可以在这里调用
+          if (window.addTaskToList && typeof window.addTaskToList === 'function') {
+            window.addTaskToList(batchTask)
+          }
+        }, inventoryAmount)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = task.importLogs || []
+        task.importLogs.push({
+          type: 'addInventory-result',
+          message: `添加库存结果: ${result.message}`,
+          timestamp: new Date().toLocaleString()
+        })
+      }
+      
       // 执行取消京配打标功能
       if (taskOptions.cancelJpSearch) {
         const cancelJpSearchModule = await import('./cancelJpSearch.js')
@@ -104,6 +249,29 @@ export async function executeOneTask(task, shopInfo, options = {}) {
     console.error('执行任务出错:', error)
     task.状态 = '失败'
     task.结果 = `执行出错: ${error.message || '未知错误'}`
+    // 添加错误日志
+    if (!task.importLogs) {
+      task.importLogs = []
+    }
+    task.importLogs.push({
+      type: 'error',
+      message: `执行出错: ${error.message || '未知错误'}`,
+      timestamp: new Date().toLocaleString()
+    })
+  } finally {
+    console.log('============ 任务执行完成 ============')
+    console.log('任务ID:', task.id)
+    console.log('最终状态:', task.状态)
+    console.log('任务结果:', task.结果)
+    
+    // 如果任务状态仍然是"执行中"，但已经完成了所有处理，则标记为成功
+    if (task.状态 === '执行中') {
+      console.log('任务执行完成但状态仍为"执行中"，更新为"成功"')
+      task.状态 = '成功'
+      if (!task.结果 || task.结果 === '') {
+        task.结果 = '任务已完成'
+      }
+    }
   }
 }
 
@@ -154,6 +322,7 @@ export async function executeTasks(
   // 更新状态显示的函数
   function updateTaskStatus(element, message) {
     element.textContent = message
+    console.log('任务状态更新:', message)
   }
 
   try {
@@ -168,6 +337,10 @@ export async function executeTasks(
 
       // 获取任务中存储的选项，如果没有则使用当前表单中的选项
       const taskOptions = task.选项 || defaultOptions || {}
+      
+      console.log('任务执行选项:', taskOptions)
+      console.log('入仓打标选项 - importStore:', taskOptions.importStore)
+      console.log('入仓打标选项 - useStore:', taskOptions.useStore)
 
       // 正确获取SKU列表
       const skuList = extractTaskSkuList(task)
@@ -188,9 +361,19 @@ export async function executeTasks(
 
       // 处理状态
       task.状态 = '执行中'
+      
+      // 确保shopInfo有正确的值
+      if (!shopInfo || !shopInfo.shopNo) {
+        console.log('shopInfo不完整，尝试从全局配置或者任务中获取店铺信息')
+        if (window.currentShopInfo) {
+          shopInfo = window.currentShopInfo
+          console.log('从全局配置获取到店铺信息:', shopInfo.shopName)
+        }
+      }
 
       try {
-        // 执行任务
+        // 执行任务并打印详细日志
+        console.log(`开始执行任务 ${taskIndex + 1}/${waitingTasks.length}, SKU数量: ${skuList.length}`)
         await executeOneTask(task, shopInfo, taskOptions)
 
         // 根据执行结果更新计数
