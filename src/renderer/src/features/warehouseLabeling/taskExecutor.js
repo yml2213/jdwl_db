@@ -7,6 +7,7 @@ import importStoreProductsFeature from './importStoreProducts'
 import importLogisticsPropsFeature from './importLogisticsProperties'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
+import stockAllocationClearanceFeature from './stockAllocationClearance'
 import { enableShopProducts, clearStockAllocation, cancelJdDeliveryTag } from '../../services/apiService'
 import {
   extractTaskSkuList
@@ -40,7 +41,7 @@ export async function executeOneTask(task, shopInfo, options) {
   let hasFailures = false
 
   try {
-    // 清库下标：清空库存分配功能
+    // 库存分配清零功能 - 使用独立模块
     if (options.clearStockAllocation === true) {
       try {
         console.log('执行[库存分配清零]功能，SKU:', task.sku)
@@ -51,18 +52,45 @@ export async function executeOneTask(task, shopInfo, options) {
           throw new Error('没有有效的SKU')
         }
 
-        // 调用库存分配清零API
-        const result = await clearStockAllocation(skuList, shopInfo)
+        // 添加店铺信息到任务中
+        task.店铺信息 = shopInfo
 
-        if (result.success) {
-          functionResults.push(`库存分配清零: 成功 - ${result.message}`)
+        // 使用库存分配清零功能模块
+        const clearanceResult = await stockAllocationClearanceFeature.execute(skuList, task, window.addTaskToList)
+
+        if (clearanceResult.success) {
+          functionResults.push(`库存分配清零: 成功 - ${clearanceResult.message}`)
         } else {
-          functionResults.push(`库存分配清零: 失败 - ${result.message || '清零失败'}`)
+          functionResults.push(`库存分配清零: 失败 - ${clearanceResult.message || '清零失败'}`)
           hasFailures = true
         }
       } catch (error) {
         functionResults.push(`库存分配清零: 失败 - ${error.message || '未知错误'}`)
         console.error('库存分配清零失败:', error)
+        hasFailures = true
+      }
+    }
+
+    // 整店库存分配清零功能
+    if (options.wholeStoreClearance === true) {
+      try {
+        console.log('执行[整店库存分配清零]功能')
+
+        // 添加店铺信息到任务中
+        task.店铺信息 = shopInfo
+
+        // 使用库存分配清零功能模块处理整店操作
+        const clearanceResult = await stockAllocationClearanceFeature.execute(['WHOLE_STORE'], task, window.addTaskToList)
+
+        if (clearanceResult.success) {
+          functionResults.push(`整店库存分配清零: 成功 - ${clearanceResult.message}`)
+        } else {
+          functionResults.push(`整店库存分配清零: 失败 - ${clearanceResult.message || '清零失败'}`)
+          hasFailures = true
+        }
+      } catch (error) {
+        functionResults.push(`整店库存分配清零: 失败 - ${error.message || '未知错误'}`)
+        console.error('整店库存分配清零失败:', error)
         hasFailures = true
       }
     }
