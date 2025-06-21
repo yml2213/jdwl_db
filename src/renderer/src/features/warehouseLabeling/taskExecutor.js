@@ -18,418 +18,92 @@ import {
  * 执行单个任务
  * @param {Object} task - 任务对象
  * @param {Object} shopInfo - 店铺信息
- * @param {Object} options - 功能选项
- * @returns {Promise<Object>} 执行结果
+ * @param {Object} options - 任务选项
+ * @returns {Promise<void>}
  */
-export async function executeOneTask(task, shopInfo, options) {
+export async function executeOneTask(task, shopInfo, options = {}) {
   if (!task) {
-    throw new Error('缺少任务信息')
+    console.error('无效的任务对象')
+    return
   }
 
-  // 对于物流属性导入任务，不需要店铺信息
-  const isLogisticsImport =
-    options && options.importProps === true && !options.importStore && !options.useStore
+  console.log('执行任务:', task)
 
-  if (!isLogisticsImport && !shopInfo) {
-    throw new Error('缺少店铺信息')
-  }
-
-  // 标记为执行中
+  // 标记任务为执行中
   task.状态 = '执行中'
 
-  // 存储功能执行结果
-  const functionResults = []
-  let hasFailures = false
-
   try {
-    // 库存分配清零功能 - 使用独立模块
-    if (options.clearStockAllocation === true) {
-      try {
-        console.log('执行[库存分配清零]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 添加店铺信息到任务中
-        task.店铺信息 = shopInfo
-
-        // 使用库存分配清零功能模块
-        const clearanceResult = await stockAllocationClearanceFeature.execute(skuList, task, window.addTaskToList)
-
-        if (clearanceResult.success) {
-          functionResults.push(`库存分配清零: 成功 - ${clearanceResult.message}`)
-        } else {
-          // 检查是否是频繁操作错误
-          if (clearanceResult.isTimeLimit) {
-            functionResults.push(`库存分配清零: 失败 - ${clearanceResult.message || '5分钟内不要频繁操作！'}`)
-            // 更新任务状态为特殊状态
-            task.状态 = '频率限制'
-            task.结果 = clearanceResult.message || '5分钟内不要频繁操作！'
-          } else {
-            functionResults.push(`库存分配清零: 失败 - ${clearanceResult.message || '清零失败'}`)
-            hasFailures = true
-          }
-        }
-      } catch (error) {
-        functionResults.push(`库存分配清零: 失败 - ${error.message || '未知错误'}`)
-        console.error('库存分配清零失败:', error)
-        hasFailures = true
-      }
+    // 确保任务有选项对象
+    const taskOptions = task.选项 || options || {}
+    
+    // 确保任务有店铺信息
+    const taskShopInfo = task.店铺信息 || shopInfo
+    
+    // 确保任务有事业部信息
+    let taskDeptInfo = task.事业部信息
+    if (!taskDeptInfo) {
+      // 如果任务没有事业部信息，尝试从localStorage获取
+      const { getSelectedDepartment } = require('../../utils/storageHelper')
+      taskDeptInfo = getSelectedDepartment()
+      console.log('从localStorage获取事业部信息:', taskDeptInfo)
+      // 将获取到的事业部信息保存到任务中
+      task.事业部信息 = taskDeptInfo
     }
 
-    // 整店库存分配清零功能
-    if (options.wholeStoreClearance === true) {
-      try {
-        console.log('执行[整店库存分配清零]功能')
-
-        // 添加店铺信息到任务中
-        task.店铺信息 = shopInfo
-
-        // 使用库存分配清零功能模块处理整店操作
-        const clearanceResult = await stockAllocationClearanceFeature.execute(['WHOLE_STORE'], task, window.addTaskToList)
-
-        if (clearanceResult.success) {
-          functionResults.push(`整店库存分配清零: 成功 - ${clearanceResult.message}`)
-        } else {
-          functionResults.push(`整店库存分配清零: 失败 - ${clearanceResult.message || '清零失败'}`)
-          hasFailures = true
-        }
-      } catch (error) {
-        functionResults.push(`整店库存分配清零: 失败 - ${error.message || '未知错误'}`)
-        console.error('整店库存分配清零失败:', error)
-        hasFailures = true
-      }
-    }
-
-    // 整店取消京配打标功能
-    if (options.wholeCancelJpSearch === true) {
-      try {
-        console.log('执行[整店取消京配打标]功能')
-
-        // 添加店铺信息到任务中
-        task.店铺信息 = shopInfo
+    // 根据任务类型执行相应功能
+    if (task.skuList && task.skuList.length === 1 && task.skuList[0] === 'WHOLE_STORE') {
+      console.log('执行[整店取消京配打标]功能')
+      
+      // 检查是否有整店取消京配打标选项
+      if (taskOptions.wholeCancelJpSearch) {
+        const cancelJpSearchModule = await import('./cancelJpSearch.js')
+        const result = await cancelJpSearchModule.default.execute(task.skuList, task)
         
-        // 如果任务中已有事业部信息，则使用它，否则从参数中获取
-        if (!task.事业部信息) {
-          // 从localStorage获取事业部信息
-          const { getSelectedDepartment } = require('../../utils/storageHelper')
-          const deptInfo = getSelectedDepartment()
-          if (deptInfo) {
-            task.事业部信息 = deptInfo
-            console.log('从localStorage获取并添加事业部信息到任务中:', deptInfo)
-          } else {
-            console.warn('未找到事业部信息')
-          }
-        }
-
-        // 使用取消京配打标功能模块处理整店操作
-        const cancelResult = await cancelJpSearchFeature.execute(['WHOLE_STORE'], task, window.addTaskToList)
-
-        if (cancelResult.success) {
-          functionResults.push(`整店取消京配打标: 成功 - ${cancelResult.message}`)
-        } else {
-          functionResults.push(`整店取消京配打标: 失败 - ${cancelResult.message || '取消失败'}`)
-          hasFailures = true
-        }
-      } catch (error) {
-        functionResults.push(`整店取消京配打标: 失败 - ${error.message || '未知错误'}`)
-        console.error('整店取消京配打标失败:', error)
-        hasFailures = true
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = result.cancelJpSearchLogs || []
       }
-    }
-
-    // 取消京配打标功能
-    if (options.cancelJpSearch === true) {
-      try {
-        console.log('执行[取消京配打标]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 添加店铺信息到任务中
-        task.店铺信息 = shopInfo
-
-        // 使用取消京配打标功能模块
-        const cancelResult = await cancelJpSearchFeature.execute(skuList, task, window.addTaskToList)
-
-        if (cancelResult.success) {
-          functionResults.push(`取消京配打标: 成功 - ${cancelResult.message}`)
-        } else {
-          functionResults.push(`取消京配打标: 失败 - ${cancelResult.message || '取消失败'}`)
-          hasFailures = true
-        }
-      } catch (error) {
-        functionResults.push(`取消京配打标: 失败 - ${error.message || '未知错误'}`)
-        console.error('取消京配打标失败:', error)
-        hasFailures = true
+      
+      // 检查是否有整店库存分配清零选项
+      if (taskOptions.wholeStoreClearance) {
+        const stockAllocationClearanceModule = await import('./stockAllocationClearance.js')
+        const result = await stockAllocationClearanceModule.default.execute(task.skuList, task)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = result.clearanceLogs || []
       }
-    }
-
-    // 启用店铺商品功能 - 使用独立模块
-    if (options.useStore === true) {
-      try {
-        console.log('执行[启用店铺商品]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 调用商品状态检查API
-        const result = await enableStoreProductsFeature.execute(skuList, shopInfo)
-
-        if (result.success) {
-          functionResults.push(`启用店铺商品: 成功 - 已检查商品状态`)
-
-          // 如果找到了停用商品，尝试启用它们
-          if (result.disabledProducts && result.disabledProducts.length > 0) {
-            const enableResult = await enableShopProducts(result.disabledProducts)
-            if (enableResult.success) {
-              functionResults.push(
-                `启用停用商品: 成功 - 已启用${result.disabledProducts.length}个商品`
-              )
-            } else {
-              functionResults.push(`启用停用商品: 失败 - ${enableResult.message}`)
-              hasFailures = true
-            }
-          }
-        } else {
-          functionResults.push(`启用店铺商品: 失败 - ${result.message || '检查状态失败'}`)
-          hasFailures = true
-        }
-      } catch (checkError) {
-        functionResults.push(`启用店铺商品: 失败 - ${checkError.message || '未知错误'}`)
-        console.error('启用店铺商品失败:', checkError)
-        hasFailures = true
+    } else {
+      // 执行普通SKU列表任务
+      
+      // 执行取消京配打标功能
+      if (taskOptions.cancelJpSearch) {
+        const cancelJpSearchModule = await import('./cancelJpSearch.js')
+        const result = await cancelJpSearchModule.default.execute(task.skuList, task)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = result.cancelJpSearchLogs || []
       }
-    }
-
-    // 导入店铺商品功能 - 使用独立模块
-    if (options.importStore === true) {
-      try {
-        console.log('执行[导入店铺商品]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 使用导入店铺商品功能模块
-        const importResult = await importStoreProductsFeature.execute(skuList, shopInfo)
-
-        if (importResult.success) {
-          functionResults.push(`导入店铺商品: 成功`)
-        } else {
-          functionResults.push(`导入店铺商品: 失败 - ${importResult.message}`)
-          hasFailures = true
-        }
-      } catch (importError) {
-        functionResults.push(`导入店铺商品: 错误 - ${importError.message || '未知错误'}`)
-        console.error('导入店铺商品失败:', importError)
-        hasFailures = true
+      
+      // 执行库存分配清零功能
+      if (taskOptions.clearStockAllocation) {
+        const stockAllocationClearanceModule = await import('./stockAllocationClearance.js')
+        const result = await stockAllocationClearanceModule.default.execute(task.skuList, task)
+        
+        // 更新任务状态
+        task.状态 = result.success ? '成功' : '失败'
+        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.importLogs = result.clearanceLogs || []
       }
-    }
-
-    // 导入物流属性功能 - 使用独立模块
-    if (options.importProps === true) {
-      try {
-        console.log('执行[导入物流属性]功能，SKU:', task.sku || task.skuList)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 使用导入物流属性功能模块
-        const importResult = await importLogisticsPropsFeature.execute(skuList)
-
-        if (importResult.success) {
-          functionResults.push(`导入物流属性: 成功 - 处理了${importResult.processedCount}个SKU`)
-        } else {
-          // 获取错误信息
-          let errorMessage = ''
-          if (importResult.errorDetail) {
-            // 使用收集到的详细错误信息
-            errorMessage = importResult.errorDetail
-          } else if (importResult.data) {
-            // 使用API返回的原始错误信息
-            errorMessage = importResult.data
-          } else if (importResult.message) {
-            errorMessage = importResult.message
-          } else {
-            errorMessage = '导入物流属性失败'
-          }
-
-          // 添加清晰的错误信息到结果
-          functionResults.push(`导入物流属性: 失败 - ${errorMessage}`)
-          hasFailures = true
-
-          // 更新任务的结果字段，确保显示具体的错误原因
-          task.结果 = errorMessage
-        }
-      } catch (importError) {
-        const errorMessage = importError.message || '未知错误'
-        functionResults.push(`导入物流属性: 错误 - ${errorMessage}`)
-        console.error('导入物流属性失败:', importError)
-        hasFailures = true
-        // 更新任务的结果字段
-        task.结果 = errorMessage
-      }
-    }
-
-    // 启用库存商品分配功能
-    if (options.useWarehouse === true) {
-      try {
-        console.log('执行[启用库存商品分配]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 创建批次任务的回调函数，用于将批次任务添加到任务列表
-        const createBatchTask = (batchTask) => {
-          if (!batchTask) return
-
-          console.log('创建批次任务', batchTask)
-
-          // 将批次任务添加到任务列表
-          if (this && this.addTaskToList) {
-            this.addTaskToList(batchTask)
-          } else if (window.addTaskToList) {
-            window.addTaskToList(batchTask)
-          } else {
-            // 如果没有可用的添加任务方法，将批次任务信息添加到原任务的结果中
-            if (task) {
-              if (!task.batchTasks) {
-                task.batchTasks = []
-              }
-              task.batchTasks.push(batchTask)
-            }
-            console.warn('未找到添加任务方法，批次任务可能无法正确添加到任务列表')
-          }
-        }
-
-        // 使用启用库存商品分配功能模块，传入createBatchTask回调
-        const warehouseResult = await importGoodsStockConfigFeature.execute(skuList, task, createBatchTask)
-
-        // 将分批导入日志添加到任务中，用于UI展示
-        if (warehouseResult.importLogs) {
-          if (!task.importLogs) {
-            task.importLogs = []
-          }
-          task.importLogs = task.importLogs.concat(warehouseResult.importLogs)
-          console.log(`添加${warehouseResult.importLogs.length}条导入日志到任务`)
-        }
-
-        if (warehouseResult.success) {
-          functionResults.push(`启用库存商品分配: 成功`)
-        } else {
-          // 检查是否允许跳过库存配置错误
-          if (options.skipConfigErrors === true) {
-            functionResults.push(`启用库存商品分配: 已跳过 - ${warehouseResult.message}`)
-            console.warn('已跳过库存商品分配功能，继续执行其他功能')
-          } else {
-            functionResults.push(`启用库存商品分配: 失败 - ${warehouseResult.message}`)
-            hasFailures = true
-          }
-        }
-      } catch (error) {
-        console.error('启用库存商品分配出错:', error)
-        functionResults.push(`启用库存商品分配: 失败 - ${error.message || '未知错误'}`)
-        hasFailures = true
-      }
-    }
-
-    // 启用京配打标生效功能
-    if (options.useJdEffect === true) {
-      try {
-        console.log('执行[启用京配打标生效]功能，SKU:', task.sku)
-
-        // 提取SKU
-        const skuList = extractTaskSkuList(task)
-        if (skuList.length === 0) {
-          throw new Error('没有有效的SKU')
-        }
-
-        // 创建批次任务的回调函数，用于将批次任务添加到任务列表
-        const createBatchTask = (batchTask) => {
-          if (!batchTask) return
-
-          console.log('创建批次任务', batchTask)
-
-          // 将批次任务添加到任务列表
-          if (this && this.addTaskToList) {
-            this.addTaskToList(batchTask)
-          } else if (window.addTaskToList) {
-            window.addTaskToList(batchTask)
-          } else {
-            // 如果没有可用的添加任务方法，将批次任务信息添加到原任务的结果中
-            if (task) {
-              if (!task.batchTasks) {
-                task.batchTasks = []
-              }
-              task.batchTasks.push(batchTask)
-            }
-            console.warn('未找到添加任务方法，批次任务可能无法正确添加到任务列表')
-          }
-        }
-
-        // 使用启用京配打标生效功能模块，传入createBatchTask回调
-        const jpSearchResult = await enableJpSearchFeature.execute(skuList, task, createBatchTask)
-
-        // 将分批导入日志添加到任务中，用于UI展示
-        if (jpSearchResult.importLogs) {
-          if (!task.importLogs) {
-            task.importLogs = []
-          }
-          task.importLogs = task.importLogs.concat(jpSearchResult.importLogs)
-          console.log(`添加${jpSearchResult.importLogs.length}条导入日志到任务`)
-        }
-
-        if (jpSearchResult.success) {
-          // 检查是否是后台任务
-          if (jpSearchResult.message && jpSearchResult.message.includes('后台任务')) {
-            functionResults.push(`启用京配打标生效: 已提交后台任务，请稍后在任务日志中查看结果`)
-          } else {
-            functionResults.push(`启用京配打标生效: 成功`)
-          }
-        } else {
-          functionResults.push(`启用京配打标生效: 失败 - ${jpSearchResult.message || '未知错误'}`)
-          hasFailures = true
-        }
-      } catch (error) {
-        console.error('启用京配打标生效失败:', error)
-        functionResults.push(`启用京配打标生效: 失败 - ${error.message || '未知错误'}`)
-        hasFailures = true
-      }
-    }
-
-    // 更新任务的结果字段
-    task.结果 = hasFailures ? '执行失败' : '执行成功'
-
-    return {
-      success: !hasFailures,
-      message: functionResults.join('\n'),
-      results: functionResults
     }
   } catch (error) {
-    console.error('执行任务失败:', error)
-    return {
-      success: false,
-      message: error.message || '未知错误',
-      results: []
-    }
+    console.error('执行任务出错:', error)
+    task.状态 = '失败'
+    task.结果 = `执行出错: ${error.message || '未知错误'}`
   }
 }
 
@@ -519,10 +193,10 @@ export async function executeTasks(
 
       try {
         // 执行任务
-        const result = await executeOneTask(task, shopInfo, taskOptions)
+        await executeOneTask(task, shopInfo, taskOptions)
 
         // 根据执行结果更新计数
-        if (result && result.success) {
+        if (task.状态 === '成功') {
           successCount++
         } else {
           failureCount++

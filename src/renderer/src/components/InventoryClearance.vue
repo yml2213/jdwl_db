@@ -196,33 +196,40 @@ const handleAddTask = () => {
     }
     addTaskToList(task)
     console.log('添加整店任务成功:', task)
-  } else {
-    const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
-    if (skuList.length === 0) {
-      alert('请输入有效的SKU')
-      return
-    }
     
-    console.log('处理SKU列表, 数量:', skuList.length, '前5个SKU:', skuList.slice(0, 5))
-    
-    const BATCH_SIZE = 2000
-    for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
-      const batch = skuList.slice(i, i + BATCH_SIZE)
-      const task = {
-        id: `batch-${Date.now()}-${i / BATCH_SIZE}`,
-        sku: `批次 ${i / BATCH_SIZE + 1} (${batch.length}个SKU)`,
-        skuList: batch,
-        店铺: shopInfo.shopName,
-        创建时间: timestamp,
-        状态: '等待中',
-        结果: '',
-        选项: JSON.parse(JSON.stringify(form.value.options)),
-        店铺信息: shopInfo,
-        事业部信息: deptInfo
-      }
-      addTaskToList(task)
-      console.log(`添加批次${i / BATCH_SIZE + 1}任务成功, 包含${batch.length}个SKU`)
+    // 整店模式下直接返回，不需要处理SKU列表
+    if (form.value.autoStart) {
+      handleExecuteTasks()
     }
+    return
+  }
+  
+  // 以下是SKU模式的处理
+  const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
+  if (skuList.length === 0) {
+    alert('请输入有效的SKU')
+    return
+  }
+  
+  console.log('处理SKU列表, 数量:', skuList.length, '前5个SKU:', skuList.slice(0, 5))
+  
+  const BATCH_SIZE = 2000
+  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+    const batch = skuList.slice(i, i + BATCH_SIZE)
+    const task = {
+      id: `batch-${Date.now()}-${i / BATCH_SIZE}`,
+      sku: `批次 ${i / BATCH_SIZE + 1} (${batch.length}个SKU)`,
+      skuList: batch,
+      店铺: shopInfo.shopName,
+      创建时间: timestamp,
+      状态: '等待中',
+      结果: '',
+      选项: JSON.parse(JSON.stringify(form.value.options)),
+      店铺信息: shopInfo,
+      事业部信息: deptInfo
+    }
+    addTaskToList(task)
+    console.log(`添加批次${i / BATCH_SIZE + 1}任务成功, 包含${batch.length}个SKU`)
   }
 
   if (form.value.autoStart) {

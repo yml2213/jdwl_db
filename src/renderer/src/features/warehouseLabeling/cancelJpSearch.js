@@ -225,6 +225,31 @@ export default {
       
       console.log('整店取消京配打标 - 合并后的完整信息:', completeShopInfo)
 
+      // 如果店铺信息中没有id字段，尝试获取完整的店铺信息
+      if (!completeShopInfo.id && completeShopInfo.shopName) {
+        result.cancelJpSearchLogs.push({
+          type: 'info',
+          message: `店铺信息不完整，正在尝试获取完整店铺信息...`,
+          time: new Date().toLocaleString()
+        });
+        
+        const shopInfoResult = await getShopInfoByName(completeShopInfo.shopName);
+        if (shopInfoResult.success && shopInfoResult.shopInfo) {
+          console.log('成功获取完整店铺信息:', shopInfoResult.shopInfo);
+          
+          // 更新店铺信息
+          Object.assign(completeShopInfo, shopInfoResult.shopInfo);
+          
+          result.cancelJpSearchLogs.push({
+            type: 'success',
+            message: `成功获取完整店铺信息`,
+            time: new Date().toLocaleString()
+          });
+        } else {
+          console.warn('获取完整店铺信息失败:', shopInfoResult.message);
+        }
+      }
+
       // 获取整店CSG列表
       result.cancelJpSearchLogs.push({
         type: 'info',
