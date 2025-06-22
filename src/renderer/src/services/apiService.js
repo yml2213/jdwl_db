@@ -1046,6 +1046,7 @@ export async function getCSGList(skuList) {
         originSend: '',
         aoData: JSON.stringify(aoDataObj)
       })
+      console.log('data', data)
 
       const response = await fetchApi(baseUrl, {
         method: 'POST',
