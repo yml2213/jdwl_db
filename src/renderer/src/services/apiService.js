@@ -121,7 +121,7 @@ export async function getShopList(deptId) {
     })
 
     try {
-      console.log(`发送店铺列表请求: 页码=${currentStart/pageSize + 1}`)
+      console.log(`发送店铺列表请求: 页码=${currentStart / pageSize + 1}`)
       const response = await fetchApi(url, {
         method: 'POST',
         headers: {
@@ -182,7 +182,7 @@ export async function getShopList(deptId) {
         hasMoreData = false
       }
     } catch (error) {
-      console.error(`获取店铺列表页码${currentStart/pageSize + 1}失败:`, error)
+      console.error(`获取店铺列表页码${currentStart / pageSize + 1}失败:`, error)
       hasMoreData = false
     }
   }
@@ -521,8 +521,13 @@ export async function batchProcessSKUs(skuList, storeInfo) {
 
   console.log(`============== batchProcessSKUs 函数被调用 ==============`)
   console.log(`开始批量处理${skuList.length}个SKU`, skuList)
+  console.log('storeInfo', storeInfo)
+  console.log(`===============================================`)
   // 使用与原始请求完全相同的URL格式
-  const spShopNo = storeInfo.spShopNo || storeInfo.shopNo || '18661988' // 默认值用于测试
+  // 从店铺信息中获取spShopNo，优先使用店铺信息中的spShopNo
+  const spShopNo = storeInfo['店铺信息'] && storeInfo['店铺信息'].spShopNo
+    ? storeInfo['店铺信息'].spShopNo
+    : (storeInfo.spShopNo || storeInfo.shopNo || '18661988') // 默认值用于测试
   const url = `${BASE_URL}/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
 
   console.log('导入接口URL:', url)
@@ -1354,36 +1359,36 @@ export async function clearStockAllocation(skuList, shopInfo) {
  * @returns {Promise<Array>} 商品CSG列表
  */
 export async function getShopGoodsList(shopInfo) {
-  console.log('getShopGoodsList被调用，传入的shopInfo:', shopInfo);
-  
+  console.log('getShopGoodsList被调用，传入的shopInfo:', shopInfo)
+
   if (!shopInfo || !shopInfo.shopNo) {
-    console.error('获取整店商品列表失败: 店铺信息不完整 - 缺少shopNo', shopInfo);
-    return { success: false, message: '店铺信息不完整 - 缺少shopNo', csgList: [] };
-  }
-  
-  // 获取事业部信息，如果shopInfo中没有提供
-  let deptInfo = null;
-  if (!shopInfo.deptId || !shopInfo.sellerId) {
-    const { getSelectedDepartment } = require('../utils/storageHelper');
-    deptInfo = getSelectedDepartment();
-    console.log('从localStorage获取事业部信息:', deptInfo);
+    console.error('获取整店商品列表失败: 店铺信息不完整 - 缺少shopNo', shopInfo)
+    return { success: false, message: '店铺信息不完整 - 缺少shopNo', csgList: [] }
   }
 
-  console.log('开始获取整店商品列表, 店铺:', shopInfo.shopName);
-  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`;
-  const csrfToken = await getCsrfToken();
+  // 获取事业部信息，如果shopInfo中没有提供
+  let deptInfo = null
+  if (!shopInfo.deptId || !shopInfo.sellerId) {
+    const { getSelectedDepartment } = require('../utils/storageHelper')
+    deptInfo = getSelectedDepartment()
+    console.log('从localStorage获取事业部信息:', deptInfo)
+  }
+
+  console.log('开始获取整店商品列表, 店铺:', shopInfo.shopName)
+  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+  const csrfToken = await getCsrfToken()
 
   try {
     // 初始化结果数组和分页参数
-    let allCsgItems = [];
-    let currentStart = 0;
-    let totalRecords = null;
-    let hasMoreData = true;
-    const pageSize = 100; // 每页获取100条记录
+    let allCsgItems = []
+    let currentStart = 0
+    let totalRecords = null
+    let hasMoreData = true
+    const pageSize = 100 // 每页获取100条记录
 
     // 循环获取所有页的数据
     while (hasMoreData) {
-      console.log(`获取整店商品列表, 当前起始位置: ${currentStart}, 每页数量: ${pageSize}`);
+      console.log(`获取整店商品列表, 当前起始位置: ${currentStart}, 每页数量: ${pageSize}`)
 
       // 准备请求参数，确保与curl命令中的参数一致
       const requestParams = {
@@ -1444,12 +1449,12 @@ export async function getShopGoodsList(shopInfo) {
           { name: 'sSortDir_0', value: 'desc' },
           { name: 'iSortingCols', value: 1 }
         ])
-      };
-      
-      console.log('发送请求参数:', requestParams);
+      }
+
+      console.log('发送请求参数:', requestParams)
 
       // 构建请求数据
-      const data = qs.stringify(requestParams);
+      const data = qs.stringify(requestParams)
 
       // 发送请求
       const response = await fetchApi(url, {
@@ -1462,62 +1467,62 @@ export async function getShopGoodsList(shopInfo) {
           'X-Requested-With': 'XMLHttpRequest'
         },
         body: data
-      });
+      })
 
-      console.log('获取整店商品列表响应:', response);
+      console.log('获取整店商品列表响应:', response)
 
       // 处理响应
       if (response && response.aaData) {
         // 首次获取总记录数
         if (totalRecords === null) {
-          totalRecords = response.iTotalRecords || 0;
-          console.log(`查询到总共有${totalRecords}个商品`);
+          totalRecords = response.iTotalRecords || 0
+          console.log(`查询到总共有${totalRecords}个商品`)
         }
 
         // 解析本页数据，提取CSG编号
         const pageCsgItems = response.aaData
           .filter(item => item.shopGoodsNo) // 只保留有CSG编号的商品
-          .map(item => item.shopGoodsNo);
+          .map(item => item.shopGoodsNo)
 
         // 合并到总结果中
-        allCsgItems = [...allCsgItems, ...pageCsgItems];
+        allCsgItems = [...allCsgItems, ...pageCsgItems]
 
-        console.log(`当前已获取${allCsgItems.length}/${totalRecords}个CSG编号`);
+        console.log(`当前已获取${allCsgItems.length}/${totalRecords}个CSG编号`)
 
         // 判断是否还有更多数据
-        currentStart += response.aaData.length;
-        hasMoreData = currentStart < totalRecords;
+        currentStart += response.aaData.length
+        hasMoreData = currentStart < totalRecords
 
         // 如果没有更多数据或已获取所有记录，退出循环
         if (!hasMoreData || allCsgItems.length >= totalRecords) {
-          break;
+          break
         }
 
         // 添加短暂延迟避免频繁请求
         if (hasMoreData) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          await new Promise((resolve) => setTimeout(resolve, 300))
         }
       } else {
         // 如果响应异常，退出循环
-        console.warn('查询CSG编号响应异常:', response);
-        hasMoreData = false;
+        console.warn('查询CSG编号响应异常:', response)
+        hasMoreData = false
       }
     }
 
-    console.log(`整店商品CSG编号查询完成，共获取${allCsgItems.length}个CSG编号`);
+    console.log(`整店商品CSG编号查询完成，共获取${allCsgItems.length}个CSG编号`)
 
     return {
       success: true,
       message: `成功获取${allCsgItems.length}个CSG编号`,
       csgList: allCsgItems
-    };
+    }
   } catch (error) {
-    console.error('获取整店商品列表失败:', error);
+    console.error('获取整店商品列表失败:', error)
     return {
       success: false,
       message: `获取整店商品列表失败: ${error.message || '未知错误'}`,
       csgList: []
-    };
+    }
   }
 }
 
@@ -1672,9 +1677,9 @@ export async function getShopInfoByName(shopName) {
     if (response && response.aaData && response.aaData.length > 0) {
       // 找到匹配的店铺
       const matchedShop = response.aaData.find(shop => shop.shopName === shopName) || response.aaData[0]
-      
+
       console.log('找到店铺信息:', matchedShop)
-      
+
       return {
         success: true,
         message: '成功获取店铺信息',
