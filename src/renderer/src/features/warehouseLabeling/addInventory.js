@@ -1,6 +1,6 @@
 import { getAllCookies } from '../../utils/cookieHelper'
 import { getCMGBySkuList } from '../../services/apiService'
-import { getSelectedDepartment } from '../../utils/storageHelper'
+import { getSelectedDepartment, getSelectedWarehouse } from '../../utils/storageHelper'
 
 export default {
   name: 'addInventory',
@@ -16,7 +16,7 @@ export default {
    */
   async execute(skuList, task, createBatchTask, inventoryAmount = 1000) {
     console.log('addInventory.execute被调用，库存数量:', inventoryAmount)
-    
+
     // 如果有任务选项中的库存数量，优先使用
     if (task && task.选项 && task.选项.inventoryAmount) {
       inventoryAmount = task.选项.inventoryAmount
@@ -73,7 +73,7 @@ export default {
           const batchNumber = i + 1
 
           // 创建批次任务
-          const           batchTask = {
+          const batchTask = {
             id: `${task.id}-batch-${batchNumber}`,
             sku: `${task.sku}-批次${batchNumber}/${batches.length}`,
             skuList: batchSkuList,
@@ -292,6 +292,14 @@ export default {
 
       console.log('事业部信息:', deptInfo)
 
+      // 获取当前选择的仓库信息
+      const warehouseInfo = getSelectedWarehouse()
+      if (!warehouseInfo) {
+        throw new Error('未选择仓库，无法添加库存')
+      }
+
+      console.log('仓库信息:', warehouseInfo)
+
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies()
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
@@ -311,7 +319,7 @@ export default {
       formData.append('deptId', deptInfo.id)
       formData.append('deptName', deptInfo.name)
       formData.append('supplierId', '4418047117122')
-      formData.append('warehouseId', '14897') // 这里使用固定的仓库ID，实际应从UI获取
+      formData.append('warehouseId', warehouseInfo.id.toString()) // 使用动态获取的仓库ID
       formData.append('billOfLading', '')
       formData.append('qualityCheckFlag', '')
       formData.append('sidChange', '0')
