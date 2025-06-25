@@ -231,6 +231,9 @@ export default {
       if (!result.success) {
         throw new Error(result.message || '获取CSG列表失败')
       }
+      console.log(`=================csgList enableJpSearch=============================`)
+      console.log(result)
+      console.log(`=================csgList enableJpSearch end=============================`)
 
       if (!result.csgList || result.csgList.length === 0) {
         throw new Error('未找到对应的CSG编号')
@@ -382,6 +385,7 @@ export default {
    * @returns {Array<Array<any>>} Excel数据
    */
   createExcelData(csgList) {
+    console.log(`createExcelData csgList: ${csgList}`)
     // 表头行
     const headers = [
       'CSG编号',
