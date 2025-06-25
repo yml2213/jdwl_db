@@ -5,17 +5,33 @@ import path from 'path'
 /**
  * 保存文件到本地
  * @param {Object} params - 保存文件参数
- * @param {string} params.fileName - 文件名
+ * @param {string} [params.fileName] - 文件名
  * @param {Array} params.data - 文件数据（Uint8Array形式）
  * @param {string} [params.targetDir] - 目标目录，相对于应用根目录
+ * @param {string} [params.filePath] - 直接指定的文件路径（优先级最高）
  * @returns {Promise<Object>} 保存结果
  */
 export async function saveFile(params) {
   try {
-    const { fileName, data, targetDir } = params
+    const { fileName, data, targetDir, filePath } = params
 
+    // 如果直接提供了文件路径，优先使用
+    if (filePath) {
+      // 确保目录存在
+      const dirPath = path.dirname(filePath)
+      await fs.promises.mkdir(dirPath, { recursive: true })
+
+      // 将数组转换回Uint8Array
+      const buffer = Buffer.from(new Uint8Array(data))
+
+      // 写入文件
+      await fs.promises.writeFile(filePath, buffer)
+
+      console.log('文件保存成功:', filePath)
+      return { saved: true, path: filePath, message: '文件保存成功' }
+    }
     // 如果指定了目标目录，使用目标目录
-    if (targetDir) {
+    else if (targetDir) {
       // 获取应用根目录
       const appPath = app.getAppPath()
       const dirPath = path.join(appPath, targetDir)

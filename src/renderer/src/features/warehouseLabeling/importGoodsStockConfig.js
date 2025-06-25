@@ -439,6 +439,22 @@ export default {
         view[i] = excelBinaryData.charCodeAt(i) & 0xff
       }
 
+      // 临时保存Excel文件到excel_gen文件夹中进行测试
+      const timestamp = new Date().getTime()
+      const fileName = `goodsStockConfigTemplate_${timestamp}.xlsx`
+      const filePath = `excel_gen/${fileName}`
+
+      try {
+        // 通过主进程API保存文件
+        await window.api.saveFile({
+          filePath: filePath,
+          data: Array.from(new Uint8Array(buf))
+        })
+        console.log(`已将Excel文件临时保存到: ${filePath}`)
+      } catch (saveError) {
+        console.error('临时保存Excel文件失败:', saveError)
+      }
+
       // 创建文件对象 - 使用标准化的文件名和MIME类型
       return new File([buf], 'goodsStockConfigTemplate.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
