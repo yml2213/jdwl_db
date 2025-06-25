@@ -1,4 +1,4 @@
-import { getSelectedDepartment } from '../../utils/storageHelper'
+import { getSelectedDepartment, getSelectedShop } from '../../utils/storageHelper'
 import * as XLSX from 'xlsx'
 import { getAllCookies } from '../../utils/cookieHelper'
 
@@ -16,7 +16,7 @@ export default {
   async execute(skuList, task, createBatchTask) {
     // 初始化日志
     if (!window.importLogs) {
-      window.importLogs = [];
+      window.importLogs = []
     }
 
     // 初始化返回结果
@@ -24,46 +24,46 @@ export default {
       success: false,
       message: '',
       importLogs: []
-    };
+    }
 
     try {
-      console.log(`开始处理SKU列表，总数：${skuList.length}`);
-      const startTime = new Date();
+      console.log(`开始处理SKU列表，总数：${skuList.length}`)
+      // const startTime = new Date();
 
       // 记录总SKU数
       result.importLogs.push({
         type: 'info',
         message: `开始处理，总SKU数：${skuList.length}`,
         time: new Date().toLocaleString()
-      });
+      })
 
       // 如果SKU数量大于2000，需要分批处理
       if (skuList.length > 2000) {
         // 主任务标记为已分批
         if (task) {
-          task.状态 = '已分批';
-          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 2000)}个批次任务`];
+          task.状态 = '已分批'
+          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 2000)}个批次任务`]
         }
 
         result.importLogs.push({
           type: 'warning',
           message: `SKU数量(${skuList.length})超过2000，已分拆为${Math.ceil(skuList.length / 2000)}个批次任务`,
           time: new Date().toLocaleString()
-        });
-        
+        })
+
         // 将SKU列表分成多个批次，每批最多2000个SKU
-        const batches = [];
+        const batches = []
         for (let i = 0; i < skuList.length; i += 2000) {
-          batches.push(skuList.slice(i, i + 2000));
+          batches.push(skuList.slice(i, i + 2000))
         }
-        
-        console.log(`已将SKU列表分成${batches.length}个批次`);
-        
+
+        console.log(`已将SKU列表分成${batches.length}个批次`)
+
         // 为每个批次创建一个独立任务
         for (let i = 0; i < batches.length; i++) {
-          const batchSkuList = batches[i];
-          const batchNumber = i + 1;
-          
+          const batchSkuList = batches[i]
+          const batchNumber = i + 1
+
           // 创建批次任务
           const batchTask = {
             id: `${task.id}-batch-${batchNumber}`,
@@ -74,62 +74,62 @@ export default {
             原始任务ID: task.id,
             批次编号: batchNumber,
             总批次数: batches.length,
-            选项: task.选项 || {useWarehouse: true}, // 继承原任务选项
+            选项: task.选项 || { useWarehouse: true }, // 继承原任务选项
             结果: [],
             importLogs: [{
               type: 'info',
               message: `批次${batchNumber}/${batches.length} - 开始处理${batchSkuList.length}个SKU`,
               time: new Date().toLocaleString()
             }]
-          };
-          
+          }
+
           // 使用回调函数添加批次任务到任务列表
           if (typeof createBatchTask === 'function') {
-            createBatchTask(batchTask);
+            createBatchTask(batchTask)
           }
-          
+
           // 如果是第一个批次，立即开始处理
           if (i === 0) {
             // 处理第一个批次的SKU
-            const batchResult = await this._processBatch(batchSkuList, batchTask);
-            result.importLogs = result.importLogs.concat(batchResult.importLogs);
-            
+            const batchResult = await this._processBatch(batchSkuList, batchTask)
+            result.importLogs = result.importLogs.concat(batchResult.importLogs)
+
             // 更新批次任务状态
-            batchTask.状态 = batchResult.success ? '成功' : '失败';
-            batchTask.结果 = batchResult.results || [];
-            batchTask.importLogs = batchResult.importLogs;
-            
+            batchTask.状态 = batchResult.success ? '成功' : '失败'
+            batchTask.结果 = batchResult.results || []
+            batchTask.importLogs = batchResult.importLogs
+
             // 通知UI更新
             if (typeof createBatchTask === 'function') {
-              createBatchTask(batchTask);
+              createBatchTask(batchTask)
             }
           }
         }
-        
+
         // 设置总体处理结果
-        result.success = true;
-        result.message = `已将任务分拆为${batches.length}个批次任务，第一批次已处理完成`;
-        
-        return result;
+        result.success = true
+        result.message = `已将任务分拆为${batches.length}个批次任务，第一批次已处理完成`
+
+        return result
       } else {
         // SKU数量不超过2000，直接处理
-        return await this._processBatch(skuList, task);
+        return await this._processBatch(skuList, task)
       }
     } catch (error) {
-      console.error('处理SKU出错:', error);
-      
-      result.success = false;
-      result.message = `处理失败: ${error.message || '未知错误'}`;
+      console.error('处理SKU出错:', error)
+
+      result.success = false
+      result.message = `处理失败: ${error.message || '未知错误'}`
       result.importLogs.push({
         type: 'error',
         message: `处理失败: ${error.message || '未知错误'}`,
         time: new Date().toLocaleString()
-      });
-      
-      return result;
+      })
+
+      return result
     }
   },
-  
+
   /**
    * 处理一个批次的SKU
    * @param {Array} skuList 批次中的SKU列表
@@ -142,42 +142,42 @@ export default {
       message: '',
       importLogs: [],
       results: []
-    };
-    
+    }
+
     try {
       // 记录批次开始时间
-      const startTime = new Date();
-      
+      const startTime = new Date()
+
       result.importLogs.push({
         type: 'info',
         message: `开始处理${skuList.length}个SKU`,
         time: startTime.toLocaleString()
-      });
-      
+      })
+
       // 更新任务状态为处理中
       if (task) {
-        task.状态 = '处理中';
-        task.结果 = [`正在处理${skuList.length}个SKU`];
+        task.状态 = '处理中'
+        task.结果 = [`正在处理${skuList.length}个SKU`]
       }
-      
+
       // 获取事业部信息
-      const department = getSelectedDepartment();
+      const department = getSelectedDepartment()
       if (!department) {
-        throw new Error('未选择事业部，无法启用库存商品分配');
+        throw new Error('未选择事业部，无法启用库存商品分配')
       }
 
       // 实际处理SKU - 调用上传方法
-      const uploadResult = await this.uploadGoodsStockConfigData(skuList, department);
-      
+      const uploadResult = await this.uploadGoodsStockConfigData(skuList, department)
+
       // 记录处理结果
-      const endTime = new Date();
-      const processingTime = (endTime - startTime) / 1000; // 秒
-      
+      const endTime = new Date()
+      const processingTime = (endTime - startTime) / 1000 // 秒
+
       // 根据上传结果设置成功/失败状态
-      result.success = uploadResult.success;
-      result.message = uploadResult.message;
-      result.results.push(result.message);
-      
+      result.success = uploadResult.success
+      result.message = uploadResult.message
+      result.results.push(result.message)
+
       result.importLogs.push({
         type: uploadResult.success ? 'success' : 'error',
         message: result.message,
@@ -185,36 +185,36 @@ export default {
         successCount: uploadResult.processedCount || 0,
         failureCount: uploadResult.failedCount || 0,
         processingTime
-      });
-      
+      })
+
       // 更新任务状态
       if (task) {
-        task.状态 = uploadResult.success ? '成功' : '失败';  // 确保任何失败（包括时间限制）都标记为失败
-        task.结果 = result.results;
-        task.importLogs = result.importLogs;
+        task.状态 = uploadResult.success ? '成功' : '失败'  // 确保任何失败（包括时间限制）都标记为失败
+        task.结果 = result.results
+        task.importLogs = result.importLogs
       }
-      
-      return result;
+
+      return result
     } catch (error) {
-      console.error('处理批次出错:', error);
-      
-      result.success = false;
-      result.message = `批次处理失败: ${error.message || '未知错误'}`;
+      console.error('处理批次出错:', error)
+
+      result.success = false
+      result.message = `批次处理失败: ${error.message || '未知错误'}`
       result.importLogs.push({
         type: 'error',
         message: result.message,
         time: new Date().toLocaleString()
-      });
-      result.results.push(result.message);
-      
+      })
+      result.results.push(result.message)
+
       // 更新任务状态
       if (task) {
-        task.状态 = '失败';
-        task.结果 = result.results;
-        task.importLogs = result.importLogs;
+        task.状态 = '失败'
+        task.结果 = result.results
+        task.importLogs = result.importLogs
       }
-      
-      return result;
+
+      return result
     }
   },
 
@@ -227,14 +227,14 @@ export default {
   async uploadGoodsStockConfigData(skuList, department) {
     try {
       // 记录接收到的SKU批次信息
-      console.log(`处理批次SKU数量: ${skuList.length}`);
-      
+      console.log(`处理批次SKU数量: ${skuList.length}`)
+
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies()
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
 
       console.log('获取到cookies:', cookieString ? '已获取' : '未获取')
-      console.log(`开始处理当前批次，共${skuList.length}个SKU，${skuList.length > 0 ? `第一个SKU: ${skuList[0]}, 最后一个SKU: ${skuList[skuList.length-1]}` : '无SKU'}`);
+      console.log(`开始处理当前批次，共${skuList.length}个SKU，${skuList.length > 0 ? `第一个SKU: ${skuList[0]}, 最后一个SKU: ${skuList[skuList.length - 1]}` : '无SKU'}`)
 
       // 创建Excel数据结构
       const data = this.createExcelData(skuList, department)
@@ -246,7 +246,7 @@ export default {
       const formData = new FormData()
       // 根据curl命令使用正确的参数名
       formData.append('goodsStockConfigExcelFile', file)
-      
+
       // 打印FormData条目
       console.log('FormData条目:')
       for (const pair of formData.entries()) {
@@ -290,19 +290,19 @@ export default {
       if (response && (response.resultCode === "1" || response.resultCode === "2")) {
         // 成功响应 - resultCode为1或2都表示成功
         // resultCode为2时通常会返回包含导入日志的文件路径
-        
+
         // 获取日志文件名，方便查看
-        let logFileName = "无日志文件";
+        let logFileName = "无日志文件"
         if (response.resultCode === "2" && response.resultData && typeof response.resultData === 'string') {
-          const parts = response.resultData.split('/');
-          logFileName = parts[parts.length - 1] || response.resultData;
+          const parts = response.resultData.split('/')
+          logFileName = parts[parts.length - 1] || response.resultData
         }
-        
-        console.log(`批次导入成功，状态码: ${response.resultCode}，导入日志: ${logFileName}`);
-        
+
+        console.log(`批次导入成功，状态码: ${response.resultCode}，导入日志: ${logFileName}`)
+
         // 将日志信息添加到window上下文，使UI可以访问
         if (!window.importLogs) {
-          window.importLogs = [];
+          window.importLogs = []
         }
         window.importLogs.push({
           timestamp: new Date().toLocaleTimeString(),
@@ -310,8 +310,8 @@ export default {
           batchSize: skuList.length,
           logFile: logFileName,
           message: `成功导入${skuList.length}个SKU，日志文件: ${logFileName}`
-        });
-        
+        })
+
         return {
           success: true,
           message: '启用库存商品分配成功',
@@ -323,27 +323,27 @@ export default {
         }
       } else {
         // 失败响应
-        let errorMessage = response?.resultMessage || response?.message || '启用库存商品分配失败，未知原因';
-        let isTimeLimit = false;
-        
+        let errorMessage = response?.resultMessage || response?.message || '启用库存商品分配失败，未知原因'
+        let isTimeLimit = false
+
         // 如果是5分钟限制的错误，修改错误信息格式
         if (response?.resultMessage?.includes('5分钟内不要频繁操作') || response?.message?.includes('5分钟内不要频繁操作')) {
-          errorMessage = '启用库存商品分配: 已失败 - 5分钟内不要频繁操作！';
-          isTimeLimit = true;
+          errorMessage = '启用库存商品分配: 已失败 - 5分钟内不要频繁操作！'
+          isTimeLimit = true
         }
 
-        console.error('库存商品分配导入失败:', errorMessage);
-        
+        console.error('库存商品分配导入失败:', errorMessage)
+
         // 将错误信息添加到window上下文，使UI可以访问
         if (!window.importLogs) {
-          window.importLogs = [];
+          window.importLogs = []
         }
         window.importLogs.push({
           timestamp: new Date().toLocaleTimeString(),
           type: 'error',
           batchSize: skuList.length,
           message: errorMessage
-        });
+        })
 
         return {
           success: false,
@@ -386,9 +386,10 @@ export default {
       '仓库编号'
     ]
 
-    // 获取店铺编码
+    // 动态获取店铺信息
+    const shop = getSelectedShop()
     const shopInfo = {
-      shopNo: 'CSP00200004055971' // 默认店铺编码，实际应该从store中获取
+      shopNo: shop?.shopNo || ''  // 使用选择的店铺编码，如果没有则为空字符串
     }
 
     // 数据行
