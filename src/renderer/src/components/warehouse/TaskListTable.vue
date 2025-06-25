@@ -4,6 +4,7 @@
       <tr>
         <th style="width: 40px"><input type="checkbox" v-model="selectAll" /></th>
         <th>SKU</th>
+        <th>功能名称</th>
         <th>店铺</th>
         <th>仓库</th>
         <th>创建时间</th>
@@ -20,6 +21,7 @@
       >
         <td><input type="checkbox" v-model="selectedTasks" :value="index" /></td>
         <td>{{ task.sku }}</td>
+        <td>{{ getTaskFeatureName(task) }}</td>
         <td>{{ task.店铺 }}</td>
         <td>{{ task.仓库 || '' }}</td>
         <td>{{ task.创建时间 }}</td>
@@ -43,9 +45,9 @@
               <span v-if="task.errorCode" class="error-code">[错误码: {{ task.errorCode }}]</span>
               {{ task.结果 || '失败' }}
             </span>
-            <button 
-              v-if="task.结果 && task.结果.length > 30" 
-              @click="toggleErrorDetail(index)" 
+            <button
+              v-if="task.结果 && task.结果.length > 30"
+              @click="toggleErrorDetail(index)"
               class="btn-link error-toggle"
             >
               {{ isErrorExpanded(index) ? '收起' : '详情' }}
@@ -55,7 +57,11 @@
               <div class="error-detail-content">{{ task.结果 || '失败' }}</div>
               <div v-if="task.errorData" class="error-detail-data">
                 <div class="error-detail-title">额外信息:</div>
-                <pre>{{ typeof task.errorData === 'object' ? JSON.stringify(task.errorData, null, 2) : task.errorData }}</pre>
+                <pre>{{
+                  typeof task.errorData === 'object'
+                    ? JSON.stringify(task.errorData, null, 2)
+                    : task.errorData
+                }}</pre>
               </div>
             </div>
           </div>
@@ -83,7 +89,7 @@
       </tr>
       <!-- 日志展示行 -->
       <tr v-for="taskIndex in tasksWithExpandedLogs" :key="`log-${taskIndex}`">
-        <td colspan="8" class="logs-container">
+        <td colspan="9" class="logs-container">
           <div class="task-logs">
             <h4>批次处理日志明细</h4>
 
@@ -272,7 +278,7 @@
         </td>
       </tr>
       <tr v-if="tasks.length === 0">
-        <td colspan="8" class="no-data">没有任务</td>
+        <td colspan="9" class="no-data">没有任务</td>
       </tr>
     </tbody>
   </table>
@@ -294,6 +300,41 @@ const emit = defineEmits(['execute-one', 'delete-task'])
 const selectedTasks = ref([])
 const expandedTasks = ref([]) // 跟踪展开的任务
 const expandedErrors = ref([]) // 跟踪展开的错误详情
+
+// 获取任务的功能名称
+const getTaskFeatureName = (task) => {
+  // 如果任务已经包含功能名称，直接返回
+  if (task.功能) {
+    return task.功能
+  }
+
+  // 如果没有功能名称和选项，返回未知功能
+  if (!task || !task.选项) return '未知功能'
+
+  const options = task.选项
+  const functionNames = []
+
+  // 入仓打标功能
+  if (options.importStore) functionNames.push('导入店铺商品')
+  if (options.useStore) functionNames.push('启用店铺商品')
+  if (options.importProps) functionNames.push('导入物流属性')
+  if (options.useMainData || options.useAddInventory) functionNames.push('添加库存')
+  if (options.useWarehouse) functionNames.push('启用商品库存分配')
+  if (options.useJdEffect) functionNames.push('启用京配')
+  if (options.importProductNames) functionNames.push('导入商品简称')
+
+  // 清库下标功能
+  if (options.clearStockAllocation) functionNames.push('库存分配清零')
+  if (options.cancelJpSearch) functionNames.push('取消京配')
+  if (options.wholeStoreClearance) functionNames.push('整店库存分配清零')
+  if (options.wholeCancelJpSearch) functionNames.push('整店取消京配')
+
+  // 退货入库功能
+  if (options.isReturnStorage) functionNames.push('退货入库')
+
+  // 如果有多个功能，用逗号连接显示
+  return functionNames.length > 0 ? functionNames.join('，') : '未知功能'
+}
 
 // 切换错误详情显示
 const toggleErrorDetail = (index) => {

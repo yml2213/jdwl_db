@@ -5,8 +5,7 @@ import {
   getSelectedShop,
   saveShopsList,
   getShopsList,
-  getSelectedDepartment,
-  getSelectedWarehouse
+  getSelectedDepartment
 } from '../utils/storageHelper'
 import { getShopList } from '../services/apiService'
 import { executeTasks, executeOneTask } from '../features/warehouseLabeling/taskExecutor'
@@ -14,7 +13,6 @@ import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
 
 import TaskArea from './warehouse/TaskArea.vue'
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
-import ClearStorageFeatureOptions from './warehouse/ClearStorageFeatureOptions.vue'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -185,11 +183,46 @@ const handleAddTask = () => {
 
   const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
+  // 确定功能名称
+  let featureName = ''
+  const options = form.value.options
+  const functionList = []
+
+  // 收集所有选择的功能
+  if (options.clearStockAllocation) functionList.push('库存分配清零')
+  if (options.cancelJpSearch) functionList.push('取消京配')
+
+  // 整店操作模式
+  if (form.value.mode === 'whole_store') {
+    if (functionList.includes('库存分配清零')) {
+      // 替换为整店版本
+      const index = functionList.indexOf('库存分配清零')
+      functionList[index] = '整店库存分配清零'
+    }
+    if (functionList.includes('取消京配')) {
+      // 替换为整店版本
+      const index = functionList.indexOf('取消京配')
+      functionList[index] = '整店取消京配'
+    }
+  }
+
+  // 将所有功能用逗号连接
+  featureName = functionList.length > 0 ? functionList.join('，') : '未知功能'
+
   if (form.value.mode === 'whole_store') {
     // 为整店操作创建特殊的选项对象，将清零和取消京配打标转换为整店操作选项
     const wholeStoreOptions = {
       wholeStoreClearance: form.value.options.clearStockAllocation,
       wholeCancelJpSearch: form.value.options.cancelJpSearch
+    }
+
+    // 整店操作的功能名称
+    if (wholeStoreOptions.wholeStoreClearance && wholeStoreOptions.wholeCancelJpSearch) {
+      featureName = '整店清库+取消京配'
+    } else if (wholeStoreOptions.wholeStoreClearance) {
+      featureName = '整店清库'
+    } else if (wholeStoreOptions.wholeCancelJpSearch) {
+      featureName = '整店取消京配'
     }
 
     const task = {
@@ -200,6 +233,7 @@ const handleAddTask = () => {
       创建时间: timestamp,
       状态: '等待中',
       结果: '',
+      功能: featureName,
       选项: wholeStoreOptions,
       店铺信息: shopInfo,
       事业部信息: deptInfo
@@ -234,6 +268,7 @@ const handleAddTask = () => {
       创建时间: timestamp,
       状态: '等待中',
       结果: '',
+      功能: featureName,
       选项: JSON.parse(JSON.stringify(form.value.options)),
       店铺信息: shopInfo,
       事业部信息: deptInfo

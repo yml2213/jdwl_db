@@ -495,6 +495,23 @@ const handleAddTask = () => {
   // 记录任务选项
   console.log('添加任务时的表单选项:', JSON.stringify(form.value.options))
 
+  // 确定功能名称
+  let featureName = ''
+  const options = form.value.options
+  const functionList = []
+
+  // 收集所有选择的功能
+  if (options.importStore) functionList.push('导入店铺商品')
+  if (options.useStore) functionList.push('启用店铺商品')
+  if (options.importProps) functionList.push('导入物流属性')
+  if (options.useMainData || options.useAddInventory) functionList.push('添加库存')
+  if (options.useWarehouse) functionList.push('启用商品库存分配')
+  if (options.useJdEffect) functionList.push('启用京配')
+  if (options.importProductNames) functionList.push('导入商品简称')
+
+  // 将所有功能用逗号连接
+  featureName = functionList.length > 0 ? functionList.join('，') : '未知功能'
+
   // 为每个组创建一个任务
   skuGroups.forEach((group, index) => {
     const groupNumber = index + 1
@@ -508,6 +525,7 @@ const handleAddTask = () => {
       创建时间: timestamp,
       状态: '等待中',
       结果: '',
+      功能: featureName, // 添加功能名称
       选项: JSON.parse(JSON.stringify(form.value.options)), // 确保是深拷贝
       店铺信息: shopInfo, // 存储完整的店铺信息对象
       importLogs: [

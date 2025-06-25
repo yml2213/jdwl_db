@@ -282,17 +282,18 @@ const importFromClipboard = async () => {
   }
 }
 
-// 添加任务的处理函数
+// 添加任务
 const handleAddTask = () => {
-  // 验证必填项
-  if (!form.value.orderNumber.trim()) {
-    alert('请输入订单号')
+  console.log('添加退货入库任务')
+
+  // 检查是否有输入的退货单号
+  const returnOrderNo = form.value.returnOrderNo.trim()
+  if (!returnOrderNo) {
+    alert('请输入退货单号')
     return
   }
 
-  // 退货原因不是必填项
-
-  // 获取当前店铺信息
+  // 检查店铺选择
   const shopInfo = currentShopInfo.value
   if (!shopInfo) {
     alert('请选择店铺')
@@ -302,25 +303,30 @@ const handleAddTask = () => {
   // 创建日期时间标记
   const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
-  // 创建新任务
+  // 创建任务对象
+  const taskId = `return-storage-${Date.now()}-${Math.floor(Math.random() * 10000)}`
   const task = {
-    id: `return-storage-${Date.now()}`,
-    orderNumber: form.value.orderNumber.trim(),
-    year: form.value.year,
-    returnReason: form.value.returnReason,
+    id: taskId,
+    sku: returnOrderNo,
+    skuList: [returnOrderNo], // 存储退货单号
     店铺: shopInfo.shopName,
     创建时间: timestamp,
     状态: '等待中',
     结果: '',
+    功能: '退货入库', // 添加功能名称
+    选项: {
+      isReturnStorage: true,
+      returnOrderNo
+    },
     店铺信息: shopInfo
   }
 
   // 添加任务到任务列表
   addTaskToList(task)
+  console.log('添加退货入库任务成功:', task)
 
-  // 清空表单
-  form.value.orderNumber = ''
-  form.value.returnReason = ''
+  // 清空输入
+  form.value.returnOrderNo = ''
 
   // 如果启用了自动开始，自动执行任务
   if (form.value.autoStart) {
