@@ -274,6 +274,9 @@ export default {
       // 将数据转换为xlsx文件
       const file = await this.convertToExcelFile(data)
 
+      // 临时测试：将生成的文件保存到excel_gen文件夹
+      // await this.saveExcelForTesting(file, csgList.length)
+
       // 创建FormData
       const formData = new FormData()
       formData.append('csrfToken', csrfToken)
@@ -388,7 +391,7 @@ export default {
     console.log(`createExcelData csgList: ${csgList}`)
     // 表头行
     const headers = [
-      'CSG编号',
+      '店铺商品编号（CSG编码）必填',
       '京配搜索（0否，1是）'
     ]
 
@@ -500,6 +503,39 @@ export default {
     return {
       _isFormData: true,
       entries
+    }
+  },
+
+  /**
+   * 临时测试：将生成的文件保存到excel_gen文件夹
+   * @param {File} file - Excel文件对象
+   * @param {number} batchSize - 批次大小
+   * @returns {Promise<void>}
+   */
+  async saveExcelForTesting(file, batchSize) {
+    try {
+      // 生成唯一的文件名
+      const fileName = `updateShopGoodsJpSearchImportTemplate_${Date.now()}_${batchSize}.xls`
+
+      // 读取文件内容为ArrayBuffer
+      const arrayBuffer = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsArrayBuffer(file)
+      })
+
+      // 使用window.api保存文件
+      await window.api.saveFile({
+        fileName,
+        targetDir: 'excel_gen',
+        data: Array.from(new Uint8Array(arrayBuffer))
+      })
+
+      console.log(`文件已保存到: excel_gen/${fileName}`)
+    } catch (error) {
+      console.error('保存Excel文件失败:', error)
+      throw new Error(`保存Excel文件失败: ${error.message}`)
     }
   }
 }

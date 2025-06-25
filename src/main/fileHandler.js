@@ -7,39 +7,82 @@ import path from 'path'
  * @param {Object} params - 保存文件参数
  * @param {string} params.fileName - 文件名
  * @param {Array} params.data - 文件数据（Uint8Array形式）
+ * @param {string} [params.targetDir] - 目标目录，相对于应用根目录
  * @returns {Promise<Object>} 保存结果
  */
 export async function saveFile(params) {
   try {
-    const { fileName, data } = params
-    
-    // 默认保存到下载目录
-    const downloadsPath = app.getPath('downloads')
-    const defaultFilePath = path.join(downloadsPath, fileName)
-    
-    // 打开保存对话框
-    const { canceled, filePath } = await dialog.showSaveDialog({
-      title: '保存文件',
-      defaultPath: defaultFilePath,
-      filters: [
-        { name: 'Excel文件', extensions: ['xls', 'xlsx'] },
-        { name: '所有文件', extensions: ['*'] }
-      ]
-    })
-    
-    if (canceled || !filePath) {
-      console.log('用户取消了保存操作')
-      return { saved: false, path: null, message: '用户取消了保存操作' }
+    const { fileName, data, targetDir } = params
+
+    // 如果指定了目标目录，使用目标目录
+    if (targetDir) {
+      // 获取应用根目录
+      const appPath = app.getAppPath()
+      const dirPath = path.join(appPath, targetDir)
+
+      // 确保目录存在
+      await fs.promises.mkdir(dirPath, { recursive: true })
+
+      // 构建文件路径
+      const filePath = path.join(dirPath, fileName)
+
+      // 将数组转换回Uint8Array
+      const buffer = Buffer.from(new Uint8Array(data))
+
+      // 写入文件
+      await fs.promises.writeFile(filePath, buffer)
+
+      console.log('文件保存成功:', filePath)
+      return { saved: true, path: filePath, message: '文件保存成功' }
+    } else {
+      // 默认保存到下载目录
+      const downloadsPath = app.getPath('downloads')
+      const defaultFilePath = path.join(downloadsPath, fileName)
+
+      // 打开保存对话框
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: '保存文件',
+        defaultPath: defaultFilePath,
+        filters: [
+          { name: 'Excel文件', extensions: ['xls', 'xlsx'] },
+          { name: '所有文件', extensions: ['*'] }
+        ]
+      })
+
+      if (canceled || !filePath) {
+        console.log('用户取消了保存操作')
+        return { saved: false, path: null, message: '用户取消了保存操作' }
+      }
+
+      try {
+        // 检查文件是否存在
+        await fs.promises.access(filePath)
+
+        // 文件存在，询问是否覆盖
+        const confirm = await dialog.showMessageBox({
+          type: 'question',
+          title: '文件已存在',
+          message: '文件已存在，是否覆盖？',
+          buttons: ['是', '否']
+        })
+
+        if (confirm.response === 1) {
+          console.log('用户取消了保存操作')
+          return { saved: false, path: null, message: '用户取消了保存操作' }
+        }
+      } catch {
+        // 文件不存在，可以直接写入
+      }
+
+      // 将数组转换回Uint8Array
+      const buffer = Buffer.from(new Uint8Array(data))
+
+      // 写入文件
+      await fs.promises.writeFile(filePath, buffer)
+
+      console.log('文件保存成功:', filePath)
+      return { saved: true, path: filePath, message: '文件保存成功' }
     }
-    
-    // 将数组转换回Uint8Array
-    const buffer = Buffer.from(new Uint8Array(data))
-    
-    // 写入文件
-    await fs.promises.writeFile(filePath, buffer)
-    
-    console.log('文件保存成功:', filePath)
-    return { saved: true, path: filePath, message: '文件保存成功' }
   } catch (error) {
     console.error('保存文件失败:', error)
     return { saved: false, path: null, message: `保存文件失败: ${error.message}` }
