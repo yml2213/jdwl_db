@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed, watch, onMounted, provide, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, provide, onUnmounted, inject } from 'vue'
 import {
   saveSelectedShop,
   getSelectedShop,
   saveShopsList,
   getShopsList,
-  getSelectedDepartment
+  getSelectedDepartment,
+  getSelectedWarehouse
 } from '../utils/storageHelper'
 import { getShopList } from '../services/apiService'
 import { executeTasks, executeOneTask } from '../features/warehouseLabeling/taskExecutor'
@@ -13,17 +14,13 @@ import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
 
 import TaskArea from './warehouse/TaskArea.vue'
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
+import ClearStorageFeatureOptions from './warehouse/ClearStorageFeatureOptions.vue'
 
 const props = defineProps({
   isLoggedIn: Boolean
 })
 
-const emit = defineEmits([
-  'shop-change',
-  'add-task',
-  'execute-task',
-  'clear-tasks'
-])
+const emit = defineEmits(['shop-change', 'add-task', 'execute-task', 'clear-tasks'])
 
 // 表单数据
 const form = ref({
@@ -37,8 +34,16 @@ const form = ref({
   autoStart: false
 })
 
-// 任务列表
-const taskList = ref([])
+// 获取全局任务列表
+const globalTaskList = inject('globalTaskList', ref([]))
+
+// 任务列表 - 使用全局任务列表
+const taskList = computed({
+  get: () => globalTaskList.value,
+  set: (value) => {
+    globalTaskList.value = value
+  }
+})
 
 // 店铺列表
 const shopsList = ref([])
@@ -106,12 +111,15 @@ const loadShops = async () => {
 }
 
 // 监听登录状态
-watch(() => props.isLoggedIn, (newVal) => {
-  if (newVal) {
-    loadShops()
-  }
-}, { immediate: true })
-
+watch(
+  () => props.isLoggedIn,
+  (newVal) => {
+    if (newVal) {
+      loadShops()
+    }
+  },
+  { immediate: true }
+)
 
 // 添加任务到列表的公共方法
 const addTaskToList = (task) => {
@@ -143,13 +151,16 @@ onUnmounted(() => {
   window.addTaskToList = null
 })
 
-
 // 添加任务
 const handleAddTask = () => {
   console.log('添加任务开始 - 当前状态:', {
     店铺: currentShopInfo.value?.shopName,
     SKU模式: form.value.mode,
-    SKU内容: form.value.sku ? (form.value.sku.length > 50 ? form.value.sku.substring(0, 50) + '...' : form.value.sku) : '空',
+    SKU内容: form.value.sku
+      ? form.value.sku.length > 50
+        ? form.value.sku.substring(0, 50) + '...'
+        : form.value.sku
+      : '空',
     功能选项: form.value.options,
     任务列表长度: taskList.value.length
   })
@@ -171,7 +182,7 @@ const handleAddTask = () => {
     alert('请至少选择一个功能选项')
     return
   }
-  
+
   const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
   if (form.value.mode === 'whole_store') {
@@ -180,7 +191,7 @@ const handleAddTask = () => {
       wholeStoreClearance: form.value.options.clearStockAllocation,
       wholeCancelJpSearch: form.value.options.cancelJpSearch
     }
-    
+
     const task = {
       id: `whole-store-${Date.now()}`,
       sku: '整店操作',
@@ -195,23 +206,23 @@ const handleAddTask = () => {
     }
     addTaskToList(task)
     console.log('添加整店任务成功:', task)
-    
+
     // 整店模式下直接返回，不需要处理SKU列表
     if (form.value.autoStart) {
       handleExecuteTasks()
     }
     return
   }
-  
+
   // 以下是SKU模式的处理
   const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
   if (skuList.length === 0) {
     alert('请输入有效的SKU')
     return
   }
-  
+
   console.log('处理SKU列表, 数量:', skuList.length, '前5个SKU:', skuList.slice(0, 5))
-  
+
   const BATCH_SIZE = 2000
   for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
     const batch = skuList.slice(i, i + BATCH_SIZE)
@@ -252,7 +263,7 @@ const handleExecuteTasks = async () => {
   console.log('开始执行任务列表, 数量:', taskList.value.length)
 
   // 过滤出等待中的任务
-  const tasksToExecute = taskList.value.filter(task => task.状态 === '等待中')
+  const tasksToExecute = taskList.value.filter((task) => task.状态 === '等待中')
   if (tasksToExecute.length === 0) {
     alert('没有等待中的任务')
     return
@@ -267,7 +278,7 @@ const handleExecuteTasks = async () => {
 }
 
 const handleExecuteOneTask = async (task) => {
-   const shopInfo = currentShopInfo.value
+  const shopInfo = currentShopInfo.value
   if (!shopInfo) {
     alert('请选择店铺')
     return
@@ -276,15 +287,18 @@ const handleExecuteOneTask = async (task) => {
 }
 
 // 监听店铺选择变化，并保存店铺信息
-watch(() => form.value.selectedStore, (newShopNo) => {
-  if (newShopNo) {
-    const selectedShop = shopsList.value.find(shop => shop.shopNo === newShopNo)
-    if (selectedShop) {
-      saveSelectedShop(selectedShop)
-      emit('shop-change', selectedShop)
+watch(
+  () => form.value.selectedStore,
+  (newShopNo) => {
+    if (newShopNo) {
+      const selectedShop = shopsList.value.find((shop) => shop.shopNo === newShopNo)
+      if (selectedShop) {
+        saveSelectedShop(selectedShop)
+        emit('shop-change', selectedShop)
+      }
     }
   }
-})
+)
 
 // 处理店铺选择变更事件
 const handleShopChange = (selectedShop) => {
@@ -313,7 +327,8 @@ const handleDeleteTask = (index) => {
   taskList.value.splice(index, 1)
 }
 
-
+// 使用provide向子组件提供数据和方法
+provide('taskList', taskList)
 provide('form', form)
 provide('shopsList', shopsList)
 provide('isLoadingShops', isLoadingShops)
@@ -328,7 +343,7 @@ provide('disabledProducts', disabledProducts)
   <div class="inventory-clearance" v-if="props.isLoggedIn">
     <div class="clearance-container">
       <ClearStorageOperationArea @shop-change="handleShopChange" />
-      <TaskArea 
+      <TaskArea
         :task-list="taskList"
         @execute="handleExecuteTasks"
         @execute-one="handleExecuteOneTask"

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, provide, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, provide, onUnmounted, inject } from 'vue'
 import {
   saveSelectedShop,
   getSelectedShop,
@@ -30,8 +30,16 @@ const form = ref({
   autoStart: false
 })
 
-// 任务列表
-const taskList = ref([])
+// 获取全局任务列表
+const globalTaskList = inject('globalTaskList', ref([]))
+
+// 任务列表 - 使用全局任务列表
+const taskList = computed({
+  get: () => globalTaskList.value,
+  set: (value) => {
+    globalTaskList.value = value
+  }
+})
 
 // 店铺列表
 const shopsList = ref([])
@@ -163,17 +171,17 @@ const handleExecuteOneTask = async (task) => {
     // 更新任务状态
     task.状态 = '执行中'
     task.结果 = '正在处理...'
-    
+
     // 执行退货入库流程
     const result = await executeReturnStorage(task, shopInfo)
-    
+
     // 根据执行结果更新任务状态
     if (result.success) {
       task.状态 = '成功'
     } else {
       task.状态 = '失败'
     }
-    
+
     task.结果 = result.message
   } catch (error) {
     console.error('执行任务失败:', error)
@@ -227,17 +235,17 @@ const executeTask = async () => {
   try {
     let successCount = 0
     let failureCount = 0
-    
+
     // 逐个执行任务
     for (const task of tasksToExecute) {
       try {
         // 更新任务状态
         task.状态 = '执行中'
         task.结果 = '正在处理...'
-        
+
         // 执行退货入库流程
         const result = await executeReturnStorage(task, shopInfo)
-        
+
         if (result.success) {
           successCount++
           task.状态 = '成功'
@@ -245,7 +253,7 @@ const executeTask = async () => {
           failureCount++
           task.状态 = '失败'
         }
-        
+
         task.结果 = result.message
       } catch (error) {
         console.error(`任务执行失败: ${task.orderNumber}`, error)
@@ -266,24 +274,24 @@ const executeTask = async () => {
 // 从剪贴板导入
 const importFromClipboard = async () => {
   try {
-    const text = await navigator.clipboard.readText();
-    form.value.orderNumber = text.trim();
+    const text = await navigator.clipboard.readText()
+    form.value.orderNumber = text.trim()
   } catch (err) {
-    console.error('无法读取剪贴板内容:', err);
-    alert('无法读取剪贴板内容');
+    console.error('无法读取剪贴板内容:', err)
+    alert('无法读取剪贴板内容')
   }
 }
 
-  // 添加任务的处理函数
+// 添加任务的处理函数
 const handleAddTask = () => {
   // 验证必填项
   if (!form.value.orderNumber.trim()) {
-    alert('请输入订单号');
-    return;
+    alert('请输入订单号')
+    return
   }
 
   // 退货原因不是必填项
-  
+
   // 获取当前店铺信息
   const shopInfo = currentShopInfo.value
   if (!shopInfo) {
@@ -311,8 +319,8 @@ const handleAddTask = () => {
   addTaskToList(task)
 
   // 清空表单
-  form.value.orderNumber = '';
-  form.value.returnReason = '';
+  form.value.orderNumber = ''
+  form.value.returnReason = ''
 
   // 如果启用了自动开始，自动执行任务
   if (form.value.autoStart) {
@@ -356,18 +364,23 @@ provide('importFromClipboard', importFromClipboard)
             <button class="btn btn-clipboard" @click="importFromClipboard">从剪贴板导入</button>
           </div>
         </div>
-        
+
         <div class="form-group">
           <label class="form-label">年份:</label>
           <input type="text" v-model="form.year" class="year-input" />
         </div>
-        
+
         <div class="form-group">
           <label class="form-label">退货原因: <span class="optional-label">(可选)</span></label>
-          <input type="text" v-model="form.returnReason" placeholder="可选填写退货原因" class="reason-input" />
+          <input
+            type="text"
+            v-model="form.returnReason"
+            placeholder="可选填写退货原因"
+            class="reason-input"
+          />
           <div class="form-tip">退货原因可以为空，如有特殊情况可填写</div>
         </div>
-        
+
         <div class="form-group">
           <button class="btn btn-add-task" @click="handleAddTask">添加任务</button>
         </div>

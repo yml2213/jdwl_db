@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, provide } from 'vue'
 import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
@@ -34,6 +34,12 @@ const handleLogout = () => {
 // 当前活动标签
 const activeTab = ref('入仓打标')
 
+// 创建一个任务列表的全局状态，以便在标签页切换时保持
+const globalTaskList = ref([])
+
+// 提供全局任务列表给所有组件使用
+provide('globalTaskList', globalTaskList)
+
 // 当前的供应商和事业部信息（用于开发模式展示）
 const currentVendor = computed(() => getSelectedVendor())
 const currentDepartment = computed(() => getSelectedDepartment())
@@ -63,12 +69,12 @@ const copyToClipboard = (text, section) => {
   tempInput.select()
   document.execCommand('copy')
   document.body.removeChild(tempInput)
-  
+
   // 显示复制成功提示
   if (copyTip.value.timer) {
     clearTimeout(copyTip.value.timer)
   }
-  
+
   copyTip.value = {
     show: true,
     section: section,
@@ -133,37 +139,69 @@ const selectJsonContent = (event) => {
       <div class="debug-section">
         <div class="section-header">
           <h4>供应商信息</h4>
-          <button v-if="currentVendor" @click="copyToClipboard(JSON.stringify(currentVendor, null, 2), '供应商')" class="copy-btn">复制</button>
+          <button
+            v-if="currentVendor"
+            @click="copyToClipboard(JSON.stringify(currentVendor, null, 2), '供应商')"
+            class="copy-btn"
+          >
+            复制
+          </button>
           <span v-if="copyTip.show && copyTip.section === '供应商'" class="copy-tip">✓ 已复制</span>
         </div>
-        <pre v-if="currentVendor" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentVendor, null, 2) }}</pre>
+        <pre v-if="currentVendor" class="json-display" @click="selectJsonContent">{{
+          JSON.stringify(currentVendor, null, 2)
+        }}</pre>
         <div v-else class="empty-data">未选择供应商</div>
       </div>
       <div class="debug-section">
         <div class="section-header">
           <h4>事业部信息</h4>
-          <button v-if="currentDepartment" @click="copyToClipboard(JSON.stringify(currentDepartment, null, 2), '事业部')" class="copy-btn">复制</button>
+          <button
+            v-if="currentDepartment"
+            @click="copyToClipboard(JSON.stringify(currentDepartment, null, 2), '事业部')"
+            class="copy-btn"
+          >
+            复制
+          </button>
           <span v-if="copyTip.show && copyTip.section === '事业部'" class="copy-tip">✓ 已复制</span>
         </div>
-        <pre v-if="currentDepartment" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentDepartment, null, 2) }}</pre>
+        <pre v-if="currentDepartment" class="json-display" @click="selectJsonContent">{{
+          JSON.stringify(currentDepartment, null, 2)
+        }}</pre>
         <div v-else class="empty-data">未选择事业部</div>
       </div>
       <div class="debug-section">
         <div class="section-header">
           <h4>店铺信息</h4>
-          <button v-if="currentShop" @click="copyToClipboard(JSON.stringify(currentShop, null, 2), '店铺')" class="copy-btn">复制</button>
+          <button
+            v-if="currentShop"
+            @click="copyToClipboard(JSON.stringify(currentShop, null, 2), '店铺')"
+            class="copy-btn"
+          >
+            复制
+          </button>
           <span v-if="copyTip.show && copyTip.section === '店铺'" class="copy-tip">✓ 已复制</span>
         </div>
-        <pre v-if="currentShop" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentShop, null, 2) }}</pre>
+        <pre v-if="currentShop" class="json-display" @click="selectJsonContent">{{
+          JSON.stringify(currentShop, null, 2)
+        }}</pre>
         <div v-else class="empty-data">未选择店铺</div>
       </div>
       <div class="debug-section">
         <div class="section-header">
           <h4>仓库信息</h4>
-          <button v-if="currentWarehouse" @click="copyToClipboard(JSON.stringify(currentWarehouse, null, 2), '仓库')" class="copy-btn">复制</button>
+          <button
+            v-if="currentWarehouse"
+            @click="copyToClipboard(JSON.stringify(currentWarehouse, null, 2), '仓库')"
+            class="copy-btn"
+          >
+            复制
+          </button>
           <span v-if="copyTip.show && copyTip.section === '仓库'" class="copy-tip">✓ 已复制</span>
         </div>
-        <pre v-if="currentWarehouse" class="json-display" @click="selectJsonContent">{{ JSON.stringify(currentWarehouse, null, 2) }}</pre>
+        <pre v-if="currentWarehouse" class="json-display" @click="selectJsonContent">{{
+          JSON.stringify(currentWarehouse, null, 2)
+        }}</pre>
         <div v-else class="empty-data">未选择仓库</div>
       </div>
     </div>
@@ -189,15 +227,17 @@ const selectJsonContent = (event) => {
           </div>
         </div>
 
-        <!-- 根据当前选中的标签页显示对应的组件 -->
-        <div v-if="activeTab === '入仓打标'">
-          <WarehouseLabeling :isLoggedIn="isUserLoggedIn" />
-        </div>
-        <div v-else-if="activeTab === '清库下标'">
-          <InventoryClearance :isLoggedIn="isUserLoggedIn" />
-        </div>
-        <div v-else-if="activeTab === '退货入库'">
-          <ReturnStorage :isLoggedIn="isUserLoggedIn" />
+        <!-- 所有组件同时渲染，但只有当前选中的可见 -->
+        <div class="tab-contents">
+          <div v-show="activeTab === '入仓打标'" class="tab-content">
+            <WarehouseLabeling :isLoggedIn="isUserLoggedIn" />
+          </div>
+          <div v-show="activeTab === '清库下标'" class="tab-content">
+            <InventoryClearance :isLoggedIn="isUserLoggedIn" />
+          </div>
+          <div v-show="activeTab === '退货入库'" class="tab-content">
+            <ReturnStorage :isLoggedIn="isUserLoggedIn" />
+          </div>
         </div>
       </div>
     </main>
@@ -427,5 +467,14 @@ body {
   color: #8bc34a;
   font-size: 12px;
   font-weight: bold;
+}
+
+/* 添加标签内容样式 */
+.tab-contents {
+  position: relative;
+}
+
+.tab-content {
+  width: 100%;
 }
 </style>

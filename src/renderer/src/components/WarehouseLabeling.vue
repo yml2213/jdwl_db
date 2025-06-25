@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, provide, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, provide, onUnmounted, inject } from 'vue'
 import {
   saveSelectedShop,
   getSelectedShop,
@@ -37,6 +37,9 @@ const emit = defineEmits([
   'execute-task',
   'clear-tasks'
 ])
+
+// 获取全局任务列表
+const globalTaskList = inject('globalTaskList', ref([]))
 
 // 表单数据
 const form = ref({
@@ -79,8 +82,13 @@ const form = ref({
   }
 })
 
-// 任务列表
-const taskList = ref([])
+// 任务列表 - 使用全局任务列表
+const taskList = computed({
+  get: () => globalTaskList.value,
+  set: (value) => {
+    globalTaskList.value = value
+  }
+})
 
 // 店铺列表
 const shopsList = ref([])
@@ -390,14 +398,17 @@ const addTaskToList = (task) => {
       // 添加新任务
       taskList.value.push(task)
       console.log('添加新任务成功，当前任务数量:', taskList.value.length)
-      console.log('当前任务列表状态:', JSON.stringify({
-        type: typeof taskList.value,
-        isArray: Array.isArray(taskList.value),
-        length: taskList.value.length,
-        firstTask: taskList.value.length > 0 ? taskList.value[0].id : 'none'
-      }))
+      console.log(
+        '当前任务列表状态:',
+        JSON.stringify({
+          type: typeof taskList.value,
+          isArray: Array.isArray(taskList.value),
+          length: taskList.value.length,
+          firstTask: taskList.value.length > 0 ? taskList.value[0].id : 'none'
+        })
+      )
     }
-    
+
     // 强制更新任务列表引用，以确保变更被检测到
     taskList.value = [...taskList.value]
   } catch (error) {
@@ -449,7 +460,7 @@ const executeTask = async () => {
 // 添加任务的处理函数
 const handleAddTask = () => {
   console.log('添加任务按钮被点击')
-  
+
   // 检查是否有输入的SKU
   if (!form.value.sku.trim()) {
     alert('请输入SKU')
@@ -471,34 +482,34 @@ const handleAddTask = () => {
     return
   }
 
-      // 创建日期时间标记
-    const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  // 创建日期时间标记
+  const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
-    // 将SKU列表按2000个一组进行分割
-    const BATCH_SIZE = 2000
-    const skuGroups = []
-    for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
-      skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
-    }
-    
-    // 记录任务选项
-    console.log('添加任务时的表单选项:', JSON.stringify(form.value.options))
+  // 将SKU列表按2000个一组进行分割
+  const BATCH_SIZE = 2000
+  const skuGroups = []
+  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
+    skuGroups.push(skuList.slice(i, i + BATCH_SIZE))
+  }
 
-    // 为每个组创建一个任务
-    skuGroups.forEach((group, index) => {
-      const groupNumber = index + 1
-      const taskId = `task-${Date.now()}-${Math.floor(Math.random() * 10000)}`
-      const task = {
-        id: taskId, // 添加唯一ID
-        sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
-        skuList: group, // 存储该组的所有SKU
-        店铺: shopInfo ? shopInfo.shopName : '未选择',
-        仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
-        创建时间: timestamp,
-        状态: '等待中',
-        结果: '',
-        选项: JSON.parse(JSON.stringify(form.value.options)), // 确保是深拷贝
-        店铺信息: shopInfo, // 存储完整的店铺信息对象
+  // 记录任务选项
+  console.log('添加任务时的表单选项:', JSON.stringify(form.value.options))
+
+  // 为每个组创建一个任务
+  skuGroups.forEach((group, index) => {
+    const groupNumber = index + 1
+    const taskId = `task-${Date.now()}-${Math.floor(Math.random() * 10000)}`
+    const task = {
+      id: taskId, // 添加唯一ID
+      sku: `批次${groupNumber}/${skuGroups.length}(${group.length}个SKU)`,
+      skuList: group, // 存储该组的所有SKU
+      店铺: shopInfo ? shopInfo.shopName : '未选择',
+      仓库: warehouseInfo ? warehouseInfo.warehouseName : '未选择',
+      创建时间: timestamp,
+      状态: '等待中',
+      结果: '',
+      选项: JSON.parse(JSON.stringify(form.value.options)), // 确保是深拷贝
+      店铺信息: shopInfo, // 存储完整的店铺信息对象
       importLogs: [
         {
           type: 'batch-info',
@@ -565,15 +576,7 @@ const handleOpenLogisticsImporter = () => {
 
 // 使用provide向子组件提供数据和方法
 provide('form', form)
-provide('taskList', computed(() => {
-  console.log('Providing taskList:', JSON.stringify({
-    type: typeof taskList.value,
-    isArray: Array.isArray(taskList.value),
-    length: taskList.value.length,
-    hasItems: taskList.value.length > 0
-  }))
-  return taskList.value
-}))
+provide('taskList', taskList)
 provide('shopsList', shopsList)
 provide('isLoadingShops', isLoadingShops)
 provide('shopLoadError', shopLoadError)
