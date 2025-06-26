@@ -3,7 +3,7 @@
     <div class="task-header">
       <div class="task-title">任务列表</div>
       <div class="task-actions">
-        <button class="btn btn-info" @click="$emit('toggle-logs')">查看日志</button>
+        <button class="btn btn-info" @click="$emit('toggle-logs')">查看任务流日志</button>
         <label class="checkbox-label timing-checkbox">
           <input type="checkbox" v-model="autoStart" />
           <span>定时</span>

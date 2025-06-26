@@ -54,18 +54,20 @@ const globalTaskList = inject('globalTaskList', ref([]))
 
 // 表单数据
 const form = ref({
-  quickSelect: '',
+  quickSelect: 'warehouseLabelingFlow',
   sku: '',
   options: {
     importStore: true,
-    useStore: true,
-    importProps: false,
+    useStore: false,
+    importProps: true,
     useMainData: false,
-    useWarehouse: false,
-    useJdEffect: false,
+    useWarehouse: true,
+    useJdEffect: true,
     importTitle: false,
     importProductNames: false,
-    skipConfigErrors: true
+    skipConfigErrors: true,
+    useAddInventory: true,
+    inventoryAmount: 1000
   },
   selectedStore: '',
   selectedWarehouse: '',
@@ -319,12 +321,12 @@ watch(
       form.value.options = {
         ...form.value.options,
         importStore: true,
-        useStore: true,
+        useStore: false,
         importProps: true,
         useAddInventory: true,
         useWarehouse: true,
         useJdEffect: true,
-        importProductNames: false // 任务流不包含此项
+        importProductNames: false
       }
     }
   }
@@ -724,8 +726,13 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
         <button @click="toggleTaskFlowLogs(false)" class="close-btn">&times;</button>
       </h4>
       <div class="logs-container">
-        <div v-for="(log, index) in form.taskFlowLogs" :key="index" class="log-entry">
-          {{ log }}
+        <div
+          v-for="(log, index) in form.taskFlowLogs"
+          :key="index"
+          class="log-entry"
+          :class="`log-${log.level}`"
+        >
+          {{ log.message }}
         </div>
       </div>
     </div>
@@ -828,6 +835,28 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
 .log-entry {
   padding: 2px 0;
   word-wrap: break-word;
+}
+
+.log-info {
+  color: #d4d4d4; /* 默认颜色 */
+}
+
+.log-step {
+  color: #569cd6;
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+.log-success {
+  color: #38a169; /* 绿色 */
+}
+
+.log-error {
+  color: #e53e3e; /* 红色 */
+}
+
+.log-warning {
+  color: #d69d29; /* 黄色 */
 }
 
 .product-names-container {

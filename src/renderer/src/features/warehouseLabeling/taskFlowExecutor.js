@@ -37,11 +37,6 @@ const taskFlowSteps = [{
     name: '启用京配打标生效',
     option: 'useJdEffect',
     executor: enableJpSearchFeature
-},
-{
-    name: '启用店铺商品',
-    option: 'useStore',
-    executor: enableStoreProductsFeature
 }
 ]
 
@@ -52,9 +47,12 @@ class TaskFlowExecutor {
         this.isCancelled = false
     }
 
-    log(message) {
+    log(message, level = 'info') {
         if (this.onLog) {
-            this.onLog(`[${new Date().toLocaleTimeString()}] ${message}`)
+            this.onLog({
+                message: `[${new Date().toLocaleTimeString()}] ${message}`,
+                level
+            })
         }
         console.log(message)
     }
@@ -65,26 +63,26 @@ class TaskFlowExecutor {
 
         for (const step of taskFlowSteps) {
             if (this.isCancelled) {
-                this.log(`任务流被取消，停止执行。`)
+                this.log(`任务流被取消，停止执行。`, 'warning')
                 this.task.状态 = '已取消'
                 break
             }
 
             // 检查任务选项中是否启用了此步骤
             if (this.task.选项 && this.task.选项[step.option]) {
-                this.log(`--- 开始执行步骤: ${step.name} ---`)
+                this.log(`--- 开始执行步骤: ${step.name} ---`, 'step')
 
                 try {
                     const result = await this.executeStepWithRetry(step)
                     if (!result.success) {
                         const errorMessage = `步骤 [${step.name}] 执行失败: ${result.message}`
-                        this.log(errorMessage)
+                        this.log(errorMessage, 'error')
                         this.task.状态 = '失败'
                         this.task.结果 = errorMessage
                         return // 关键步骤失败，终止整个任务流
                     }
 
-                    this.log(`步骤 [${step.name}] 执行成功。`)
+                    this.log(`步骤 [${step.name}] 执行成功。`, 'success')
 
                     // 如果是导入店铺商品步骤，则等待一段时间
                     if (step.option === 'importStore') {
@@ -93,7 +91,7 @@ class TaskFlowExecutor {
                     }
                 } catch (error) {
                     const errorMessage = `步骤 [${step.name}] 发生严重错误: ${error.message}`
-                    this.log(errorMessage)
+                    this.log(errorMessage, 'error')
                     this.task.状态 = '失败'
                     this.task.结果 = errorMessage
                     return
@@ -102,7 +100,7 @@ class TaskFlowExecutor {
         }
 
         if (this.task.状态 === '执行中') {
-            this.log('任务流所有步骤执行完毕。')
+            this.log('任务流所有步骤执行完毕。', 'success')
             this.task.状态 = '成功'
             this.task.结果 = '任务流执行成功'
         }
@@ -138,14 +136,18 @@ class TaskFlowExecutor {
                         const randomDelay = Math.floor(Math.random() * 5000) // 增加随机延迟避免同时重试
                         const totalDelay = delay + randomDelay
                         this.log(
-                            `步骤 [${step.name}] 遇到可重试错误: ${result.message}. 将在约 ${Math.round(
-                                totalDelay / 60000
-                            )} 分钟后进行第 ${attempt + 1} 次尝试...`
+                            `步骤 [${step.name}] 遇到可重试错误: ${result.message
+                            }. 将在约 ${Math.round(totalDelay / 60000)} 分钟后进行第 ${attempt + 1
+                            } 次尝试...`,
+                            'warning'
                         )
                         await wait(totalDelay)
                         continue // 继续下一次循环尝试
                     } else {
-                        this.log(`步骤 [${step.name}] 已达到最大重试次数 (${maxRetries})，标记为失败。`)
+                        this.log(
+                            `步骤 [${step.name}] 已达到最大重试次数 (${maxRetries})，标记为失败。`,
+                            'error'
+                        )
                         return {
                             success: false,
                             message: `重试 ${maxRetries} 次后仍然失败: ${result.message}`
@@ -156,12 +158,15 @@ class TaskFlowExecutor {
                 // 如果执行成功或遇到不可重试的错误，则直接返回结果
                 return result
             } catch (error) {
-                this.log(`步骤 [${step.name}] 第 ${attempt} 次尝试时发生异常: ${error.message}`)
+                this.log(`步骤 [${step.name}] 第 ${attempt} 次尝试时发生异常: ${error.message}`, 'error')
                 if (attempt < maxRetries) {
                     // 对于未知异常，可以采用较短的延迟重试
                     await wait(5000)
                 } else {
-                    this.log(`步骤 [${step.name}] 发生异常且已达到最大重试次数，标记为失败。`)
+                    this.log(
+                        `步骤 [${step.name}] 发生异常且已达到最大重试次数，标记为失败。`,
+                        'error'
+                    )
                     return {
                         success: false,
                         message: `重试 ${maxRetries} 次后因异常失败: ${error.message}`
