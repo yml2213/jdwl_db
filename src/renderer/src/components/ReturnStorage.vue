@@ -30,16 +30,8 @@ const form = ref({
   autoStart: false
 })
 
-// 获取全局任务列表
-const globalTaskList = inject('globalTaskList', ref([]))
-
-// 任务列表 - 使用全局任务列表
-const taskList = computed({
-  get: () => globalTaskList.value,
-  set: (value) => {
-    globalTaskList.value = value
-  }
-})
+// 直接在组件内部创建和管理 taskList
+const taskList = ref([])
 
 // 店铺列表
 const shopsList = ref([])
@@ -394,9 +386,9 @@ provide('importFromClipboard', importFromClipboard)
 
       <!-- 右侧任务列表区域 -->
       <task-area
+        :task-list="taskList"
         @execute="executeTask"
         @clear="clearTasks"
-        @open-web="executeTask"
         @execute-one="handleExecuteOneTask"
         @delete-task="handleDeleteTask"
       />

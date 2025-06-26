@@ -25,7 +25,8 @@ import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 import LogisticsAttributesImporter from './warehouse/LogisticsAttributesImporter.vue'
 import ProductNameImporter from './warehouse/feature/ProductNameImporter.vue'
-import TaskFlowExecutor from '../features/warehouseLabeling/taskFlowExecutor'
+import { useTask } from '../composables/useTask'
+import warehouseLabelingFlow from '../features/warehouseLabeling/taskFlowExecutor'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -49,8 +50,8 @@ const emit = defineEmits([
   'clear-tasks'
 ])
 
-// 获取全局任务列表
-const globalTaskList = inject('globalTaskList', ref([]))
+// 直接在组件内部创建和管理 taskList
+const taskList = ref([])
 
 // 表单数据
 const form = ref({
@@ -94,14 +95,6 @@ const form = ref({
     progress: '初始化...'
   },
   taskFlowLogs: []
-})
-
-// 任务列表 - 使用全局任务列表
-const taskList = computed({
-  get: () => globalTaskList.value,
-  set: (value) => {
-    globalTaskList.value = value
-  }
 })
 
 // 店铺列表
@@ -332,12 +325,72 @@ watch(
   }
 )
 
+// --- 新的统一任务执行逻辑 ---
+
+// 使用 useTask 创建一个可复用的任务执行器实例
+const {
+  execute: runWarehouseLabeling,
+  isRunning: isWarehouseLabelingRunning,
+  log: warehouseLabelingLog,
+  logs: warehouseLabelingLogs,
+  error: warehouseLabelingError,
+  result: warehouseLabelingResult,
+  cancel: cancelWarehouseLabeling,
+  progress: warehouseLabelingProgress
+} = useTask(warehouseLabelingFlow, {
+  onSuccess: (res, task) => {
+    if (task) {
+      task.状态 = '成功'
+      task.结果 = res.message || '执行成功'
+    }
+  },
+  onError: (err, task) => {
+    if (task) {
+      task.状态 = '失败'
+      task.结果 = err.message || '执行失败'
+    }
+  },
+  onLog: (logEntry, task) => {
+    // 允许将日志同步到旧的任务流日志窗口
+    if (logEntry) {
+      form.value.taskFlowLogs.push(logEntry)
+    }
+    // 同时也可以更新任务的实时结果
+    if (task) {
+      task.结果 = logEntry.message
+    }
+  }
+})
+
+// 新的、统一的执行入口 - 重命名以保持一致性
+const runWarehouseLabelingFlow = (task) => {
+  // 如果是从UI按钮直接触发（没有task参数），则从form中构建上下文
+  const context = task
+    ? {
+        task, // 将整个task对象传入，以便在hook中更新
+        skuList: task.skuList,
+        shopInfo: task.店铺信息,
+        options: task.选项,
+        departmentInfo: getSelectedDepartment()
+      }
+    : {
+        skuList: form.value.sku.split('\\n').filter((s) => s.trim()),
+        shopInfo: currentShopInfo.value,
+        departmentInfo: getSelectedDepartment(),
+        options: form.value.options
+      }
+  
+  // 清空旧日志并显示日志窗口
+  form.value.taskFlowLogs = []
+  toggleTaskFlowLogs(true)
+
+  // 运行任务
+  runWarehouseLabeling(context, task) // 传入task本身，用于回调
+}
+
 // 组件挂载时，如果已登录则加载数据
 onMounted(() => {
-  // 暴露taskList到window对象，供其他模块访问
-  window.taskList = taskList.value
-
-  // 暴露addTaskToList方法到window对象，供批次处理使用
+  // 不再需要从 window 暴露 taskList，但保留 addTaskToList
   window.addTaskToList = addTaskToList
 
   // 加载店铺和仓库列表
@@ -349,7 +402,6 @@ onMounted(() => {
 
 // 确保在组件卸载时清理全局引用
 onUnmounted(() => {
-  window.taskList = null
   window.addTaskToList = null
 })
 
@@ -393,9 +445,9 @@ const enableDisabledProducts = async (disabledProducts) => {
 const handleExecuteOneTask = async (task) => {
   if (!task) return
 
-  // 检查是否是任务流
+  // 检查是否是任务流，如果是，则调用新的统一执行入口
   if (task.选项 && task.选项.quickSelect === 'warehouseLabelingFlow') {
-    executeTaskFlow(task)
+    runWarehouseLabelingFlow(task)
     return
   }
 
@@ -421,59 +473,15 @@ const handleExecuteOneTask = async (task) => {
   }
 }
 
-// 执行任务流
-const executeTaskFlow = async (task) => {
-  form.value.taskFlowLogs = [] // 清空之前的日志
-  const executor = new TaskFlowExecutor(task, (log) => {
-    form.value.taskFlowLogs.push(log)
-  })
-
-  try {
-    await executor.execute()
-  } catch (error) {
-    const errorMessage = `任务流执行时发生未捕获的错误: ${error.message}`
-    form.value.taskFlowLogs.push(errorMessage)
-    console.error(errorMessage)
-  }
-}
-
 // 添加任务到任务列表 - 用于批次任务
 const addTaskToList = (task) => {
   if (!task) return
-  console.log('添加批次任务到任务列表:', task)
-
-  try {
-    // 检查是否是更新现有任务
-    const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
-    if (existingTaskIndex >= 0) {
-      // 更新现有任务
-      taskList.value[existingTaskIndex] = task
-      console.log('更新现有任务成功，索引:', existingTaskIndex)
-    } else {
-      // 添加新任务
-      taskList.value.push(task)
-      console.log('添加新任务成功，当前任务数量:', taskList.value.length)
-      console.log(
-        '当前任务列表状态:',
-        JSON.stringify({
-          type: typeof taskList.value,
-          isArray: Array.isArray(taskList.value),
-          length: taskList.value.length,
-          firstTask: taskList.value.length > 0 ? taskList.value[0].id : 'none'
-        })
-      )
-    }
-
-    // 强制更新任务列表引用，以确保变更被检测到
-    taskList.value = [...taskList.value]
-  } catch (error) {
-    console.error('添加任务到列表时出错:', error)
+  const existingTaskIndex = taskList.value.findIndex((t) => t.id === task.id)
+  if (existingTaskIndex >= 0) {
+    taskList.value[existingTaskIndex] = task
+  } else {
+    taskList.value.push(task)
   }
-
-  // 更新window.taskList
-  window.taskList = taskList.value
-
-  // 触发添加任务事件
   emit('add-task', task)
 }
 
@@ -500,7 +508,8 @@ const executeTask = async () => {
     (t) => t.选项.quickSelect === 'warehouseLabelingFlow'
   )
   if (flowTask) {
-    executeTaskFlow(flowTask)
+    // 调用新的统一执行入口
+    runWarehouseLabelingFlow(flowTask)
     return
   }
 
@@ -666,7 +675,6 @@ const handleOpenLogisticsImporter = () => {
 
 // 使用provide向子组件提供数据和方法
 provide('form', form)
-provide('taskList', taskList)
 provide('shopsList', shopsList)
 provide('isLoadingShops', isLoadingShops)
 provide('shopLoadError', shopLoadError)
@@ -708,10 +716,9 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
 
       <!-- 右侧任务列表区域 -->
       <task-area
-        :task-list="taskList.value"
+        :task-list="taskList"
         @execute="executeTask"
         @clear="clearTasks"
-        @open-web="executeTask"
         @execute-one="handleExecuteOneTask"
         @delete-task="handleDeleteTask"
         @enable-products="enableDisabledProducts"
@@ -727,12 +734,12 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
       </h4>
       <div class="logs-container">
         <div
-          v-for="(log, index) in form.taskFlowLogs"
+          v-for="(log, index) in warehouseLabelingLogs"
           :key="index"
           class="log-entry"
           :class="`log-${log.level}`"
         >
-          {{ log.message }}
+          [{{ log.level }}] {{ log.message }}
         </div>
       </div>
     </div>
@@ -749,6 +756,51 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
     <!-- 商品简称导入组件 -->
     <div v-if="form.options.importProductNames" class="product-names-container">
       <product-name-importer />
+    </div>
+
+    <!-- 新版任务流执行区域 -->
+    <div class="card bg-base-200 shadow-xl mt-6">
+      <div class="card-body">
+        <h2 class="card-title">入仓打标流程执行器</h2>
+        <p>点击下方按钮，执行完整的入仓打标流程。</p>
+        
+        <div class="card-actions justify-start mt-4">
+          <button
+            class="btn btn-primary"
+            @click="() => runWarehouseLabelingFlow()"
+            :disabled="isWarehouseLabelingRunning"
+          >
+            <span v-if="isWarehouseLabelingRunning" class="loading loading-spinner"></span>
+            {{ isWarehouseLabelingRunning ? '正在执行...' : '执行入仓打标' }}
+          </button>
+          <button
+            class="btn btn-ghost"
+            @click="cancelWarehouseLabeling"
+            v-if="isWarehouseLabelingRunning"
+          >
+            取消
+          </button>
+        </div>
+
+        <div v-if="warehouseLabelingError" class="alert alert-error mt-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span>错误: {{ warehouseLabelingError }}</span>
+        </div>
+
+        <div v-if="warehouseLabelingResult" class="alert alert-success mt-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span>完成: {{ warehouseLabelingResult.message }}</span>
+        </div>
+        
+        <div v-if="warehouseLabelingLogs.length > 0" class="mt-4">
+          <h3 class="font-bold">执行日志:</h3>
+          <div class="mockup-code h-64 overflow-y-auto mt-2">
+            <template v-for="(log, index) in warehouseLabelingLogs" :key="index">
+              <pre :data-prefix="log.level.toUpperCase()"><code>[{{ log.timestamp }}] {{ log.message }}</code></pre>
+            </template>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div v-else class="login-required">请先登录</div>

@@ -16,20 +16,15 @@
 
     <div class="task-table-container">
       <tab-panel
-        :tasks="taskList"
+        :tasks="props.taskList"
         :logs="logs"
         :disabled-products="disabledProducts"
         @execute-one="(task, index) => $emit('execute-one', task, index)"
         @delete-task="(index) => $emit('delete-task', index)"
         @enable-products="(products) => $emit('enable-products', products)"
       />
-      <div v-if="taskList && taskList.length === 0" class="no-tasks">
+      <div v-if="!props.taskList || props.taskList.length === 0" class="no-tasks">
         <p>无任务数据，请先添加任务</p>
-        <p>任务数据状态: {{ JSON.stringify({
-          propsTask: props.taskList ? '有数据' : '无数据',
-          injectedTask: injectedTaskList.value ? '有数据' : '无数据',
-          combined: taskList.length
-        }) }}</p>
       </div>
     </div>
 
@@ -43,14 +38,14 @@
 </template>
 
 <script setup>
-import { inject, computed, ref } from 'vue'
+import { inject, computed } from 'vue'
 import TabPanel from './TabPanel.vue'
 
-// 接收任务列表作为props或从注入中获取
+// 只通过 props 接收任务列表，这是清晰的单向数据流
 const props = defineProps({
   taskList: {
     type: Array,
-    default: null // 改为null允许我们检查是否传入了prop
+    required: true
   },
   getStatusClass: {
     type: Function,
@@ -58,22 +53,10 @@ const props = defineProps({
   }
 })
 
-// 注入数据
+// 注入其他需要的数据
 const logs = inject('logs', [])
 const disabledProducts = inject('disabledProducts', { items: [], checking: false })
 const form = inject('form')
-const injectedTaskList = inject('taskList', ref([]))
-
-// 使用prop中的taskList，如果没有则使用注入的taskList
-const taskList = computed(() => {
-  console.log('TaskArea computed taskList:', { 
-    hasPropsList: !!props.taskList, 
-    propsListLength: props.taskList?.length ?? 'N/A',
-    hasInjectedList: !!injectedTaskList.value,
-    injectedListLength: injectedTaskList.value?.length ?? 'N/A'
-  })
-  return props.taskList || injectedTaskList.value
-})
 
 // 从表单数据中提取需要的值
 const autoStart = computed({

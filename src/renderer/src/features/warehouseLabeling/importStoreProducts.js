@@ -16,64 +16,44 @@ export default {
   name: 'importStore',
   label: '导入店铺商品',
 
-  async execute(skuList, task) {
-    const shopInfo = task.店铺信息
+  /**
+   * @param {object} context - The context object.
+   * @param {string[]} context.skuList - The list of SKUs.
+   * @param {object} context.shopInfo - The shop information.
+   * @param {object} context.departmentInfo - The department information.
+   * @param {object} helpers - The helpers object.
+   * @param {function} helpers.log - The logging function.
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async execute(context, helpers) {
+    const { skuList, shopInfo, departmentInfo } = context
+    const { log } = helpers
+
     if (!shopInfo || !shopInfo.spShopNo) {
-      throw new Error('任务对象中缺少有效的店铺信息或spShopNo')
+      throw new Error('缺少有效的店铺信息或spShopNo')
+    }
+    if (!departmentInfo) {
+      throw new Error('缺少有效的事业部信息')
     }
 
-    console.log('执行[导入店铺商品]功能，SKU列表:', skuList)
-    console.log('使用店铺信息:', shopInfo.shopName)
+    log({ message: `开始导入 ${skuList.length} 个商品到店铺 [${shopInfo.shopName}]...`, level: 'info' })
 
-    const department = getSelectedDepartment()
-    if (!department) {
-      throw new Error('未选择事业部，无法导入商品')
-    }
-    console.log('使用事业部信息:', department)
+    try {
+      const result = await window.electron.ipcRenderer.invoke('import-store-products', {
+        skuList,
+        shopInfo: { ...shopInfo },
+        departmentInfo: { ...departmentInfo }
+      })
 
-    const BATCH_SIZE = 2000
-    const totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
-    let totalProcessed = 0
-    let totalFailed = 0
-    const errorMessages = []
-
-    for (let i = 0; i < totalBatches; i++) {
-      const batchSkus = skuList.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
-      console.log(`处理批次 ${i + 1}/${totalBatches}，包含 ${batchSkus.length} 个SKU`)
-
-      try {
-        const result = await this._processSingleBatch(batchSkus, shopInfo, department)
-        if (result.success) {
-          totalProcessed += result.processedCount || batchSkus.length
-        } else {
-          totalFailed += result.failedCount || batchSkus.length
-          errorMessages.push(result.message || '一个批次处理失败')
-        }
-      } catch (error) {
-        totalFailed += batchSkus.length
-        errorMessages.push(error.message || `批次 ${i + 1} 处理时发生未知错误`)
+      if (!result.success) {
+        throw new Error(result.message)
       }
 
-      if (i < totalBatches - 1) {
-        console.log('等待1分钟后继续下一个批次...')
-        await wait(60000)
-      }
-    }
-
-    if (totalFailed > 0) {
-      return {
-        success: false,
-        message: `批量处理完成，但有 ${totalFailed} 个失败。错误: ${errorMessages.join('; ')}`,
-        processedCount: totalProcessed,
-        failedCount: totalFailed
-      }
-    }
-
-    return {
-      success: true,
-      message: `成功处理所有 ${totalProcessed} 个SKU。`,
-      processedCount: totalProcessed,
-      failedCount: 0
+      log({ message: `导入成功: ${result.message}`, level: 'success' })
+      return result
+    } catch (error) {
+      log({ message: `导入商品时发生错误: ${error.message}`, level: 'error' })
+      throw error // Re-throw to be caught by the task executor
     }
   },
 

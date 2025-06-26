@@ -470,6 +470,78 @@ function setupRequestHandlers() {
       return { success: false, message: `主进程出错: ${error.message}` }
     }
   })
+
+  /**
+   * IPC处理程序：导入店铺商品
+   */
+  ipcMain.handle('import-store-products', async (event, { skuList, shopInfo, departmentInfo }) => {
+    console.log(`主进程: 开始导入 ${skuList.length} 个商品到店铺 [${shopInfo.shopName}]`)
+
+    const BATCH_SIZE = 2000
+    const totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
+    let totalProcessed = 0
+    let totalFailed = 0
+    const errorMessages = []
+
+    const cookies = await event.sender.session.cookies.get({})
+    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+    const csrfToken = await getCsrfTokenFromCookies(cookies)
+
+    for (let i = 0; i < totalBatches; i++) {
+      const batchSkus = skuList.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
+      console.log(`主进程: 处理批次 ${i + 1}/${totalBatches}，包含 ${batchSkus.length} 个SKU`)
+
+      try {
+        const importUrl = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${shopInfo.spShopNo}&_r=${Math.random()}`
+
+        const excelData = [
+          ['商家商品编号', '商品名称', '事业部商品编码'],
+          ...batchSkus.map((sku) => [sku, `商品-${sku}`, departmentInfo.deptNo])
+        ]
+        const worksheet = XLSX.utils.aoa_to_sheet(excelData)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
+        const buffer = XLSX.write(workbook, { bookType: 'xls', type: 'buffer' })
+
+        const formData = new FormData()
+        formData.append('csrfToken', csrfToken)
+        formData.append('shopGoodsPopGoodsListFile', new Blob([buffer]), 'PopGoodsImportTemplate.xls')
+
+        const response = await fetch(importUrl, {
+          method: 'POST',
+          headers: {
+            'Cookie': cookieString,
+            'Referer': `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${shopInfo.spShopNo}&deptId=${shopInfo.deptId}`
+          },
+          body: formData
+        })
+
+        const result = await response.json()
+
+        if (result && result.result) {
+          totalProcessed += batchSkus.length
+        } else {
+          totalFailed += batchSkus.length
+          errorMessages.push(result.msg || '一个批次处理失败')
+        }
+
+      } catch (error) {
+        totalFailed += batchSkus.length
+        errorMessages.push(error.message || `批次 ${i + 1} 处理时发生未知错误`)
+      }
+
+      if (i < totalBatches - 1) {
+        console.log('主进程: 等待60秒后继续下一个批次...')
+        await new Promise(resolve => setTimeout(resolve, 60000));
+      }
+    }
+
+    if (totalFailed > 0) {
+      return { success: false, message: `批量导入完成，但有 ${totalFailed} 个失败。错误: ${errorMessages.join('; ')}` }
+    }
+
+    return { success: true, message: `成功导入所有 ${totalProcessed} 个商品。` }
+  })
 }
 
 export { sendRequest, setupRequestHandlers }

@@ -40,145 +40,71 @@ const taskFlowSteps = [{
 }
 ]
 
-class TaskFlowExecutor {
-    constructor(task, onLog) {
-        this.task = task
-        this.onLog = onLog // 日志回调函数
-        this.isCancelled = false
+async function executeStep(step, context, helpers, inventoryAmount) {
+    // 适配器模式：根据步骤决定调用新接口还是旧接口
+    if (step.executor.name === 'importStore') {
+        // importStore 已经重构，直接调用新接口
+        return await step.executor.execute(context, helpers)
     }
 
-    log(message, level = 'info') {
-        if (this.onLog) {
-            this.onLog({
-                message: `[${new Date().toLocaleTimeString()}] ${message}`,
-                level
-            })
-        }
-        console.log(message)
+    // 对于尚未重构的模块，继续使用模拟的旧接口
+    const mockTask = {
+        店铺信息: context.shopInfo,
+        事业部信息: context.departmentInfo,
+        选项: context.options
     }
 
-    async execute() {
-        this.log(`任务流 [${this.task.功能}] 开始执行...`)
-        this.task.状态 = '执行中'
+    let result
+    if (step.option === 'useAddInventory') {
+        result = await step.executor.execute(context.skuList, mockTask, null, inventoryAmount)
+    } else {
+        result = await step.executor.execute(context.skuList, mockTask)
+    }
+
+    if (!result.success) {
+        throw new Error(result.message)
+    }
+    return result
+}
+
+export default {
+    name: 'warehouseLabelingFlow',
+    label: '入仓打标流程',
+
+    async execute(context, helpers) {
+        const { log, isCancelled } = helpers
+        const { options, skuList } = context
+        const inventoryAmount = options.inventoryAmount || 1000
+
+        log({ message: `入仓打标流程开始...`, level: 'info' })
 
         for (const step of taskFlowSteps) {
-            if (this.isCancelled) {
-                this.log(`任务流被取消，停止执行。`, 'warning')
-                this.task.状态 = '已取消'
-                break
+            if (isCancelled()) {
+                log({ message: `任务被取消，停止执行。`, level: 'warning' })
+                return
             }
 
-            // 检查任务选项中是否启用了此步骤
-            if (this.task.选项 && this.task.选项[step.option]) {
-                this.log(`--- 开始执行步骤: ${step.name} ---`, 'step')
+            if (options && options[step.option]) {
+                log({ message: `--- 开始执行步骤: ${step.name} ---`, level: 'step' })
 
                 try {
-                    const result = await this.executeStepWithRetry(step)
-                    if (!result.success) {
-                        const errorMessage = `步骤 [${step.name}] 执行失败: ${result.message}`
-                        this.log(errorMessage, 'error')
-                        this.task.状态 = '失败'
-                        this.task.结果 = errorMessage
-                        return // 关键步骤失败，终止整个任务流
-                    }
+                    await executeStep(step, context, helpers, inventoryAmount)
+                    log({ message: `步骤 [${step.name}] 执行成功。`, level: 'success' })
 
-                    this.log(`步骤 [${step.name}] 执行成功。`, 'success')
-
-                    // 如果是导入店铺商品步骤，则等待一段时间
                     if (step.option === 'importStore') {
-                        this.log('等待15秒，以便服务器处理后台任务...')
+                        log({ message: '等待15秒，以便服务器处理后台任务...', level: 'info' })
                         await wait(15000)
                     }
                 } catch (error) {
-                    const errorMessage = `步骤 [${step.name}] 发生严重错误: ${error.message}`
-                    this.log(errorMessage, 'error')
-                    this.task.状态 = '失败'
-                    this.task.结果 = errorMessage
-                    return
+                    const errorMessage = `步骤 [${step.name}] 发生错误: ${error.message}`
+                    log({ message: errorMessage, level: 'error' })
+                    // 抛出错误以终止整个流程
+                    throw new Error(errorMessage)
                 }
             }
         }
 
-        if (this.task.状态 === '执行中') {
-            this.log('任务流所有步骤执行完毕。', 'success')
-            this.task.状态 = '成功'
-            this.task.结果 = '任务流执行成功'
-        }
+        log({ message: '入仓打标流程所有步骤执行完毕。', level: 'success' })
+        return { success: true, message: '入仓打标流程执行成功' }
     }
-
-    async executeStepWithRetry(step, maxRetries = 2) {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                // 执行原始步骤
-                const inventoryAmount = this.task.选项.inventoryAmount || 1000
-                let result
-                if (step.option === 'useAddInventory') {
-                    result = await step.executor.execute(
-                        this.task.skuList,
-                        this.task,
-                        null,
-                        inventoryAmount
-                    )
-                } else {
-                    result = await step.executor.execute(this.task.skuList, this.task)
-                }
-
-                // 检查结果是否需要重试
-                if (
-                    result &&
-                    !result.success &&
-                    result.retryable &&
-                    result.message &&
-                    result.message.includes('分钟内只能导入一次')
-                ) {
-                    if (attempt < maxRetries) {
-                        const delay = result.delay || 300000 // 默认5分钟
-                        const randomDelay = Math.floor(Math.random() * 5000) // 增加随机延迟避免同时重试
-                        const totalDelay = delay + randomDelay
-                        this.log(
-                            `步骤 [${step.name}] 遇到可重试错误: ${result.message
-                            }. 将在约 ${Math.round(totalDelay / 60000)} 分钟后进行第 ${attempt + 1
-                            } 次尝试...`,
-                            'warning'
-                        )
-                        await wait(totalDelay)
-                        continue // 继续下一次循环尝试
-                    } else {
-                        this.log(
-                            `步骤 [${step.name}] 已达到最大重试次数 (${maxRetries})，标记为失败。`,
-                            'error'
-                        )
-                        return {
-                            success: false,
-                            message: `重试 ${maxRetries} 次后仍然失败: ${result.message}`
-                        }
-                    }
-                }
-
-                // 如果执行成功或遇到不可重试的错误，则直接返回结果
-                return result
-            } catch (error) {
-                this.log(`步骤 [${step.name}] 第 ${attempt} 次尝试时发生异常: ${error.message}`, 'error')
-                if (attempt < maxRetries) {
-                    // 对于未知异常，可以采用较短的延迟重试
-                    await wait(5000)
-                } else {
-                    this.log(
-                        `步骤 [${step.name}] 发生异常且已达到最大重试次数，标记为失败。`,
-                        'error'
-                    )
-                    return {
-                        success: false,
-                        message: `重试 ${maxRetries} 次后因异常失败: ${error.message}`
-                    }
-                }
-            }
-        }
-    }
-
-    cancel() {
-        this.isCancelled = true
-    }
-}
-
-export default TaskFlowExecutor 
+} 
