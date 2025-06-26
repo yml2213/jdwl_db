@@ -1,6 +1,7 @@
 import { getAllCookies } from '../../utils/cookieHelper'
 import * as XLSX from 'xlsx'
 import { getCSGList as getCSGListFromApi } from '../../services/apiService'
+import { wait } from './utils/taskUtils'
 
 export default {
   name: 'enableJpSearch',
@@ -14,119 +15,48 @@ export default {
    * @returns {Object} 执行结果
    */
   async execute(skuList, task, createBatchTask) {
-    // 初始化日志
-    if (!window.importLogs) {
-      window.importLogs = []
-    }
+    const BATCH_SIZE = 2000
+    const totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
+    let processedCount = 0
+    let failedCount = 0
+    const errorMessages = []
 
-    // 初始化返回结果
-    const result = {
-      success: false,
-      message: '',
-      importLogs: []
-    }
+    for (let i = 0; i < totalBatches; i++) {
+      const batchSkus = skuList.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
 
-    try {
-      console.log(`开始处理SKU列表，总数：${skuList.length}`)
-      // const startTime = new Date();
-
-      // 记录总SKU数
-      result.importLogs.push({
-        type: 'info',
-        message: `开始处理，总SKU数：${skuList.length}`,
-        time: new Date().toLocaleString()
-      })
-
-      // 如果SKU数量大于2000，需要分批处理
-      if (skuList.length > 2000) {
-        // 主任务标记为已分批
-        if (task) {
-          task.状态 = '已分批'
-          task.结果 = [`已将任务分拆为${Math.ceil(skuList.length / 2000)}个批次任务`]
+      try {
+        const batchResult = await this._processBatch(batchSkus, task)
+        if (batchResult.success) {
+          processedCount += batchSkus.length
+        } else {
+          failedCount += batchSkus.length
+          errorMessages.push(batchResult.message || '一个批次处理失败')
         }
-
-        result.importLogs.push({
-          type: 'warning',
-          message: `SKU数量(${skuList.length})超过2000，已分拆为${Math.ceil(skuList.length / 2000)}个批次任务`,
-          time: new Date().toLocaleString()
-        })
-
-        // 将SKU列表分成多个批次，每批最多2000个SKU
-        const batches = []
-        for (let i = 0; i < skuList.length; i += 2000) {
-          batches.push(skuList.slice(i, i + 2000))
-        }
-
-        console.log(`已将SKU列表分成${batches.length}个批次`)
-
-        // 为每个批次创建一个独立任务
-        for (let i = 0; i < batches.length; i++) {
-          const batchSkuList = batches[i]
-          const batchNumber = i + 1
-
-          // 创建批次任务
-          const batchTask = {
-            id: `${task.id}-batch-${batchNumber}`,
-            sku: `${task.sku}-批次${batchNumber}/${batches.length}`,
-            skuList: batchSkuList,
-            状态: i === 0 ? '处理中' : '等待中',
-            创建时间: new Date().toISOString(),
-            原始任务ID: task.id,
-            批次编号: batchNumber,
-            总批次数: batches.length,
-            选项: task.选项 || { useWarehouse: true }, // 继承原任务选项
-            结果: [],
-            importLogs: [{
-              type: 'info',
-              message: `批次${batchNumber}/${batches.length} - 开始处理${batchSkuList.length}个SKU`,
-              time: new Date().toLocaleString()
-            }]
-          }
-
-          // 使用回调函数添加批次任务到任务列表
-          if (typeof createBatchTask === 'function') {
-            createBatchTask(batchTask)
-          }
-
-          // 如果是第一个批次，立即开始处理
-          if (i === 0) {
-            // 处理第一个批次的SKU
-            const batchResult = await this._processBatch(batchSkuList, batchTask)
-            result.importLogs = result.importLogs.concat(batchResult.importLogs)
-
-            // 更新批次任务状态
-            batchTask.状态 = batchResult.success ? '成功' : '失败'
-            batchTask.结果 = batchResult.results || []
-            batchTask.importLogs = batchResult.importLogs
-
-            // 通知UI更新
-            if (typeof createBatchTask === 'function') {
-              createBatchTask(batchTask)
-            }
-          }
-        }
-
-        // 设置总体处理结果
-        result.success = true
-        result.message = `已将任务分拆为${batches.length}个批次任务，第一批次已处理完成`
-
-        return result
-      } else {
-        // SKU数量不超过2000，直接处理
-        return await this._processBatch(skuList, task)
+      } catch (error) {
+        failedCount += batchSkus.length
+        errorMessages.push(error.message || '一个批次处理时发生未知错误')
       }
-    } catch (error) {
-      console.error('处理SKU出错:', error)
 
-      result.success = false
-      result.message = `处理失败: ${error.message || '未知错误'}`
-      result.importLogs.push({
-        type: 'error',
-        message: `处理失败: ${error.message || '未知错误'}`,
-        time: new Date().toLocaleString()
-      })
+      // 如果不是最后一个批次，等待30秒
+      if (i < totalBatches - 1) {
+        await wait(30000) // 等待30秒
+      }
+    }
 
-      return result
+    if (failedCount > 0) {
+      return {
+        success: false,
+        message: `京配打标完成，但有 ${failedCount} 个失败。错误: ${errorMessages.join('; ')}`,
+        processedCount,
+        failedCount
+      }
+    }
+
+    return {
+      success: true,
+      message: `成功为 ${processedCount} 个SKU启用京配打标。`,
+      processedCount,
+      failedCount
     }
   },
 

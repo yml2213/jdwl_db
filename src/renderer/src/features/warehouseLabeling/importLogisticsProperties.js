@@ -21,8 +21,8 @@ export default {
     }
 
     try {
-      // 构建表格数据，每批最多处理500个SKU
-      const BATCH_SIZE = 500
+      // 构建表格数据，每批最多处理2000个SKU
+      const BATCH_SIZE = 2000
       let processedCount = 0
       let failedCount = 0
       let totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
@@ -42,6 +42,12 @@ export default {
         try {
           // 调用API上传物流属性数据
           const result = await this.uploadLogisticsData(batchSkus, department)
+
+          // 如果是可重试的错误，直接将结果返回给上层执行器
+          if (result.retryable) {
+            console.log('检测到可重试的API限制，将控制权交还给任务流执行器...')
+            return result
+          }
 
           if (result.success) {
             processedCount += batchSkus.length
@@ -188,21 +194,18 @@ export default {
         // 处理各种可能的错误响应格式
         if (response) {
           if (typeof response.data === 'string' && response.data.trim() !== '') {
-            // 优先使用data字段中的错误信息（例如"5分钟内只能导入一次,请稍后再试!!"）
             errorMessage = response.data
-
-            // 检查是否是特定的API限制类型错误（这类错误通常算部分成功）
-            if (
-              response.data.includes('分钟内只能导入一次') ||
-              response.data.includes('请稍后再试')
-            ) {
-              isPartialSuccess = true
+            if (errorMessage.includes('5分钟内只能导入一次')) {
+              return {
+                success: false,
+                message: errorMessage,
+                retryable: true,
+                delay: 300000 // 5分钟
+              }
             }
           } else if (typeof response.tipMsg === 'string' && response.tipMsg.trim() !== '') {
-            // 其次使用tipMsg
             errorMessage = response.tipMsg
           } else if (typeof response.message === 'string' && response.message.trim() !== '') {
-            // 最后使用message
             errorMessage = response.message
           }
         }

@@ -25,10 +25,21 @@ import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 import LogisticsAttributesImporter from './warehouse/LogisticsAttributesImporter.vue'
 import ProductNameImporter from './warehouse/feature/ProductNameImporter.vue'
+import TaskFlowExecutor from '../features/warehouseLabeling/taskFlowExecutor'
 
 const props = defineProps({
   isLoggedIn: Boolean
 })
+
+const showTaskFlowLogs = ref(false)
+
+const toggleTaskFlowLogs = (visible) => {
+  if (typeof visible === 'boolean') {
+    showTaskFlowLogs.value = visible
+  } else {
+    showTaskFlowLogs.value = !showTaskFlowLogs.value
+  }
+}
 
 const emit = defineEmits([
   'shop-change',
@@ -79,7 +90,8 @@ const form = ref({
     currentBatch: 0,
     totalBatches: 0,
     progress: '初始化...'
-  }
+  },
+  taskFlowLogs: []
 })
 
 // 任务列表 - 使用全局任务列表
@@ -379,6 +391,12 @@ const enableDisabledProducts = async (disabledProducts) => {
 const handleExecuteOneTask = async (task) => {
   if (!task) return
 
+  // 检查是否是任务流
+  if (task.选项 && task.选项.quickSelect === 'warehouseLabelingFlow') {
+    executeTaskFlow(task)
+    return
+  }
+
   // 获取店铺信息
   const shopInfo = currentShopInfo.value
 
@@ -398,6 +416,22 @@ const handleExecuteOneTask = async (task) => {
   } catch (error) {
     console.error('执行任务失败:', error)
     alert(`执行任务失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 执行任务流
+const executeTaskFlow = async (task) => {
+  form.value.taskFlowLogs = [] // 清空之前的日志
+  const executor = new TaskFlowExecutor(task, (log) => {
+    form.value.taskFlowLogs.push(log)
+  })
+
+  try {
+    await executor.execute()
+  } catch (error) {
+    const errorMessage = `任务流执行时发生未捕获的错误: ${error.message}`
+    form.value.taskFlowLogs.push(errorMessage)
+    console.error(errorMessage)
   }
 }
 
@@ -456,6 +490,15 @@ const executeTask = async () => {
   const shopInfo = currentShopInfo.value
   if (!shopInfo) {
     alert('请选择店铺')
+    return
+  }
+
+  // 检查是否有任务流任务
+  const flowTask = tasksToExecute.find(
+    (t) => t.选项.quickSelect === 'warehouseLabelingFlow'
+  )
+  if (flowTask) {
+    executeTaskFlow(flowTask)
     return
   }
 
@@ -531,6 +574,11 @@ const handleAddTask = () => {
   // 将所有功能用逗号连接
   featureName = functionList.length > 0 ? functionList.join('，') : '未知功能'
 
+  // 如果是任务流，功能名称特殊处理
+  if (form.value.quickSelect === 'warehouseLabelingFlow') {
+    featureName = '任务流 - 入仓打标'
+  }
+
   // 为每个组创建一个任务
   skuGroups.forEach((group, index) => {
     const groupNumber = index + 1
@@ -545,7 +593,10 @@ const handleAddTask = () => {
       状态: '等待中',
       结果: '',
       功能: featureName, // 添加功能名称
-      选项: JSON.parse(JSON.stringify(form.value.options)), // 确保是深拷贝
+      选项: {
+        ...JSON.parse(JSON.stringify(form.value.options)),
+        quickSelect: form.value.quickSelect // 保存快捷选择的标识
+      },
       店铺信息: shopInfo, // 存储完整的店铺信息对象
       importLogs: [
         {
@@ -644,6 +695,7 @@ provide('handleDeleteTask', handleDeleteTask)
 provide('enableDisabledProducts', enableDisabledProducts)
 provide('getStatusClass', getStatusClass)
 provide('openLogisticsImporter', handleOpenLogisticsImporter)
+provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
 </script>
 
 <template>
@@ -661,7 +713,21 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
         @execute-one="handleExecuteOneTask"
         @delete-task="handleDeleteTask"
         @enable-products="enableDisabledProducts"
+        @toggle-logs="toggleTaskFlowLogs"
       />
+    </div>
+
+    <!-- 任务流日志区域 -->
+    <div v-if="form.taskFlowLogs.length > 0 && showTaskFlowLogs" class="task-flow-logs">
+      <h4>
+        <span>任务流执行日志</span>
+        <button @click="toggleTaskFlowLogs(false)" class="close-btn">&times;</button>
+      </h4>
+      <div class="logs-container">
+        <div v-for="(log, index) in form.taskFlowLogs" :key="index" class="log-entry">
+          {{ log }}
+        </div>
+      </div>
     </div>
 
     <!-- 物流属性导入对话框 -->
@@ -689,6 +755,81 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
   height: calc(100vh - 120px);
 }
 
+.task-flow-logs {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  max-width: 700px;
+  height: 60%;
+  max-height: 500px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  padding: 20px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #333;
+}
+
+.task-flow-logs h4 {
+  margin: 0 0 15px 0;
+  color: #569cd6;
+  border-bottom: 1px solid #333;
+  padding-bottom: 10px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #d4d4d4;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 5px;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #fff;
+}
+
+.logs-container {
+  overflow-y: auto;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  flex-grow: 1;
+  padding-right: 10px;
+}
+
+.logs-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.logs-container::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.logs-container::-webkit-scrollbar-thumb {
+  background-color: #555;
+  border-radius: 4px;
+  border: 2px solid #2a2a2a;
+}
+
+.log-entry {
+  padding: 2px 0;
+  word-wrap: break-word;
+}
+
 .product-names-container {
   position: fixed;
   top: 120px;
@@ -701,5 +842,63 @@ provide('openLogisticsImporter', handleOpenLogisticsImporter)
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.log-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.log-modal-content {
+  background-color: #2c2c2c;
+  padding: 25px;
+  border-radius: 10px;
+  width: 60%;
+  max-width: 800px;
+  max-height: 70vh;
+  overflow-y: auto;
+  color: #e0e0e0;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  border: 1px solid #444;
+  position: relative;
+}
+
+.log-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #444;
+}
+
+.log-modal-title {
+  font-size: 1.5em;
+  color: #fff;
+  margin: 0;
+}
+
+.close-log-modal-button {
+  background: none;
+  border: 1px solid #888;
+  color: #ccc;
+  font-size: 1.5em;
+  cursor: pointer;
+  padding: 0 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.close-log-modal-button:hover {
+  background-color: #555;
+  color: #fff;
 }
 </style>

@@ -78,8 +78,31 @@ async function sendRequest(url, options = {}) {
 
     // 处理请求体
     if (options.body) {
-      // 如果是FormData类型，直接传递
-      if (options.body instanceof Object && options.body._isFormData) {
+      if (options.useFormData && options.body.filePath) {
+        console.log('处理文件上传请求，文件路径:', options.body.filePath)
+        const FormData = require('form-data')
+        const formData = new FormData()
+
+        // 添加其他表单字段
+        if (options.body.formFields) {
+          for (const [key, value] of Object.entries(options.body.formFields)) {
+            formData.append(key, value)
+          }
+        }
+
+        // 附加文件
+        formData.append(
+          options.body.fileUploadKey,
+          fs.createReadStream(options.body.filePath),
+          { filename: options.body.fileName }
+        )
+
+        axiosOptions.data = formData
+        axiosOptions.headers = {
+          ...axiosOptions.headers,
+          ...formData.getHeaders()
+        }
+      } else if (options.body instanceof Object && options.body._isFormData) {
         // 对于FormData类型的请求，需要特殊处理
         console.log('处理FormData请求')
 
@@ -94,15 +117,15 @@ async function sendRequest(url, options = {}) {
         if (Array.isArray(entries)) {
           // 处理数组格式的entries
           console.log('处理数组格式的FormData entries, 长度:', entries.length)
-          
+
           for (const entry of entries) {
             if (!Array.isArray(entry) || entry.length !== 2) {
               console.error('无效的FormData entry格式:', entry)
               continue
             }
-            
+
             const [key, value] = entry
-            
+
             // 检查是否是文件对象
             if (value && typeof value === 'object' && value._isFile) {
               // 处理文件：从数组数据中创建buffer
@@ -123,7 +146,7 @@ async function sendRequest(url, options = {}) {
         } else if (typeof entries === 'object') {
           // 处理对象格式的entries
           console.log('处理对象格式的FormData entries')
-          
+
           for (const [key, value] of Object.entries(entries)) {
             // 检查是否是文件对象
             if (value && typeof value === 'object' && value._isFile) {

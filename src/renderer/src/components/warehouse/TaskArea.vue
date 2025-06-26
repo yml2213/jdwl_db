@@ -3,6 +3,7 @@
     <div class="task-header">
       <div class="task-title">任务列表</div>
       <div class="task-actions">
+        <button class="btn btn-info" @click="$emit('toggle-logs')">查看日志</button>
         <label class="checkbox-label timing-checkbox">
           <input type="checkbox" v-model="autoStart" />
           <span>定时</span>
@@ -85,7 +86,7 @@ const enableAutoUpload = computed({
   set: (value) => (form.value.enableAutoUpload = value)
 })
 
-defineEmits(['execute', 'clear', 'open-web', 'execute-one', 'delete-task', 'enable-products'])
+defineEmits(['execute', 'clear', 'open-web', 'execute-one', 'delete-task', 'enable-products', 'toggle-logs'])
 </script>
 
 <style scoped>
@@ -163,6 +164,11 @@ defineEmits(['execute', 'clear', 'open-web', 'execute-one', 'delete-task', 'enab
 
 .btn-danger {
   background-color: #ff4d4f;
+  color: white;
+}
+
+.btn-info {
+  background-color: #17a2b8;
   color: white;
 }
 

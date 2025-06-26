@@ -164,3 +164,12 @@ export function getStatusClass(status) {
       return ''
   }
 }
+
+/**
+ * 等待指定的时间
+ * @param {number} ms - 等待的毫秒数
+ * @returns {Promise<void>}
+ */
+export function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

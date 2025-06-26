@@ -10,7 +10,7 @@ import {
   setupLoginHandlers
 } from './loginManager'
 import { sendRequest } from './requestHandler'
-import { saveFile } from './fileHandler'
+import { saveFile, setupFileHandlers } from './fileHandler'
 
 // 主窗口引用
 let mainWindow = null
@@ -160,4 +160,6 @@ function setupIPCHandlers() {
 
   // 设置登录相关处理程序
   setupLoginHandlers()
+  // 设置文件相关处理程序
+  setupFileHandlers()
 }

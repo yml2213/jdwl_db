@@ -24,10 +24,15 @@ const api = {
   sendRequest: (url, options) => {
     return ipcRenderer.invoke('sendRequest', url, options)
   },
-  
+
   // 保存文件到本地
   saveFile: (params) => {
     return ipcRenderer.invoke('saveFile', params)
+  },
+
+  // 保存Excel文件并获取路径
+  saveExcelAndGetPath: (params) => {
+    return ipcRenderer.invoke('save-excel-and-get-path', params)
   }
 }
 

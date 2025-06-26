@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron'
+import { app, dialog, ipcMain } from 'electron'
 import fs from 'fs'
 import path from 'path'
 
@@ -103,4 +103,20 @@ export async function saveFile(params) {
     console.error('保存文件失败:', error)
     return { saved: false, path: null, message: `保存文件失败: ${error.message}` }
   }
+}
+
+export function setupFileHandlers() {
+  ipcMain.handle('save-excel-and-get-path', async (event, { base64Data, fileName }) => {
+    try {
+      const tempDir = app.getPath('temp')
+      const filePath = path.join(tempDir, fileName)
+      const buffer = Buffer.from(base64Data, 'base64')
+      fs.writeFileSync(filePath, buffer)
+      console.log(`临时文件已保存到: ${filePath}`)
+      return filePath
+    } catch (error) {
+      console.error('保存临时Excel文件失败:', error)
+      return null
+    }
+  })
 } 
