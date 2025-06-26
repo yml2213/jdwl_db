@@ -5,6 +5,7 @@
       <div class="select-wrapper">
         <select v-model="form.quickSelect" class="form-select">
           <option value="">请选择快捷方式</option>
+          <option value="warehouseLabelingFlow">任务流 -- 入仓打标</option>
         </select>
       </div>
     </div>

@@ -299,6 +299,25 @@ watch(
   { immediate: true }
 )
 
+// 监听快捷选择变化
+watch(
+  () => form.value.quickSelect,
+  (newValue) => {
+    if (newValue === 'warehouseLabelingFlow') {
+      form.value.options = {
+        ...form.value.options,
+        importStore: true,
+        useStore: true,
+        importProps: true,
+        useAddInventory: true,
+        useWarehouse: true,
+        useJdEffect: true,
+        importProductNames: false // 任务流不包含此项
+      }
+    }
+  }
+)
+
 // 组件挂载时，如果已登录则加载数据
 onMounted(() => {
   // 暴露taskList到window对象，供其他模块访问
