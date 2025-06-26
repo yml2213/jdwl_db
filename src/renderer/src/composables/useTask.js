@@ -43,7 +43,8 @@ export function useTask(featureDefinition) {
                 log,
                 updateProgress: (current, total) => {
                     state.progress = { current, total }
-                }
+                },
+                isRunning: toRefs(state).isRunning
             }
 
             // 3. 调用功能定义中的核心逻辑

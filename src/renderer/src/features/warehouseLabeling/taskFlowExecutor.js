@@ -72,39 +72,44 @@ export default {
     label: '入仓打标流程',
 
     async execute(context, helpers) {
-        const { log, isCancelled } = helpers
-        const { options, skuList } = context
-        const inventoryAmount = options.inventoryAmount || 1000
+        const { log, isRunning } = helpers;
+        const { options, skuList } = context;
+        const inventoryAmount = options.inventoryAmount || 1000;
 
-        log({ message: `入仓打标流程开始...`, level: 'info' })
+        log(`入仓打标流程开始...`, 'info');
 
         for (const step of taskFlowSteps) {
-            if (isCancelled()) {
-                log({ message: `任务被取消，停止执行。`, level: 'warning' })
-                return
+            if (!isRunning.value) {
+                log(`任务被取消，停止执行。`, 'warning');
+                return;
             }
 
             if (options && options[step.option]) {
-                log({ message: `--- 开始执行步骤: ${step.name} ---`, level: 'step' })
+                log(`--- 开始执行步骤: ${step.name} ---`, 'info');
 
                 try {
-                    await executeStep(step, context, helpers, inventoryAmount)
-                    log({ message: `步骤 [${step.name}] 执行成功。`, level: 'success' })
+                    await executeStep(step, context, helpers, inventoryAmount);
+                    log(`步骤 [${step.name}] 执行成功。`, 'success');
 
                     if (step.option === 'importStore') {
-                        log({ message: '等待15秒，以便服务器处理后台任务...', level: 'info' })
-                        await wait(15000)
+                        log('等待15秒，以便服务器处理后台任务...', 'info');
+                        for (let i = 0; i < 15; i++) {
+                            if (!isRunning.value) {
+                                log(`任务被取消，停止等待。`, 'warning');
+                                return;
+                            }
+                            await wait(1000);
+                        }
                     }
                 } catch (error) {
-                    const errorMessage = `步骤 [${step.name}] 发生错误: ${error.message}`
-                    log({ message: errorMessage, level: 'error' })
-                    // 抛出错误以终止整个流程
-                    throw new Error(errorMessage)
+                    const errorMessage = `步骤 [${step.name}] 发生错误: ${error.message}`;
+                    log(errorMessage, 'error');
+                    throw new Error(errorMessage);
                 }
             }
         }
 
-        log({ message: '入仓打标流程所有步骤执行完毕。', level: 'success' })
-        return { success: true, message: '入仓打标流程执行成功' }
+        log('入仓打标流程所有步骤执行完毕。', 'success');
+        return { success: true, message: '入仓打标流程执行成功' };
     }
 } 

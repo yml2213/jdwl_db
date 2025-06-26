@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { app } from 'electron'
+import { app, session } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { ipcMain } from 'electron'
@@ -249,9 +249,49 @@ async function getCsrfTokenFromCookies(cookies) {
 }
 
 /**
- * 设置所有与请求相关的IPC处理程序
+ * 设置所有主进程的IPC事件处理器
  */
-function setupRequestHandlers() {
+export function setupRequestHandlers() {
+  console.log('设置主进程IPC事件处理器...')
+
+  ipcMain.on('send-request', async (event, payload) => {
+    const { url, options } = payload
+    try {
+      const result = await sendRequest(url, options)
+      event.sender.send('send-request-reply', { success: true, data: result })
+    } catch (error) {
+      console.error(`[ipcMain] send-request 处理器错误:`, error)
+      event.sender.send('send-request-reply', {
+        success: false,
+        message: error.message || '未知错误',
+        status: error.status
+      })
+    }
+  })
+
+  // 使用 on/send 模式替换 handle/invoke，以绕过潜在的克隆错误
+  ipcMain.on('import-store-products', async (event, payload) => {
+    const { skuList, shopInfo, departmentInfo, cookies } = payload
+    try {
+      console.log('接收到 import-store-products 请求:', {
+        skuCount: skuList.length,
+        shopName: shopInfo.shopName
+      })
+
+      const result = await processSingleBatch(skuList, shopInfo, departmentInfo, cookies)
+
+      // 将结果发送回渲染器进程
+      event.sender.send('import-store-products-reply', { success: true, ...result })
+    } catch (error) {
+      console.error(`[ipcMain] import-store-products 处理器错误:`, error)
+      // 将错误发送回渲染器进程
+      event.sender.send('import-store-products-reply', {
+        success: false,
+        message: error.message || '在主进程中导入商品时发生未知错误'
+      })
+    }
+  })
+
   /**
    * IPC处理程序：上传取消京配打标的数据。
    * 接收CSG列表，在主进程中创建Excel文件并上传。
@@ -471,77 +511,79 @@ function setupRequestHandlers() {
     }
   })
 
-  /**
-   * IPC处理程序：导入店铺商品
-   */
-  ipcMain.handle('import-store-products', async (event, { skuList, shopInfo, departmentInfo }) => {
-    console.log(`主进程: 开始导入 ${skuList.length} 个商品到店铺 [${shopInfo.shopName}]`)
-
-    const BATCH_SIZE = 2000
-    const totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
-    let totalProcessed = 0
-    let totalFailed = 0
-    const errorMessages = []
-
-    const cookies = await event.sender.session.cookies.get({})
-    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-    const csrfToken = await getCsrfTokenFromCookies(cookies)
-
-    for (let i = 0; i < totalBatches; i++) {
-      const batchSkus = skuList.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
-      console.log(`主进程: 处理批次 ${i + 1}/${totalBatches}，包含 ${batchSkus.length} 个SKU`)
-
-      try {
-        const importUrl = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${shopInfo.spShopNo}&_r=${Math.random()}`
-
-        const excelData = [
-          ['商家商品编号', '商品名称', '事业部商品编码'],
-          ...batchSkus.map((sku) => [sku, `商品-${sku}`, departmentInfo.deptNo])
-        ]
-        const worksheet = XLSX.utils.aoa_to_sheet(excelData)
-        const workbook = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
-        const buffer = XLSX.write(workbook, { bookType: 'xls', type: 'buffer' })
-
-        const formData = new FormData()
-        formData.append('csrfToken', csrfToken)
-        formData.append('shopGoodsPopGoodsListFile', new Blob([buffer]), 'PopGoodsImportTemplate.xls')
-
-        const response = await fetch(importUrl, {
-          method: 'POST',
-          headers: {
-            'Cookie': cookieString,
-            'Referer': `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${shopInfo.spShopNo}&deptId=${shopInfo.deptId}`
-          },
-          body: formData
-        })
-
-        const result = await response.json()
-
-        if (result && result.result) {
-          totalProcessed += batchSkus.length
-        } else {
-          totalFailed += batchSkus.length
-          errorMessages.push(result.msg || '一个批次处理失败')
-        }
-
-      } catch (error) {
-        totalFailed += batchSkus.length
-        errorMessages.push(error.message || `批次 ${i + 1} 处理时发生未知错误`)
-      }
-
-      if (i < totalBatches - 1) {
-        console.log('主进程: 等待60秒后继续下一个批次...')
-        await new Promise(resolve => setTimeout(resolve, 60000));
-      }
-    }
-
-    if (totalFailed > 0) {
-      return { success: false, message: `批量导入完成，但有 ${totalFailed} 个失败。错误: ${errorMessages.join('; ')}` }
-    }
-
-    return { success: true, message: `成功导入所有 ${totalProcessed} 个商品。` }
-  })
+  console.log('主进程IPC事件处理器设置完毕。')
 }
 
-export { sendRequest, setupRequestHandlers }
+/**
+ * 处理单个批次的商品导入
+ * (这是从 importStoreProducts.js 迁移过来的核心逻辑)
+ */
+async function processSingleBatch(skuList, storeInfo, department, cookies) {
+  const spShopNo = storeInfo.spShopNo
+  const importUrl = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
+  console.log('导入接口URL:', importUrl)
+
+  // 不再从主进程session获取，直接使用传递过来的cookies
+  const csrfToken = await getCsrfTokenFromCookies(cookies)
+
+  if (!csrfToken) {
+    return { success: false, message: '无法从传递的cookies中获取csrfToken' }
+  }
+
+  const excelData = [
+    ['商家商品编号', '商品名称', '事业部商品编码'],
+    ...skuList.map((sku) => [sku, `商品-${sku}`, department.deptNo])
+  ]
+  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
+  const buffer = XLSX.write(workbook, { bookType: 'xls', type: 'buffer' })
+
+  // 将文件保存到临时目录
+  const tempDir = app.getPath('temp')
+  const fileName = `PopGoodsImportTemplate-${Date.now()}.xls`
+  const filePath = path.join(tempDir, fileName)
+  await fs.promises.writeFile(filePath, buffer)
+  console.log('临时Excel文件已创建:', filePath)
+
+  const payload = {
+    csrfToken,
+    filePath,
+    fileName,
+    formFields: {
+      csrfToken: csrfToken
+    },
+    fileUploadKey: 'shopGoodsPopGoodsListFile'
+  }
+
+  // 将 cookies 数组转换为单个字符串
+  const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+
+  try {
+    const response = await sendRequest(importUrl, {
+      method: 'POST',
+      headers: {
+        Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${spShopNo}&deptId=${storeInfo.deptId}`,
+        'Cookie': cookieString
+      },
+      body: payload,
+      useFormData: true
+    })
+
+    console.log(`批量处理响应:`, response)
+
+    if (response && response.result) {
+      return { success: true, message: response.msg }
+    }
+
+    return { success: false, message: response.msg || '导入失败，未知原因' }
+  } catch (error) {
+    console.error(`批量处理请求失败:`, error)
+    return { success: false, message: `请求失败: ${error.message}` }
+  } finally {
+    // 清理临时文件
+    await fs.promises.unlink(filePath).catch(err => console.error('删除临时文件失败:', err));
+  }
+}
+
+export { sendRequest }

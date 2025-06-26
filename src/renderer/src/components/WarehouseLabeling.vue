@@ -737,9 +737,9 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
           v-for="(log, index) in warehouseLabelingLogs"
           :key="index"
           class="log-entry"
-          :class="`log-${log.level}`"
+          :class="`log-${log.type}`"
         >
-          [{{ log.level }}] {{ log.message }}
+          [{{ log.type }}] {{ log.message }}
         </div>
       </div>
     </div>
@@ -796,7 +796,7 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
           <h3 class="font-bold">执行日志:</h3>
           <div class="mockup-code h-64 overflow-y-auto mt-2">
             <template v-for="(log, index) in warehouseLabelingLogs" :key="index">
-              <pre :data-prefix="log.level.toUpperCase()"><code>[{{ log.timestamp }}] {{ log.message }}</code></pre>
+              <pre :data-prefix="log.type.toUpperCase()"><code>[{{ log.time }}] {{ log.message }}</code></pre>
             </template>
           </div>
         </div>
@@ -893,7 +893,7 @@ provide('toggleTaskFlowLogs', toggleTaskFlowLogs)
   color: #d4d4d4; /* 默认颜色 */
 }
 
-.log-step {
+.log-step, .log-info {
   color: #569cd6;
   font-weight: bold;
   margin-top: 8px;

@@ -1,16 +1,13 @@
-import { fetchApi } from '../../services/apiService'
-import { getSelectedDepartment, getSelectedVendor } from '../../utils/storageHelper'
-import { wait } from './utils/taskUtils'
-import * as XLSX from 'xlsx'
+/**
+ * 功能定义: 导入店铺商品
+ * 职责:
+ * 1. 从上下文(context)中提取数据。
+ * 2. 构建一个纯净的、可序列化的数据对象。
+ * 3. 通过 IPC 调用主进程的 'import-store-products' 事件来执行核心业务逻辑。
+ * 4. 处理主进程返回的结果或错误。
+ */
+
 import { getAllCookies } from '../../utils/cookieHelper'
-
-const BASE_URL = 'https://o.jdl.com'
-
-async function getCsrfToken() {
-  const cookies = (await getAllCookies()) || []
-  const tokenCookie = cookies.find((cookie) => cookie.name === 'csrfToken')
-  return tokenCookie ? tokenCookie.value : ''
-}
 
 export default {
   name: 'importStore',
@@ -19,8 +16,8 @@ export default {
   /**
    * @param {object} context - The context object.
    * @param {string[]} context.skuList - The list of SKUs.
-   * @param {object} context.shopInfo - The shop information.
-   * @param {object} context.departmentInfo - The department information.
+   * @param {object} context.shopInfo - The shop information proxy.
+   * @param {object} context.departmentInfo - The department information proxy.
    * @param {object} helpers - The helpers object.
    * @param {function} helpers.log - The logging function.
    * @returns {Promise<{success: boolean, message: string}>}
@@ -32,29 +29,58 @@ export default {
     if (!shopInfo || !shopInfo.spShopNo) {
       throw new Error('缺少有效的店铺信息或spShopNo')
     }
-    if (!departmentInfo) {
+    if (!departmentInfo || !departmentInfo.deptNo) {
       throw new Error('缺少有效的事业部信息')
     }
 
-    log({ message: `开始导入 ${skuList.length} 个商品到店铺 [${shopInfo.shopName}]...`, level: 'info' })
+    log(`[IPC] 请求主进程导入 ${skuList.length} 个商品到店铺 [${shopInfo.shopName}]...`, 'info')
 
-    try {
-      const result = await window.electron.ipcRenderer.invoke('import-store-products', {
-        skuList,
-        shopInfo: { ...shopInfo },
-        departmentInfo: { ...departmentInfo }
-      })
-
-      if (!result.success) {
-        throw new Error(result.message)
+    return new Promise(async (resolve, reject) => {
+      // 1. 从渲染器进程获取所有 cookies
+      const cookies = await getAllCookies()
+      if (!cookies || cookies.length === 0) {
+        return reject(new Error('在渲染器进程中无法获取到任何Cookies'))
       }
 
-      log({ message: `导入成功: ${result.message}`, level: 'success' })
-      return result
-    } catch (error) {
-      log({ message: `导入商品时发生错误: ${error.message}`, level: 'error' })
-      throw error // Re-throw to be caught by the task executor
-    }
+      // 监听一次性的回复事件
+      window.electron.ipcRenderer.once('import-store-products-reply', (event, result) => {
+        log(`[IPC] 收到主进程回复`, 'info')
+        if (result && result.success) {
+          log(`主进程返回导入成功: ${result.message}`, 'success')
+          resolve(result)
+        } else {
+          const errorMessage = `主进程返回错误: ${result.message || '未知错误'}`
+          log(errorMessage, 'error')
+          reject(new Error(errorMessage))
+        }
+      })
+
+      // 发送请求到主进程
+      try {
+        const payload = {
+          skuList,
+          cookies, // 2. 将 cookies 作为 payload 的一部分传递
+          shopInfo: {
+            spShopNo: shopInfo.spShopNo,
+            deptId: shopInfo.deptId,
+            shopName: shopInfo.shopName,
+            shopNo: shopInfo.shopNo,
+            sellerId: shopInfo.sellerId
+          },
+          departmentInfo: {
+            deptNo: departmentInfo.deptNo
+          }
+        }
+        // **决定性修复**: 对整个 payload进行净化，以处理包括 skuList 在内的所有潜在 Proxy
+        const cleanPayload = JSON.parse(JSON.stringify(payload))
+        window.electron.ipcRenderer.send('import-store-products', cleanPayload)
+      } catch (error) {
+        // 如果发送本身就失败了（虽然不太可能），直接拒绝Promise
+        const errorMessage = `IPC发送 'import-store-products' 失败: ${error.message}`
+        log(errorMessage, 'error')
+        reject(new Error(errorMessage))
+      }
+    })
   },
 
   async _processSingleBatch(skuList, storeInfo, department) {

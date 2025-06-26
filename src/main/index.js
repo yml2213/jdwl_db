@@ -9,8 +9,8 @@ import {
   isLoggedIn,
   setupLoginHandlers
 } from './loginManager'
-import { sendRequest, setupRequestHandlers } from './requestHandler'
-import { saveFile, setupFileHandlers } from './fileHandler'
+import { setupRequestHandlers } from './requestHandler'
+import { setupFileHandlers } from './fileHandler'
 
 // 主窗口引用
 let mainWindow = null
@@ -42,6 +42,8 @@ function createWindow() {
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    // Open dev tools docked to the right in development mode
+    mainWindow.webContents.openDevTools({ mode: 'right' })
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -97,11 +99,6 @@ app.whenReady().then(() => {
     createLoginWindow(mainWindow, icon)
   })
 
-  // 检查登录状态
-  ipcMain.handle('check-login-status', async () => {
-    return await isLoggedIn()
-  })
-
   // 获取Cookies
   ipcMain.handle('get-cookies', async () => {
     return await loadCookies()
@@ -112,7 +109,7 @@ app.whenReady().then(() => {
     await clearCookies(mainWindow)
   })
 
-  // 设置IPC处理程序
+  // 设置所有IPC处理程序
   setupIPCHandlers()
 
   createWindow()
@@ -136,32 +133,22 @@ app.on('window-all-closed', () => {
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
 
-// 设置IPC处理程序
+/**
+ * 集中设置所有IPC处理程序
+ * 这是组织IPC逻辑的推荐位置
+ */
 function setupIPCHandlers() {
-  // 处理HTTP请求
-  ipcMain.handle('sendRequest', async (event, url, options) => {
-    try {
-      return await sendRequest(url, options)
-    } catch (error) {
-      console.error('IPC请求处理错误:', error)
-      throw error
-    }
-  })
-
-  // 处理文件保存
-  ipcMain.handle('saveFile', async (event, params) => {
-    try {
-      return await saveFile(params)
-    } catch (error) {
-      console.error('保存文件错误:', error)
-      throw error
-    }
-  })
-
-  // 设置登录相关处理程序
+  console.log('设置登录处理程序')
   setupLoginHandlers()
-  // 设置文件相关处理程序
+
+  console.log('设置文件处理程序')
   setupFileHandlers()
-  // 设置请求相关处理程序
+
+  console.log('设置请求处理程序')
   setupRequestHandlers()
+
+  // 检查登录状态的处理器可以保留在这里，因为它与 loginManager 的耦合不强
+  ipcMain.handle('check-login-status', async () => {
+    return await isLoggedIn()
+  })
 }
