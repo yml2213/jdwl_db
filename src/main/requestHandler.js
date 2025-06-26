@@ -315,69 +315,53 @@ function setupRequestHandlers() {
 
   /**
    * IPC处理程序：重置商品库存分配比例（整店清零）
+   * @description 根据 old.js 文件中的正确逻辑重写
    */
   ipcMain.handle('reset-goods-stock-ratio', async (event, { cookies, shopInfo, departmentInfo }) => {
-    const url = 'https://o.jdl.com/shopGoods/resetGoodStockRatio.do'
     const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
     const csrfToken = await getCsrfTokenFromCookies(cookies)
 
-    const params = new URLSearchParams()
-    params.append('csrfToken', csrfToken)
-    params.append('shopGoods.sellerId', shopInfo.sellerId)
-    params.append('shopGoods.deptId', shopInfo.deptId)
-    params.append('shopGoods.shopId', shopInfo.id)
-    params.append('shopGoods.shopNo', shopInfo.shopNo)
-    params.append('shopGoods.sellerNo', shopInfo.sellerNo)
+    if (!csrfToken) {
+      return { success: false, message: '主进程错误: 未能获取csrfToken' }
+    }
+
+    // 从 old.js 确认，参数是 shopId 和 deptId
+    const shopId = shopInfo.id
+    const deptId = departmentInfo.id
+
+    if (!shopId || !deptId) {
+      return { success: false, message: `主进程错误: 店铺ID或部门ID无效 (shopId: ${shopId}, deptId: ${deptId})` }
+    }
+
+    // 根据 old.js 确认，正确的URL、GET方法和查询字符串参数
+    const url = `https://o.jdl.com/goodsStockConfig/resetGoodsStockRatio.do?csrfToken=${csrfToken}&shopId=${shopId}&deptId=${deptId}&_r=${Math.random()}`
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'GET', // 使用GET方法
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
           'Cookie': cookieString,
-          'Origin': 'https://o.jdl.com',
           'Referer': 'https://o.jdl.com/goToMainIframe.do',
           'X-Requested-With': 'XMLHttpRequest',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-        },
-        body: params
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+        }
+        // GET请求没有body
       })
 
-      // 1. 首先，检查HTTP请求本身是否成功
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(
-          `reset-goods-stock-ratio 请求失败，状态码: ${response.status} ${response.statusText}. 响应: ${errorText}`
-        )
-        return {
-          success: false,
-          message: `服务器请求失败，状态码: ${response.status}. 请检查登录状态或网络。`
-        }
+        return { success: false, message: `服务器请求失败，状态码: ${response.status}.` }
       }
 
-      // 2. 如果请求成功(2xx), 再处理响应体
-      const responseText = await response.text()
-      console.log('reset-goods-stock-ratio 响应文本:', responseText)
+      const result = await response.json()
+      console.log('整店清零API响应:', result)
 
-      // 3. 成功且响应体为空 (例如 204 No Content)
-      if (!responseText) {
-        return { success: true, message: '整店清零操作成功。' }
-      }
-
-      // 4. 成功且响应体不为空，尝试解析JSON
-      try {
-        const result = JSON.parse(responseText)
-        if (result.code === 200) {
-          return { success: true, message: result.message }
-        } else {
-          return { success: false, message: result.message || 'API返回失败，但未提供详细信息。' }
-        }
-      } catch (e) {
-        console.error(
-          `reset-goods-stock-ratio JSON解析失败，但响应成功。文本: ${responseText}`,
-          e
-        )
-        return { success: false, message: '操作失败：服务器返回了无法解析的数据。' }
+      // 根据 old.js 确认，成功的判断条件
+      if (result && (result.resultCode === 1 || result.resultCode === '1' || result.resultMessage === '操作成功！')) {
+        return { success: true, message: `成功清空店铺 ${shopInfo.shopName} 的所有SKU库存分配` }
+      } else {
+        const errorMsg = result?.resultMessage || '未知错误'
+        return { success: false, message: errorMsg }
       }
     } catch (error) {
       console.error('主进程处理 reset-goods-stock-ratio 出错:', error)

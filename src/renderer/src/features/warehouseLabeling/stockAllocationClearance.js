@@ -58,11 +58,11 @@ async function _callClearanceAPI(skuList, shopInfo) {
 }
 
 /**
- * 处理整店清零的核心逻辑
- * @param {object} shopInfo - 店铺信息
- * @param {object} helpers - 辅助函数对象 { log }
- * @returns {Array} 结果数组
- */
+* 处理整店清零的核心逻辑
+* @param {object} shopInfo - 店铺信息
+* @param {object} helpers - 辅助函数对象 { log }
+* @returns {Array} 结果数组
+*/
 async function _processWholeStoreClearance(shopInfo, { log }) {
   if (!shopInfo || !shopInfo.shopNo) {
     throw new Error('未提供有效的店铺信息，无法执行整店清零')
@@ -76,11 +76,11 @@ async function _processWholeStoreClearance(shopInfo, { log }) {
 }
 
 /**
- * 处理一个批次的SKU的核心逻辑
- * @param {Array} skuList - SKU列表
- * @param {object} shopInfo - 店铺信息
- * @param {object} helpers - 辅助函数对象 { log }
- * @returns {Array} 结果数组
+* 处理一个批次的SKU的核心逻辑
+* @param {Array} skuList - SKU列表
+* @param {object} shopInfo - 店铺信息
+* @param {object} helpers - 辅助函数对象 { log }
+* @returns {Array} 结果数组
  */
 async function _processBatch(skuList, shopInfo, { log }) {
   log(`开始为 ${skuList.length} 个SKU调用清零API...`)
@@ -96,7 +96,7 @@ async function _processBatch(skuList, shopInfo, { log }) {
  * @param {object} context - { skuList, shopInfo, options }
  * @param {object} helpers - { log, updateProgress }
  * @returns {Promise<Array>} - 返回一个包含所有结果信息的数组
- */
+   */
 async function stockAllocationClearanceExecute(context, helpers) {
   const { skuList, shopInfo } = context
   const { log, updateProgress } = helpers
