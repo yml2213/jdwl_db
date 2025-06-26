@@ -8,11 +8,16 @@ import {
   getSelectedDepartment
 } from '../utils/storageHelper'
 import { getShopList } from '../services/apiService'
-import { executeTasks, executeOneTask } from '../features/warehouseLabeling/taskExecutor'
 import { getStatusClass } from '../features/warehouseLabeling/utils/taskUtils'
+
+import { useTask } from '../composables/useTask'
+import stockAllocationClearanceFeature from '../features/warehouseLabeling/stockAllocationClearance'
 
 import TaskArea from './warehouse/TaskArea.vue'
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
+
+// 重新导入 executeOneTask 以支持旧版任务列表
+import { executeOneTask } from '../features/warehouseLabeling/taskExecutor'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -312,13 +317,17 @@ const handleExecuteTasks = async () => {
   }
 }
 
+// 修复后的旧版任务执行逻辑
 const handleExecuteOneTask = async (task) => {
-  const shopInfo = currentShopInfo.value
-  if (!shopInfo) {
-    alert('请选择店铺')
-    return
+  console.log('Executing one task via old system:', task)
+  try {
+    await executeOneTask(task, currentShopInfo.value, task.选项)
+    // 可以在这里更新任务状态，或者依赖 executeOneTask 内部的修改
+  } catch (error) {
+    console.error(`Failed to execute task ${task.id}:`, error)
+    task.状态 = '失败'
+    task.结果 = error.message
   }
-  await executeOneTask(task, shopInfo, task.选项)
 }
 
 // 监听店铺选择变化，并保存店铺信息
@@ -372,12 +381,103 @@ provide('handleAddTask', handleAddTask)
 provide('handleFileChange', handleFileChange)
 provide('logs', logs)
 provide('disabledProducts', disabledProducts)
+
+// 为"库存分配清零"功能实例化一个专用的任务执行器
+const {
+  isRunning: isClearanceRunning,
+  status: clearanceStatus,
+  logs: clearanceLogs,
+  results: clearanceResults,
+  execute: executeClearance
+} = useTask(stockAllocationClearanceFeature)
+
+// 创建一个新的、独立的执行函数
+const handleRunClearanceImmediately = async () => {
+  const shopInfo = currentShopInfo.value
+  if (!shopInfo) {
+    alert('请先选择一个店铺')
+    return
+  }
+
+  let skuList = []
+  if (form.value.mode === 'whole_store') {
+    skuList = ['WHOLE_STORE']
+  } else {
+    skuList = form.value.sku
+      .split(/[\n,，]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (skuList.length === 0) {
+      alert('请输入有效的SKU')
+      return
+    }
+  }
+
+  // 构建传递给 useTask 的上下文
+  const context = {
+    skuList,
+    shopInfo
+  }
+
+  // 直接执行，无需创建和管理任务对象
+  await executeClearance(context)
+}
 </script>
 
 <template>
   <div class="inventory-clearance" v-if="props.isLoggedIn">
     <div class="clearance-container">
-      <ClearStorageOperationArea @shop-change="handleShopChange" />
+      <div class="operation-wrapper">
+        <ClearStorageOperationArea
+          v-model:mode="form.mode"
+          v-model:sku="form.sku"
+          v-model:options="form.options"
+          v-model:selectedStore="form.selectedStore"
+          v-model:autoStart="form.autoStart"
+          :shopsList="shopsList"
+          :isLoading="isLoadingShops"
+          :error="shopLoadError"
+          @add-task="handleAddTask"
+        >
+          <template #extra-actions>
+            <div class="new-feature-section">
+              <button
+                class="btn-execute-new"
+                @click="handleRunClearanceImmediately"
+                :disabled="isClearanceRunning || !form.options.clearStockAllocation"
+              >
+                <span v-if="!form.options.clearStockAllocation">请勾选上方清零选项</span>
+                <span v-else-if="isClearanceRunning">执行中 ({{ clearanceStatus }})...</span>
+                <span v-else>立即执行库存分配清零</span>
+              </button>
+              <p class="new-feature-desc">
+                对于"库存分配清零"功能，请使用下方的"立即执行"按钮。
+                <br />
+                它将采用新版执行器，实时反馈日志，无需添加至任务列表。
+              </p>
+            </div>
+          </template>
+        </ClearStorageOperationArea>
+
+        <div v-if="clearanceLogs.length > 0" class="new-logs-area">
+          <h4 class="logs-header">
+            执行日志 (状态: <span :class="`status-${clearanceStatus}`">{{ clearanceStatus }}</span>)
+          </h4>
+          <div class="logs-content">
+            <div v-for="(log, index) in clearanceLogs" :key="index" :class="`log-item log-${log.type}`">
+              <span class="log-time">{{ log.time }}</span>
+              <span class="log-message">{{ log.message }}</span>
+            </div>
+          </div>
+          <div v-if="clearanceStatus === 'success' && clearanceResults.length > 0" class="results-area">
+            <strong>处理结果:</strong>
+            <ul>
+              <li v-for="(res, i) in clearanceResults" :key="i">{{ res }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <TaskArea
         :task-list="taskList"
         @execute="handleExecuteTasks"
@@ -406,5 +506,119 @@ provide('disabledProducts', disabledProducts)
   height: calc(100vh - 120px);
   font-size: 20px;
   color: #909399;
+}
+
+.new-feature-section {
+  border-top: 1px solid #444;
+  padding-top: 15px;
+  margin-top: 15px;
+}
+
+.btn-execute-new {
+  background-color: #28a745;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  width: 100%;
+  transition: background-color 0.3s;
+}
+
+.btn-execute-new:disabled {
+  background-color: #5a6268;
+  cursor: not-allowed;
+}
+
+.btn-execute-new:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.new-feature-desc {
+  font-size: 12px;
+  color: #888;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.new-logs-area {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background-color: #2a2a2e;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.logs-header {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #eee;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #444;
+}
+
+.logs-content {
+  flex: 1;
+  overflow-y: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.log-item {
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+}
+
+.log-time {
+  color: #888;
+  margin-right: 10px;
+}
+
+.log-message {
+  white-space: pre-wrap;
+}
+
+.log-info .log-message {
+  color: #ccc;
+}
+.log-success .log-message {
+  color: #28a745;
+}
+.log-error .log-message {
+  color: #dc3545;
+}
+.log-warning .log-message {
+  color: #ffc107;
+}
+
+.status-running {
+  color: #007bff;
+}
+.status-success {
+  color: #28a745;
+}
+.status-error {
+  color: #dc3545;
+}
+.status-batching {
+  color: #17a2b8;
+}
+
+.results-area {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #444;
+  color: #eee;
+}
+.results-area ul {
+  padding-left: 20px;
+  margin: 0;
 }
 </style>
