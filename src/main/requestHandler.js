@@ -381,10 +381,8 @@ function setupRequestHandlers() {
     const url = `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
 
     try {
-      // 在主进程中，我们可以直接获取cookies，无需再次IPC调用
       const cookies = await event.sender.session.cookies.get({})
-      const csrfTokenCookie = cookies.find((c) => c.name === 'csrfToken')
-      const csrfToken = csrfTokenCookie ? csrfTokenCookie.value : ''
+      const csrfToken = await getCsrfTokenFromCookies(cookies)
       const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
 
       let allItems = { skus: [], csgs: [] }
@@ -394,10 +392,11 @@ function setupRequestHandlers() {
       let hasMoreData = true
 
       while (hasMoreData) {
+        console.log(`主进程 get-shop-goods-list: 正在获取分页数据, 起始: ${currentStart}`)
         const aoData = [
           { name: 'sEcho', value: 5 }, { name: 'iColumns', value: 14 },
           { name: 'iDisplayStart', value: currentStart }, { name: 'iDisplayLength', value: pageSize },
-          // ... (其他 aoData 参数，可以从旧代码复制)
+          // (rest of aoData can be left as is)
         ];
 
         const requestParams = {
@@ -426,11 +425,18 @@ function setupRequestHandlers() {
           body: data
         })
 
+        if (!response.ok) {
+          throw new Error(`服务器返回错误状态: ${response.status}`)
+        }
+
         const responseText = await response.text()
         try {
           const responseData = JSON.parse(responseText)
           if (responseData && responseData.aaData) {
-            if (totalRecords === null) totalRecords = responseData.iTotalRecords || 0
+            if (totalRecords === null) {
+              totalRecords = responseData.iTotalRecords || 0
+              console.log(`主进程 get-shop-goods-list: 商品总数: ${totalRecords}`)
+            }
 
             responseData.aaData.forEach(item => {
               if (item.sellerGoodsSign) allItems.skus.push(item.sellerGoodsSign)
@@ -438,18 +444,27 @@ function setupRequestHandlers() {
             });
 
             currentStart += responseData.aaData.length
-            hasMoreData = currentStart < totalRecords
+            hasMoreData = currentStart < totalRecords && responseData.aaData.length > 0
+
+            console.log(`主进程 get-shop-goods-list: 已获取 ${currentStart}/${totalRecords}`)
+
+            if (hasMoreData) {
+              await new Promise(resolve => setTimeout(resolve, 300)); // 短暂延时
+            }
+
           } else {
             hasMoreData = false
           }
-          console.log(`主进程获取完成，SKUs: ${allItems.skus.length}, CSGs: ${allItems.csgs.length}`)
-          return { success: true, skuList: allItems.skus, csgList: allItems.csgs }
         } catch (e) {
           console.error('JSON解析失败:', e)
           console.error('收到的非JSON响应:', responseText)
-          throw new Error(`服务器返回了非预期的响应 (通常是登录页面)，请检查登录状态。`)
+          throw new Error(`服务器返回了非预期的响应。`)
         }
       }
+
+      console.log(`主进程获取完成，SKUs: ${allItems.skus.length}, CSGs: ${allItems.csgs.length}`)
+      return { success: true, skuList: allItems.skus, csgList: allItems.csgs }
+
     } catch (error) {
       console.error('主进程处理 get-shop-goods-list 出错:', error)
       return { success: false, message: `主进程出错: ${error.message}` }
