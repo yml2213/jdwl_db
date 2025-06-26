@@ -1,6 +1,6 @@
 import { getAllCookies } from '../../utils/cookieHelper'
 import { getCMGBySkuList } from '../../services/apiService'
-import { getSelectedDepartment, getSelectedWarehouse } from '../../utils/storageHelper'
+import { getSelectedDepartment, getSelectedWarehouse, getSelectedVendor } from '../../utils/storageHelper'
 
 export default {
   name: 'addInventory',
@@ -300,6 +300,14 @@ export default {
 
       console.log('仓库信息:', warehouseInfo)
 
+      // 获取当前选择的供应商信息
+      const vendorInfo = getSelectedVendor()
+      if (!vendorInfo) {
+        throw new Error('未选择供应商，无法添加库存')
+      }
+
+      console.log('供应商信息:', vendorInfo)
+
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies()
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
@@ -311,6 +319,14 @@ export default {
       const goodsJson = JSON.stringify(goodsList)
       console.log('商品JSON:', goodsJson.length)
 
+      // 处理供应商ID - 去除前缀，只保留数字部分
+      let supplierIdValue = vendorInfo.id
+      if (typeof supplierIdValue === 'string' && supplierIdValue.match(/^[A-Za-z]+\d+$/)) {
+        // 如果ID格式为字母+数字，则只保留数字部分
+        supplierIdValue = supplierIdValue.replace(/^[A-Za-z]+/, '')
+      }
+      console.log('处理后的供应商ID:', supplierIdValue)
+
       // 创建FormData
       const formData = new FormData()
       formData.append('id', '')
@@ -318,7 +334,7 @@ export default {
       formData.append('goods', goodsJson)
       formData.append('deptId', deptInfo.id)
       formData.append('deptName', deptInfo.name)
-      formData.append('supplierId', '4418047117122')
+      formData.append('supplierId', supplierIdValue)     // 使用处理后的供应商ID
       formData.append('warehouseId', warehouseInfo.id.toString()) // 使用动态获取的仓库ID
       formData.append('billOfLading', '')
       formData.append('qualityCheckFlag', '')

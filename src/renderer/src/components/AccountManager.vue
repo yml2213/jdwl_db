@@ -172,11 +172,11 @@ const handleVendorSelected = (vendor) => {
   // 暂存供应商名称，用于传递给事业部选择器
   tempVendorName.value = vendor.name
 
-  // 保存完整的供应商对象
+  // 保存完整的供应商对象，确保包含正确的id属性
   const vendorData = {
     id: vendor.id,
     name: vendor.name,
-    supplierNo: vendor.id
+    supplierNo: vendor.id  // 保持supplierNo兼容性
   }
   saveSelectedVendor(vendorData)
 }
