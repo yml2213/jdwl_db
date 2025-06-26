@@ -2,6 +2,9 @@ import axios from 'axios'
 import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { ipcMain } from 'electron'
+import XLSX from 'xlsx'
+import qs from 'qs'
 
 // 日志文件路径
 const logPath = path.join(app.getPath('userData'), 'request-logs.txt')
@@ -240,4 +243,234 @@ async function sendRequest(url, options = {}) {
   }
 }
 
-export { sendRequest }
+async function getCsrfTokenFromCookies(cookies) {
+  const tokenCookie = cookies.find((cookie) => cookie.name === 'csrfToken')
+  return tokenCookie ? tokenCookie.value : ''
+}
+
+/**
+ * 设置所有与请求相关的IPC处理程序
+ */
+function setupRequestHandlers() {
+  /**
+   * IPC处理程序：上传取消京配打标的数据。
+   * 接收CSG列表，在主进程中创建Excel文件并上传。
+   */
+  ipcMain.handle('upload-cancel-jp-search-data', async (event, { cookies, csgList, shopInfo }) => {
+    try {
+      console.log(`主进程接收到 upload-cancel-jp-search-data 请求, CSG数量: ${csgList.length}`)
+
+      // 1. 获取 CSRF Token
+      const csrfTokenCookie = cookies.find((cookie) => cookie.name === 'csrfToken')
+      const csrfToken = csrfTokenCookie ? csrfTokenCookie.value : ''
+      if (!csrfToken) {
+        throw new Error('在主进程中无法获取csrfToken')
+      }
+
+      // 2. 创建 Excel 数据 (表头 + 数据行)
+      const excelData = [['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）'], ...csgList.map(csg => [csg, '0'])]
+
+      // 3. 将数据转换为 Buffer
+      const ws = XLSX.utils.aoa_to_sheet(excelData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+      const excelBuffer = XLSX.write(wb, { bookType: 'xls', type: 'buffer' })
+
+      // 4. 使用 FormData 和 fetch 发送请求
+      const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+      const form = new FormData()
+      form.append('csrfToken', csrfToken)
+      form.append('updateShopGoodsJpSearchListFile', new Blob([excelBuffer]), 'updateShopGoodsJpSearchImportTemplate.xls')
+
+      const url = 'https://o.jdl.com/shopGoods/importUpdateShopGoodsJpSearch.do?_r=' + Math.random()
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Cookie': cookieString,
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Origin': 'https://o.jdl.com',
+          'Referer': 'https://o.jdl.com/goToMainIframe.do',
+        },
+        body: form
+      })
+
+      const responseData = await response.json()
+      console.log('主进程 upload-cancel-jp-search-data 响应:', responseData)
+
+      // 5. 返回结果给渲染器进程
+      if (responseData && responseData.resultCode === 1) {
+        return { success: true, message: responseData.resultMessage || '取消京配打标成功' }
+      } else {
+        return { success: false, message: responseData.resultMessage || responseData.msg || '取消京配打标失败' }
+      }
+
+    } catch (error) {
+      console.error('主进程处理 upload-cancel-jp-search-data 出错:', error)
+      return { success: false, message: `主进程出错: ${error.message}` }
+    }
+  })
+
+  /**
+   * IPC处理程序：重置商品库存分配比例（整店清零）
+   */
+  ipcMain.handle('reset-goods-stock-ratio', async (event, { cookies, shopInfo, departmentInfo }) => {
+    const url = 'https://o.jdl.com/shopGoods/resetGoodStockRatio.do'
+    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+    const csrfToken = await getCsrfTokenFromCookies(cookies)
+
+    const params = new URLSearchParams()
+    params.append('csrfToken', csrfToken)
+    params.append('shopGoods.sellerId', shopInfo.sellerId)
+    params.append('shopGoods.deptId', shopInfo.deptId)
+    params.append('shopGoods.shopId', shopInfo.id)
+    params.append('shopGoods.shopNo', shopInfo.shopNo)
+    params.append('shopGoods.sellerNo', shopInfo.sellerNo)
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Cookie': cookieString,
+          'Origin': 'https://o.jdl.com',
+          'Referer': 'https://o.jdl.com/goToMainIframe.do',
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        },
+        body: params
+      })
+
+      // 1. 首先，检查HTTP请求本身是否成功
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(
+          `reset-goods-stock-ratio 请求失败，状态码: ${response.status} ${response.statusText}. 响应: ${errorText}`
+        )
+        return {
+          success: false,
+          message: `服务器请求失败，状态码: ${response.status}. 请检查登录状态或网络。`
+        }
+      }
+
+      // 2. 如果请求成功(2xx), 再处理响应体
+      const responseText = await response.text()
+      console.log('reset-goods-stock-ratio 响应文本:', responseText)
+
+      // 3. 成功且响应体为空 (例如 204 No Content)
+      if (!responseText) {
+        return { success: true, message: '整店清零操作成功。' }
+      }
+
+      // 4. 成功且响应体不为空，尝试解析JSON
+      try {
+        const result = JSON.parse(responseText)
+        if (result.code === 200) {
+          return { success: true, message: result.message }
+        } else {
+          return { success: false, message: result.message || 'API返回失败，但未提供详细信息。' }
+        }
+      } catch (e) {
+        console.error(
+          `reset-goods-stock-ratio JSON解析失败，但响应成功。文本: ${responseText}`,
+          e
+        )
+        return { success: false, message: '操作失败：服务器返回了无法解析的数据。' }
+      }
+    } catch (error) {
+      console.error('主进程处理 reset-goods-stock-ratio 出错:', error)
+      return { success: false, message: `主进程请求失败: ${error.message}` }
+    }
+  })
+
+  /**
+   * IPC处理程序：获取店铺的所有商品信息（CSG和SKU）
+   */
+  ipcMain.handle('get-shop-goods-list', async (event, shopInfo) => {
+    console.log('主进程接收到 get-shop-goods-list 请求, 店铺:', shopInfo.shopName)
+    if (!shopInfo || !shopInfo.shopNo) {
+      return { success: false, message: '主进程错误: 店铺信息不完整' }
+    }
+
+    const url = `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+
+    try {
+      // 在主进程中，我们可以直接获取cookies，无需再次IPC调用
+      const cookies = await event.sender.session.cookies.get({})
+      const csrfTokenCookie = cookies.find((c) => c.name === 'csrfToken')
+      const csrfToken = csrfTokenCookie ? csrfTokenCookie.value : ''
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+
+      let allItems = { skus: [], csgs: [] }
+      let currentStart = 0
+      const pageSize = 100
+      let totalRecords = null
+      let hasMoreData = true
+
+      while (hasMoreData) {
+        const aoData = [
+          { name: 'sEcho', value: 5 }, { name: 'iColumns', value: 14 },
+          { name: 'iDisplayStart', value: currentStart }, { name: 'iDisplayLength', value: pageSize },
+          // ... (其他 aoData 参数，可以从旧代码复制)
+        ];
+
+        const requestParams = {
+          csrfToken: csrfToken,
+          shopNo: shopInfo.shopNo,
+          sellerId: shopInfo.sellerId,
+          deptId: shopInfo.deptId,
+          jdDeliver: '1',
+          status: '1',
+          aoData: JSON.stringify(aoData)
+        }
+
+        const data = qs.stringify(requestParams)
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Origin': 'https://o.jdl.com',
+            'Referer': 'https://o.jdl.com/goToMainIframe.do',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Cookie': cookieString,
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          },
+          body: data
+        })
+
+        const responseText = await response.text()
+        try {
+          const responseData = JSON.parse(responseText)
+          if (responseData && responseData.aaData) {
+            if (totalRecords === null) totalRecords = responseData.iTotalRecords || 0
+
+            responseData.aaData.forEach(item => {
+              if (item.sellerGoodsSign) allItems.skus.push(item.sellerGoodsSign)
+              if (item.shopGoodsNo) allItems.csgs.push(item.shopGoodsNo)
+            });
+
+            currentStart += responseData.aaData.length
+            hasMoreData = currentStart < totalRecords
+          } else {
+            hasMoreData = false
+          }
+          console.log(`主进程获取完成，SKUs: ${allItems.skus.length}, CSGs: ${allItems.csgs.length}`)
+          return { success: true, skuList: allItems.skus, csgList: allItems.csgs }
+        } catch (e) {
+          console.error('JSON解析失败:', e)
+          console.error('收到的非JSON响应:', responseText)
+          throw new Error(`服务器返回了非预期的响应 (通常是登录页面)，请检查登录状态。`)
+        }
+      }
+    } catch (error) {
+      console.error('主进程处理 get-shop-goods-list 出错:', error)
+      return { success: false, message: `主进程出错: ${error.message}` }
+    }
+  })
+}
+
+export { sendRequest, setupRequestHandlers }

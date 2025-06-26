@@ -16,9 +16,14 @@ async function _callResetGoodsStockRatioAPI(shopInfo) {
     throw new Error('获取Cookies失败')
   }
 
+  // 修复：将 shopInfo 转换为纯对象，避免IPC克隆错误
+  const plainShopInfo = { ...shopInfo }
+
+  console.log('调用 reset-goods-stock-ratio, shopInfo:', plainShopInfo, 'dept:', selectedDepartment)
+
   const response = await window.electron.ipcRenderer.invoke('reset-goods-stock-ratio', {
     cookies: allCookies,
-    shopInfo: shopInfo,
+    shopInfo: plainShopInfo,
     departmentInfo: selectedDepartment
   })
 

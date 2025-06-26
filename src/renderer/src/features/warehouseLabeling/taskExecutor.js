@@ -76,27 +76,63 @@ export async function executeOneTask(task, shopInfo, options = {}) {
 
     // 根据任务类型执行相应功能
     if (task.skuList && task.skuList.length === 1 && task.skuList[0] === 'WHOLE_STORE') {
-      console.log('执行[整店取消京配打标]功能')
+      console.log('执行[整店操作]功能')
 
       // 检查是否有整店取消京配打标选项
       if (taskOptions.wholeCancelJpSearch) {
+        console.log('执行整店取消京配打标（通过适配器）')
         const cancelJpSearchModule = await import('./cancelJpSearch.js')
-        const result = await cancelJpSearchModule.default.execute(task.skuList, task)
 
-        // 更新任务状态
+        // --- 整店操作适配器 ---
+        let result = {}
+        try {
+          const context = { skuList: task.skuList, shopInfo: task.店铺信息 }
+          const helpers = {
+            log: (message, type = 'info') => {
+              console.log(`[cancelJpSearch log] ${type}: ${message}`)
+            },
+            updateProgress: (current, total) => {
+              console.log(`[cancelJpSearch progress] ${current}/${total}`)
+            }
+          }
+          const resultsArray = await cancelJpSearchModule.default.execute(context, helpers)
+          result = { success: true, message: `整店取消京配成功: ${resultsArray.join(', ')}` }
+        } catch (error) {
+          result = { success: false, message: `整店取消京配失败: ${error.message}` }
+        }
+        // --- 适配器结束 ---
+
         task.状态 = result.success ? '成功' : '失败'
-        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.结果 = result.message
         task.importLogs = result.cancelJpSearchLogs || []
       }
 
       // 检查是否有整店库存分配清零选项
       if (taskOptions.wholeStoreClearance) {
+        console.log('执行整店库存分配清零（通过适配器）')
         const stockAllocationClearanceModule = await import('./stockAllocationClearance.js')
-        const result = await stockAllocationClearanceModule.default.execute(task.skuList, task)
 
-        // 更新任务状态
+        // --- 整店操作适配器 ---
+        let result = {}
+        try {
+          const context = { skuList: task.skuList, shopInfo: task.店铺信息 }
+          const helpers = {
+            log: (message, type = 'info') => {
+              console.log(`[clearance log] ${type}: ${message}`)
+            },
+            updateProgress: (current, total) => {
+              console.log(`[clearance progress] ${current}/${total}`)
+            }
+          }
+          const resultsArray = await stockAllocationClearanceModule.default.execute(context, helpers)
+          result = { success: true, message: `整店清零成功: ${resultsArray.join(', ')}` }
+        } catch (error) {
+          result = { success: false, message: `整店清零失败: ${error.message}` }
+        }
+        // --- 适配器结束 ---
+
         task.状态 = result.success ? '成功' : '失败'
-        task.结果 = result.message || (result.success ? '成功' : '失败')
+        task.结果 = result.message
         task.importLogs = result.clearanceLogs || []
       }
     } else {
@@ -223,12 +259,47 @@ export async function executeOneTask(task, shopInfo, options = {}) {
         })
       }
 
-      // 执行取消京配打标功能
+      // 执行取消京配打标功能 - 使用适配器来调用重构后的模块
       if (taskOptions.cancelJpSearch) {
+        console.log('执行取消京配打标功能（通过适配器）')
         const cancelJpSearchModule = await import('./cancelJpSearch.js')
-        const result = await cancelJpSearchModule.default.execute(task.skuList, task)
 
-        // 更新任务状态
+        // --- 适配器开始 ---
+        let result = {}
+        try {
+          // 构造新的 context 和 helpers
+          const context = { skuList: task.skuList, shopInfo: task.店铺信息 }
+          const helpers = {
+            log: (message, type = 'info') => {
+              // 可以在这里将新模块的日志桥接到旧的任务日志上
+              console.log(`[cancelJpSearch log] ${type}: ${message}`);
+              (task.importLogs = task.importLogs || []).push({ type, message, time: new Date().toLocaleString() });
+            },
+            updateProgress: (current, total) => {
+              console.log(`[cancelJpSearch progress] ${current}/${total}`);
+            }
+          }
+
+          const resultsArray = await cancelJpSearchModule.default.execute(context, helpers)
+
+          // 成功时，转换回旧的结果格式
+          result = {
+            success: true,
+            message: `取消京配打标成功: ${resultsArray.join(', ')}`,
+            cancelJpSearchLogs: task.importLogs
+          }
+
+        } catch (error) {
+          // 失败时，转换回旧的结果格式
+          result = {
+            success: false,
+            message: `取消京配打标失败: ${error.message}`,
+            cancelJpSearchLogs: task.importLogs
+          }
+        }
+        // --- 适配器结束 ---
+
+        // 更新任务状态 (使用转换后的 result 对象)
         task.状态 = result.success ? '成功' : '失败'
         task.结果 = result.message || (result.success ? '成功' : '失败')
         task.importLogs = result.cancelJpSearchLogs || []

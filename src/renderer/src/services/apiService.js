@@ -1339,175 +1339,25 @@ export async function clearStockAllocation(skuList, shopInfo) {
 }
 
 /**
- * 获取整店商品列表（CSG编号）
- * @param {Object} shopInfo - 店铺信息
- * @returns {Promise<Array>} 商品CSG列表
+ * 【重构】获取店铺的所有商品信息（CSG和SKU）
+ * 通过IPC调用主进程来执行，避免在渲染器中处理复杂请求。
+ * @param {object} shopInfo - 店铺信息对象
+ * @returns {Promise<{success: boolean, message: string, skuList?: string[], csgList?: string[]}>}
  */
 export async function getShopGoodsList(shopInfo) {
-  console.log('getShopGoodsList被调用，传入的shopInfo:', shopInfo)
-
-  if (!shopInfo || !shopInfo.shopNo) {
-    console.error('获取整店商品列表失败: 店铺信息不完整 - 缺少shopNo', shopInfo)
-    return { success: false, message: '店铺信息不完整 - 缺少shopNo', csgList: [] }
-  }
-
-  // 获取事业部信息，如果shopInfo中没有提供
-  let deptInfo = null
-  if (!shopInfo.deptId || !shopInfo.sellerId) {
-    const { getSelectedDepartment } = require('../utils/storageHelper')
-    deptInfo = getSelectedDepartment()
-    console.log('从localStorage获取事业部信息:', deptInfo)
-  }
-
-  console.log('开始获取整店商品列表, 店铺:', shopInfo.shopName)
-  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
-  const csrfToken = await getCsrfToken()
-
+  console.log('apiService.getShopGoodsList: 通过IPC调用主进程获取全店商品...')
   try {
-    // 初始化结果数组和分页参数
-    let allCsgItems = []
-    let currentStart = 0
-    let totalRecords = null
-    let hasMoreData = true
-    const pageSize = 100 // 每页获取100条记录
-
-    // 循环获取所有页的数据
-    while (hasMoreData) {
-      console.log(`获取整店商品列表, 当前起始位置: ${currentStart}, 每页数量: ${pageSize}`)
-
-      // 准备请求参数，确保与curl命令中的参数一致
-      const requestParams = {
-        csrfToken: csrfToken,
-        ids: '',
-        shopId: shopInfo.id || '', // 使用id作为shopId
-        sellerId: shopInfo.sellerId || (deptInfo ? deptInfo.sellerId : ''),
-        deptId: shopInfo.deptId || (deptInfo ? deptInfo.id : ''),
-        sellerNo: shopInfo.sellerNo || (deptInfo ? deptInfo.sellerNo : ''),
-        deptNo: shopInfo.deptNo || (deptInfo ? deptInfo.deptNo : ''),
-        shopNo: shopInfo.shopNo,
-        spSource: '',
-        shopGoodsName: '',
-        isCombination: '',
-        barcode: '',
-        jdDeliver: '1', // 京配商品
-        sellerGoodsSigns: '',
-        spGoodsNos: '',
-        goodsNos: '',
-        isvGoodsNos: '',
-        status: '1', // 启用状态
-        originSend: '',
-        aoData: JSON.stringify([
-          { name: 'sEcho', value: 5 },
-          { name: 'iColumns', value: 14 },
-          { name: 'sColumns', value: ',,,,,,,,,,,,,' },
-          { name: 'iDisplayStart', value: currentStart },
-          { name: 'iDisplayLength', value: pageSize },
-          { name: 'mDataProp_0', value: 0 },
-          { name: 'bSortable_0', value: false },
-          { name: 'mDataProp_1', value: 1 },
-          { name: 'bSortable_1', value: false },
-          { name: 'mDataProp_2', value: 'shopGoodsName' },
-          { name: 'bSortable_2', value: false },
-          { name: 'mDataProp_3', value: 'goodsNo' },
-          { name: 'bSortable_3', value: false },
-          { name: 'mDataProp_4', value: 'spGoodsNo' },
-          { name: 'bSortable_4', value: false },
-          { name: 'mDataProp_5', value: 'isvGoodsNo' },
-          { name: 'bSortable_5', value: false },
-          { name: 'mDataProp_6', value: 'shopGoodsNo' },
-          { name: 'bSortable_6', value: false },
-          { name: 'mDataProp_7', value: 'barcode' },
-          { name: 'bSortable_7', value: false },
-          { name: 'mDataProp_8', value: 'shopName' },
-          { name: 'bSortable_8', value: false },
-          { name: 'mDataProp_9', value: 'createTime' },
-          { name: 'bSortable_9', value: false },
-          { name: 'mDataProp_10', value: 10 },
-          { name: 'bSortable_10', value: false },
-          { name: 'mDataProp_11', value: 'isCombination' },
-          { name: 'bSortable_11', value: false },
-          { name: 'mDataProp_12', value: 'status' },
-          { name: 'bSortable_12', value: false },
-          { name: 'mDataProp_13', value: 13 },
-          { name: 'bSortable_13', value: false },
-          { name: 'iSortCol_0', value: 9 },
-          { name: 'sSortDir_0', value: 'desc' },
-          { name: 'iSortingCols', value: 1 }
-        ])
-      }
-
-      console.log('发送请求参数:', requestParams)
-
-      // 构建请求数据
-      const data = qs.stringify(requestParams)
-
-      // 发送请求
-      const response = await fetchApi(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'Accept': 'application/json, text/javascript, */*; q=0.01',
-          'Origin': BASE_URL,
-          'Referer': `${BASE_URL}/goToMainIframe.do`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: data
-      })
-
-      console.log('获取整店商品列表响应:', response)
-
-      // 处理响应
-      if (response && response.aaData) {
-        // 首次获取总记录数
-        if (totalRecords === null) {
-          totalRecords = response.iTotalRecords || 0
-          console.log(`查询到总共有${totalRecords}个商品`)
-        }
-
-        // 解析本页数据，提取CSG编号
-        const pageCsgItems = response.aaData
-          .filter(item => item.shopGoodsNo) // 只保留有CSG编号的商品
-          .map(item => item.shopGoodsNo)
-
-        // 合并到总结果中
-        allCsgItems = [...allCsgItems, ...pageCsgItems]
-
-        console.log(`当前已获取${allCsgItems.length}/${totalRecords}个CSG编号`)
-
-        // 判断是否还有更多数据
-        currentStart += response.aaData.length
-        hasMoreData = currentStart < totalRecords
-
-        // 如果没有更多数据或已获取所有记录，退出循环
-        if (!hasMoreData || allCsgItems.length >= totalRecords) {
-          break
-        }
-
-        // 添加短暂延迟避免频繁请求
-        if (hasMoreData) {
-          await new Promise((resolve) => setTimeout(resolve, 300))
-        }
-      } else {
-        // 如果响应异常，退出循环
-        console.warn('查询CSG编号响应异常:', response)
-        hasMoreData = false
-      }
+    const plainShopInfo = { ...shopInfo }
+    const result = await window.electron.ipcRenderer.invoke('get-shop-goods-list', plainShopInfo)
+    if (!result.success) {
+      // 如果主进程返回错误，也以异常形式抛出
+      throw new Error(result.message)
     }
-
-    console.log(`整店商品CSG编号查询完成，共获取${allCsgItems.length}个CSG编号`)
-
-    return {
-      success: true,
-      message: `成功获取${allCsgItems.length}个CSG编号`,
-      csgList: allCsgItems
-    }
+    return result
   } catch (error) {
-    console.error('获取整店商品列表失败:', error)
-    return {
-      success: false,
-      message: `获取整店商品列表失败: ${error.message || '未知错误'}`,
-      csgList: []
-    }
+    console.error('调用主进程 get-shop-goods-list 失败:', error)
+    // 返回一个符合预期的失败对象
+    return { success: false, message: error.message }
   }
 }
 

@@ -9,7 +9,7 @@ import {
   isLoggedIn,
   setupLoginHandlers
 } from './loginManager'
-import { sendRequest } from './requestHandler'
+import { sendRequest, setupRequestHandlers } from './requestHandler'
 import { saveFile, setupFileHandlers } from './fileHandler'
 
 // 主窗口引用
@@ -162,4 +162,6 @@ function setupIPCHandlers() {
   setupLoginHandlers()
   // 设置文件相关处理程序
   setupFileHandlers()
+  // 设置请求相关处理程序
+  setupRequestHandlers()
 }
