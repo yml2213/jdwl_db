@@ -206,10 +206,11 @@ const handleExecuteTask = async (taskToRun) => {
 
   task.status = '运行中'
   try {
+    const departmentInfo = getSelectedDepartment()
     const context = {
       skus: task.skus,
       options: task.options,
-      store: task.selectedStore,
+      store: { ...task.selectedStore, ...departmentInfo },
       warehouse: task.selectedWarehouse,
       taskName: task.featureName
     }

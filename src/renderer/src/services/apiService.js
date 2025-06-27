@@ -611,6 +611,7 @@ export async function queryProductStatus(skuList, shopInfo, deptInfo) {
         originSend: '',
         aoData: JSON.stringify(aoDataObj)
       })
+      console.log('查询停用商品 - 请求参数:', data)
 
       const response = await fetchApi(baseUrl, {
         method: 'POST',
@@ -693,7 +694,7 @@ export async function queryProductStatus(skuList, shopInfo, deptInfo) {
  */
 export async function enableShopProducts(disabledItems) {
   console.log('开始执行 enableShopProducts，收到的停用商品:', disabledItems)
-  const url = `${BASE_URL}/vender/product/updateStatusByIds.do`
+  const url = `${BASE_URL}/shopGoods/updateStatusByIds.do`
   const csrfToken = await getCsrfToken()
 
   // 构建请求体
@@ -715,7 +716,7 @@ export async function enableShopProducts(disabledItems) {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         Origin: BASE_URL,
-        Referer: `${BASE_URL}/vender/product/view.action`,
+        Referer: `${BASE_URL}/shopGoods/view.action`,
         'X-Requested-With': 'XMLHttpRequest'
       },
       body: data

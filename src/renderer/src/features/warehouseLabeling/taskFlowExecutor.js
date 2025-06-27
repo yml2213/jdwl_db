@@ -82,8 +82,10 @@ export default {
                 try {
                     const result = await step.execute(context, { log, isRunning, isManual })
                     if (result && result.success === false) {
-                        log(`步骤 [${step.name}] 执行失败: ${result.message}`, 'error')
-                        return result
+                        const errorMessage = `步骤 [${step.name}] 执行失败: ${result.message}`
+                        log(errorMessage, 'error')
+                        // 抛出错误，以便被外层 `useTask` 的 catch 块捕获
+                        throw new Error(errorMessage)
                     }
                     if (!isManual) {
                         log(`步骤 [${step.name}] 执行成功。`, 'success')
@@ -91,7 +93,8 @@ export default {
                 } catch (e) {
                     const errorMessage = e.message || '未知错误'
                     log(`步骤 [${step.name}] 发生意外错误: ${errorMessage}`, 'error')
-                    return { success: false, message: `步骤 [${step.name}] 失败: ${errorMessage}` }
+                    // 重新抛出错误，确保任务状态被正确设置为失败
+                    throw new Error(`步骤 [${step.name}] 失败: ${errorMessage}`)
                 }
             }
         }

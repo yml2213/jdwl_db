@@ -2,14 +2,13 @@ import { queryProductStatus, enableShopProducts } from '../../services/apiServic
 
 /**
  * 检查批次中商品的状态并找出停用的商品
- * @param {object} params - 参数对象
- * @param {Array<string>} params.skus - 商品SKU列表
- * @param {string} params.shopNo - 店铺编号
- * @param {string} params.deptNo - 事业部编号
- * @param {object} helpers - 辅助函数，包含 log
- * @returns {Promise<Array<string>>} - 返回停用的SKU列表
+ * @param {object} params - 参数
+ * @param {Array<string>} params.skus - SKU列表
+ * @param {object} params.store - 店铺对象
+ * @param {object} helpers - 辅助函数
+ * @returns {Promise<Array<string>>} 停用的SKU列表
  */
-async function findDisabledProducts({ skus, shopNo, deptNo }, helpers) {
+async function findDisabledProducts({ skus, store }, helpers) {
   const allDisabledProducts = []
   try {
     const QUERY_BATCH_SIZE = 1000
@@ -22,7 +21,7 @@ async function findDisabledProducts({ skus, shopNo, deptNo }, helpers) {
     for (let i = 0; i < skuGroups.length; i++) {
       const group = skuGroups[i]
       helpers.log(`查询第 ${i + 1}/${skuGroups.length} 组, ${group.length}个SKU...`)
-      const statusResult = await queryProductStatus(group, shopNo, deptNo)
+      const statusResult = await queryProductStatus(group, store, store)
 
       if (statusResult.success && statusResult.disabledItems.length > 0) {
         helpers.log(`发现 ${statusResult.disabledItems.length} 个停用商品`)
@@ -45,44 +44,101 @@ export default {
 
   /**
    * 执行启用店铺商品功能
-   * @param {object} context - 上下文对象
-   * @param {object} helpers - 辅助函数对象
+   * @param {Array<string>|Object} skuListOrContext - SKU列表或上下文对象
+   * @param {Object} taskOrHelpers - 任务对象或辅助函数对象
    * @returns {Promise<Object>} 执行结果
    */
-  async execute(context, helpers) {
-    helpers.log(`开始执行 [${this.label}] 功能...`)
-    const { skus, store } = context
+  async execute(skuListOrContext, taskOrHelpers) {
+    // 兼容两种调用方式：
+    // 1. 新方式: execute({skus, store}, helpers)
+    // 2. 旧方式: execute(skuList, task)
+
+    let skus, store, helpers;
+
+    if (Array.isArray(skuListOrContext)) {
+      // 旧的调用方式
+      console.log('使用旧的调用方式 execute(skuList, task)');
+      console.log('传入的task对象:', JSON.stringify(taskOrHelpers, null, 2));
+
+      skus = skuListOrContext;
+
+      // 尝试从不同位置获取店铺信息
+      store = taskOrHelpers.店铺信息 || taskOrHelpers.shopInfo || {};
+      console.log('提取的store对象:', JSON.stringify(store, null, 2));
+
+      // 如果store中没有必要的信息，尝试从其他地方获取
+      if (!store.shopNo && taskOrHelpers.shopNo) {
+        store.shopNo = taskOrHelpers.shopNo;
+      }
+
+      if (!store.deptNo && taskOrHelpers.deptNo) {
+        store.deptNo = taskOrHelpers.deptNo;
+      }
+
+      // 从task对象中查找所有可能包含店铺信息的字段
+      console.log('task对象的所有键:', Object.keys(taskOrHelpers));
+
+      // 创建一个简单的helpers对象
+      helpers = {
+        log: (message, type = 'info') => {
+          console.log(`[enableStoreProducts ${type}] ${message}`);
+          if (taskOrHelpers.importLogs) {
+            taskOrHelpers.importLogs.push({
+              type,
+              message,
+              timestamp: new Date().toLocaleString()
+            });
+          }
+        },
+        updateProgress: (current, total) => {
+          console.log(`[enableStoreProducts progress] ${current}/${total}`);
+        }
+      };
+    } else {
+      // 新的调用方式
+      console.log('使用新的调用方式 execute({skus, store}, helpers)');
+      ({ skus, store } = skuListOrContext);
+      helpers = taskOrHelpers;
+    }
+
+    helpers.log(`开始执行 [${this.label}] 功能...`);
+
+    // 打印store对象的内容，帮助调试
+    console.log('最终使用的store对象:', JSON.stringify(store, null, 2));
 
     if (!store || !store.shopNo || !store.deptNo) {
-      throw new Error('未提供有效的店铺或事业部信息 (shopNo, deptNo)')
+      const errorMsg = '未提供有效的店铺或事业部信息 (shopNo, deptNo)';
+      console.error(errorMsg, '可用的store:', store);
+      helpers.log(errorMsg, 'error');
+      throw new Error(errorMsg);
     }
-    const { shopNo, deptNo } = store
+    const { shopNo: _shopNo } = store;
 
     if (!skus || skus.length === 0) {
-      helpers.log('SKU列表为空，无需执行。')
-      return { success: true, message: 'SKU列表为空，跳过执行。' }
+      helpers.log('SKU列表为空，无需执行。');
+      return { success: true, message: 'SKU列表为空，跳过执行。' };
     }
-    helpers.log(`店铺: ${shopNo}, 事业部: ${deptNo}`)
+    helpers.log(`店铺: ${store.shopName || _shopNo}, 事业部: ${store.deptName || store.deptNo}`);
 
     // 1. 查找所有停用的商品
-    const disabledSkus = await findDisabledProducts({ skus, shopNo, deptNo }, helpers)
-    helpers.log(`状态检查完成，共发现 ${disabledSkus.length} 个停用商品。`)
+    const disabledSkus = await findDisabledProducts({ skus, store }, helpers);
+    helpers.log(`状态检查完成，共发现 ${disabledSkus.length} 个停用商品。`);
 
     // 2. 如果有停用的商品，则启用它们
     if (disabledSkus.length > 0) {
-      helpers.log(`准备启用 ${disabledSkus.length} 个商品...`)
-      const enableResult = await enableShopProducts({ shopNo, deptNo, skuList: disabledSkus })
+      helpers.log(`准备启用 ${disabledSkus.length} 个商品...`);
+      const enableResult = await enableShopProducts(disabledSkus);
 
       if (enableResult.success) {
-        helpers.log(`成功启用 ${disabledSkus.length} 个商品。`, 'success')
-        return { success: true, message: `成功启用 ${disabledSkus.length} 个商品。` }
+        helpers.log(`成功启用 ${disabledSkus.length} 个商品。`, 'success');
+        return { success: true, message: `成功启用 ${disabledSkus.length} 个商品。` };
       } else {
-        throw new Error(enableResult.message || '启用商品时发生未知 API 错误')
+        throw new Error(enableResult.message || '启用商品时发生未知 API 错误');
       }
     }
 
-    helpers.log('所有商品状态正常，无需启用。', 'success')
-    return { success: true, message: '所有商品状态均正常。' }
+    helpers.log('所有商品状态正常，无需启用。', 'success');
+    return { success: true, message: '所有商品状态均正常。' };
   },
 
   /**
