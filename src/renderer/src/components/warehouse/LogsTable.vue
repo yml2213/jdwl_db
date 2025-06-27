@@ -1,127 +1,86 @@
 <template>
-  <table class="task-table">
-    <thead>
-      <tr>
-        <th>时间</th>
-        <th>批次</th>
-        <th>SKU数量</th>
-        <th>状态</th>
-        <th>处理时间</th>
-        <th>结果</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr
-        v-for="(log, index) in logs"
-        :key="index"
-        :class="{ expandable: log.message }"
-        @click="toggleDetails(index)"
-      >
-        <td>{{ log.time }}</td>
-        <td>{{ log.batchNumber }}/{{ log.totalBatches }}</td>
-        <td>{{ log.skuCount }}</td>
-        <td>
-          <status-tag :status="log.status" />
-        </td>
-        <td>{{ log.processingTime ? log.processingTime + '秒' : '-' }}</td>
-        <td>{{ log.result }}</td>
-      </tr>
-      <tr v-if="selectedLogIndex !== null && logs[selectedLogIndex].message" class="details-row">
-        <td colspan="6" class="details-cell">
-          <div class="details-content">
-            <div class="details-label">详细信息:</div>
-            <div class="details-message">{{ logs[selectedLogIndex].message }}</div>
-          </div>
-        </td>
-      </tr>
-      <tr v-if="logs.length === 0">
-        <td colspan="6" class="no-data">暂无提交日志</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="logs-container">
+    <div v-if="isRunning" class="log-status">执行中...</div>
+    <div v-if="taskError" class="log-status log-error">错误: {{ taskError }}</div>
+    <div v-if="taskResult" class="log-status log-success">完成: {{ taskResult.message }}</div>
+    <div v-for="(log, index) in logs" :key="index" :class="`log-entry log-${log.type}`">
+      <span class="log-time">[{{ log.time }}]</span>
+      <span class="log-message">{{ log.message }}</span>
+    </div>
+    <div v-if="logs.length === 0 && !isRunning" class="no-logs">
+      <p>暂无日志</p>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import StatusTag from './StatusTag.vue'
-import { ref } from 'vue'
-
 defineProps({
   logs: {
     type: Array,
     default: () => []
-  }
+  },
+  isRunning: Boolean,
+  taskError: String,
+  taskResult: Object
 })
-
-const selectedLogIndex = ref(null)
-
-const toggleDetails = (index) => {
-  if (selectedLogIndex.value === index) {
-    selectedLogIndex.value = null
-  } else {
-    selectedLogIndex.value = index
-  }
-}
 </script>
 
 <style scoped>
-.task-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.task-table th,
-.task-table td {
-  border-bottom: 1px solid #ebeef5;
-  padding: 12px 0;
-  text-align: left;
-}
-
-.task-table th {
-  color: #909399;
-  font-weight: 500;
-  padding-bottom: 8px;
-}
-
-.no-data {
-  text-align: center;
-  color: #909399;
-  padding: 30px 0;
-}
-
-.expandable {
-  cursor: pointer;
-}
-
-.expandable:hover {
-  background-color: #f5f7fa;
-}
-
-.details-row {
-  background-color: #f5f7fa;
-}
-
-.details-cell {
-  padding: 15px !important;
-}
-
-.details-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.details-label {
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-.details-message {
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #606266;
-  font-family: monospace;
-  padding: 8px;
-  background-color: #ffffff;
+.logs-container {
+  height: 100%;
+  overflow-y: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  background-color: #f8f9fa;
+  padding: 10px;
+  border: 1px solid #dee2e6;
   border-radius: 4px;
-  border: 1px solid #e4e7ed;
+  color: #343a40;
+}
+
+.log-status {
+  padding: 8px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.log-entry {
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-time {
+  color: #6c757d;
+  margin-right: 10px;
+}
+
+.log-message {
+  color: #212529;
+}
+
+.log-info {
+  /* Default style is fine */
+}
+
+.log-error {
+  color: #dc3545;
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+}
+
+.log-success {
+  color: #28a745;
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+}
+
+.no-logs {
+  text-align: center;
+  padding-top: 20px;
+  color: #6c757d;
 }
 </style>

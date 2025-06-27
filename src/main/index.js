@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { setupLoginHandlers, createLoginWindow } from './loginManager'
+import { setupLoginHandlers, createLoginWindow, isLoggedIn } from './loginManager'
 import { setupRequestHandlers } from './requestHandler'
 import { setupFileHandlers } from './fileHandler'
 import fs from 'fs'
@@ -71,8 +71,7 @@ function createWindow() {
   setupIPCHandlers()
 
   // 检查登录状态，如果未登录则打开登录窗口
-  const { isLoggedIn } = require('./loginManager')
-  isLoggedIn().then(status => {
+  isLoggedIn().then((status) => {
     if (!status) {
       createLoginWindow(mainWindow, icon)
     }

@@ -12,6 +12,10 @@
       <tab-panel
         v-if="props.taskList.length > 0"
         :tasks="props.taskList"
+        :logs="props.logs"
+        :is-running="props.isRunning"
+        :task-error="props.taskError"
+        :task-result="props.taskResult"
         @execute-one="(task) => emit('executeTask', task)"
       />
       <div v-else class="no-tasks">
@@ -32,7 +36,14 @@ const props = defineProps({
   taskList: {
     type: Array,
     required: true
-  }
+  },
+  logs: {
+    type: Array,
+    default: () => []
+  },
+  isRunning: Boolean,
+  taskError: String,
+  taskResult: Object
 })
 
 const emit = defineEmits(['executeTask', 'clearTasks'])

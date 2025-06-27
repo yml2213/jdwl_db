@@ -50,7 +50,6 @@ const isLoadingShops = ref(false)
 const isLoadingWarehouses = ref(false)
 const shopLoadError = ref('')
 const warehouseLoadError = ref('')
-const showTaskFlowLogs = ref(false)
 
 // === COMPUTED PROPERTIES ===
 const currentShopInfo = computed(() =>
@@ -123,7 +122,6 @@ const {
 })
 
 const runTaskFlow = (taskContext) => {
-  showTaskFlowLogs.value = true
   execute(taskContext)
 }
 
@@ -196,40 +194,28 @@ watch(currentWarehouseInfo, (newWarehouse) => {
 
 <template>
   <div v-if="isLoggedIn" class="warehouse-labeling-container">
-    <OperationArea
-      :form="form"
-      :shops-list="shopsList"
-      :is-loading-shops="isLoadingShops"
-      :shop-load-error="shopLoadError"
-      :warehouses-list="warehousesList"
-      :is-loading-warehouses="isLoadingWarehouses"
-      :warehouse-load-error="warehouseLoadError"
-      @add-task="handleAddTask"
-    />
-    <TaskArea
-      :task-list="taskList"
-      @execute-task="handleExecuteTask"
-      @clear-tasks="handleClearTasks"
-    />
-
-    <!-- Log Modal -->
-    <div v-if="showTaskFlowLogs" class="task-flow-logs-modal">
-      <div class="log-content">
-        <div class="log-header">
-          <h2 class="log-title">任务流执行日志</h2>
-          <button @click="showTaskFlowLogs = false" class="close-btn">&times;</button>
+    <div class="main-content">
+      <OperationArea
+        :form="form"
+        :shops-list="shopsList"
+        :is-loading-shops="isLoadingShops"
+        :shop-load-error="shopLoadError"
+        :warehouses-list="warehousesList"
+        :is-loading-warehouses="isLoadingWarehouses"
+        :warehouse-load-error="warehouseLoadError"
+        @add-task="handleAddTask"
+      />
+      <TaskArea
+        :task-list="taskList"
+        :logs="logs"
+        :is-running="isRunning"
+        :task-error="taskError"
+        :task-result="taskResult"
+        @execute-task="handleExecuteTask"
+        @clear-tasks="handleClearTasks"
+      />
     </div>
-      <div class="logs-container">
-          <div v-if="isRunning">执行中...</div>
-          <div v-if="taskError" class="log-error">错误: {{ taskError }}</div>
-          <div v-if="taskResult" class="log-success">完成: {{ taskResult.message }}</div>
-          <div v-for="(log, index) in logs" :key="index" :class="`log-${log.type}`">
-            [{{ log.time }}] {{ log.message }}
-          </div>
-        </div>
-      </div>
-    </div>
-    </div>
+  </div>
   <div v-else class="login-prompt">
     <h2>请先登录</h2>
   </div>
@@ -238,8 +224,16 @@ watch(currentWarehouseInfo, (newWarehouse) => {
 <style scoped>
 .warehouse-labeling-container {
   display: flex;
+  flex-direction: column;
   height: calc(100vh - 50px);
 }
+
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
 .login-prompt {
   display: flex;
   justify-content: center;
@@ -247,48 +241,4 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   height: 100%;
   font-size: 1.5rem;
 }
-/* Basic styles for the log modal */
-.task-flow-logs-modal {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background-color: rgba(0,0,0,0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-.log-content {
-  background-color: #2c2c2c;
-  padding: 25px;
-  border-radius: 10px;
-  width: 60%;
-  max-width: 800px;
-  max-height: 70vh;
-  overflow-y: auto;
-  color: #e0e0e0;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-}
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-.log-title {
-  font-size: 1.5em;
-  color: #fff;
-  margin: 0;
-}
-.close-btn {
-  background: none;
-  border: none;
-  color: #d4d4d4;
-  font-size: 24px;
-  cursor: pointer;
-}
-.logs-container {
-  font-family: monospace;
-}
-.log-error { color: #e53e3e; }
-.log-success { color: #38a169; }
 </style>

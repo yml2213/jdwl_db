@@ -33,12 +33,12 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue'
+import { ref, defineProps, defineEmits, watch } from 'vue'
 import TaskListTable from './TaskListTable.vue'
 import LogsTable from './LogsTable.vue'
 import DisabledProducts from './feature/DisabledProducts.vue'
 
-defineProps({
+const props = defineProps({
   tasks: {
     type: Array,
     default: () => []
@@ -59,12 +59,25 @@ defineProps({
       totalBatches: 0,
       progress: '初始化...'
     })
+  },
+  isRunning: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(['execute-one', 'delete-task', 'enable-products'])
 
 const activeTab = ref('tasks')
+
+watch(
+  () => props.isRunning,
+  (running) => {
+    if (running) {
+      activeTab.value = 'logs'
+    }
+  }
+)
 
 const onExecuteOne = (task, index) => {
   emit('execute-one', task, index)
