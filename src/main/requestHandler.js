@@ -543,47 +543,55 @@ export function setupRequestHandlers() {
 
   ipcMain.handle(
     'upload-goods-stock-config',
-    async (event, { fileBuffer }) => {
+    async (event, { fileBuffer, cookies, csrfToken }) => {
       const url = `https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=${Math.random()}`
       const FormData = require('form-data')
 
       try {
         await logRequest(`[IPC] 上传库存商品分配文件...`)
 
-        const cookies = await loadCookies()
-        if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
-
+        if (!cookies || cookies.length === 0) throw new Error('从渲染器进程接收到的Cookies为空')
         const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-        const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
-        // 此接口似乎不需要csrfToken，但以防万一还是加上
 
         const formData = new FormData()
-        if (csrfToken) formData.append('csrfToken', csrfToken)
         formData.append(
           'goodsStockConfigExcelFile',
           Buffer.from(fileBuffer),
-          'goods-stock-config.xlsx'
+          'goodsStockConfigTemplate.xlsx'
         )
 
         const response = await axiosInstance.post(url, formData, {
           headers: {
             ...formData.getHeaders(),
             Cookie: cookieString,
-            Referer: 'https://o.jdl.com/goodsStockConfig/showImport.do' // 添加合适的Referer
+            Referer: 'https://o.jdl.com/goToMainIframe.do'
           }
         })
 
-        const responseText = response.data
-        await logRequest(`[IPC] 库存分配导入响应: ${responseText}`)
+        const responseData = response.data
+        await logRequest(`[IPC] 库存分配导入响应: ${JSON.stringify(responseData)}`)
+        console.log('[IPC] 库存分配导入响应:', responseData)
 
-        if (typeof responseText === 'string' && responseText.includes('导入成功')) {
-          return { success: true, message: responseText }
-        } else {
+        if (responseData && responseData.resultCode === '1') {
+          const logFileName = responseData.resultData ? responseData.resultData.split('/').pop() : '未知日志文件'
+          return { success: true, message: `导入任务已提交，请在报表中心查看日志: ${logFileName}` }
+        }
+
+        // 增加对业务错误JSON的精细化处理
+        if (responseData && typeof responseData.resultCode !== 'undefined' && responseData.resultMessage) {
+          return { success: false, message: responseData.resultMessage }
+        }
+
+        if (typeof responseData === 'string') {
           // 尝试从HTML响应中提取更具体的错误信息
-          const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">(.*?)<\/div>/)
+          const match = responseData.match(/<div class="error-msg">(.*?)<\/div>/)
           const errorMessage = match ? match[1].trim() : '库存商品分配文件上传失败'
           return { success: false, message: errorMessage }
         }
+
+        const finalErrorMessage = responseData.message || JSON.stringify(responseData)
+        return { success: false, message: `上传失败: ${finalErrorMessage}` }
+
       } catch (error) {
         await logRequest(`[IPC] 库存分配上传失败: ${error.message}`)
         return { success: false, message: `上传失败: ${error.message}` }

@@ -83,6 +83,18 @@ async function importGoodsStockConfigExecute(context, helpers) {
     const fileBuffer = _createExcelFileAsBuffer(skuList, department)
     log(`文件创建成功, 大小: ${fileBuffer.length} bytes`, 'info')
 
+    // 保存Excel到本地Downloads目录，便于人工比对
+    try {
+      const saveResult = await window.electron.ipcRenderer.invoke('saveFileToDownloads', fileBuffer, 'goodsStockConfigTemplate_debug.xlsx')
+      if (saveResult && saveResult.success) {
+        log('已将Excel文件保存到下载目录: goodsStockConfigTemplate_debug.xlsx', 'info')
+      } else {
+        log('保存Excel到本地失败', 'warn')
+      }
+    } catch (e) {
+      log('保存Excel到本地异常: ' + e.message, 'warn')
+    }
+
     // 获取 cookies
     const cookies = await getAllCookies()
     const tokenCookie = cookies.find((c) => c.name === 'csrfToken')
