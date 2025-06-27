@@ -78,29 +78,6 @@ const emit = defineEmits(['executeTask', 'clearTasks'])
   border-top: 1px solid #ebeef5;
 }
 
-.btn {
-  height: 36px;
-  padding: 0 16px;
-  font-size: 14px;
-  border-radius: 4px;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-success {
-  background-color: #52c41a;
-  color: white;
-}
-
-.btn-danger {
-  background-color: #ff4d4f;
-  color: white;
-}
-
-.btn:hover {
-  opacity: 0.9;
-}
-
 .no-tasks {
   padding: 20px;
   text-align: center;

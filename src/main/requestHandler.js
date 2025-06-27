@@ -254,18 +254,15 @@ async function getCsrfTokenFromCookies(cookies) {
 export function setupRequestHandlers() {
   console.log('设置主进程IPC事件处理器...')
 
-  ipcMain.on('send-request', async (event, payload) => {
-    const { url, options } = payload
+  ipcMain.handle('sendRequest', async (event, url, options) => {
     try {
       const result = await sendRequest(url, options)
-      event.sender.send('send-request-reply', { success: true, data: result })
+      return result
     } catch (error) {
-      console.error(`[ipcMain] send-request 处理器错误:`, error)
-      event.sender.send('send-request-reply', {
-        success: false,
-        message: error.message || '未知错误',
-        status: error.status
-      })
+      console.error(`[ipcMain] sendRequest 处理器错误:`, error)
+      // 当使用 invoke/handle 时，应该重新抛出错误，
+      // Electron 会将其封装为 Promise rejection
+      throw error
     }
   })
 

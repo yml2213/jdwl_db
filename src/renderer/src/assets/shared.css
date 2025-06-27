@@ -1,0 +1,75 @@
+/* Button Styles */
+.btn {
+    display: inline-block;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    user-select: none;
+    border: 1px solid transparent;
+    padding: 0.5rem 1rem;
+    font-size: 14px;
+    line-height: 1.5;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    text-decoration: none;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+    color: #fff;
+    background-color: #1890ff;
+    border-color: #1890ff;
+}
+
+.btn-primary:hover {
+    background-color: #40a9ff;
+    border-color: #40a9ff;
+}
+
+.btn-success {
+    color: #fff;
+    background-color: #52c41a;
+    border-color: #52c41a;
+}
+
+.btn-success:hover {
+    background-color: #73d13d;
+    border-color: #73d13d;
+}
+
+.btn-danger {
+    color: #fff;
+    background-color: #ff4d4f;
+    border-color: #ff4d4f;
+}
+
+.btn-danger:hover {
+    background-color: #ff7875;
+    border-color: #ff7875;
+}
+
+.btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+.btn-link {
+    font-weight: 400;
+    color: #1890ff;
+    text-decoration: none;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-link:hover {
+    color: #40a9ff;
+    text-decoration: underline;
+}

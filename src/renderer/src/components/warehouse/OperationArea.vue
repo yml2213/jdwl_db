@@ -29,7 +29,7 @@
     />
 
     <div class="form-actions">
-      <button class="btn btn-default">保存快捷</button>
+      <button class="btn btn-primary" @click.prevent="">添加至快捷</button>
       <button class="btn btn-success" @click="emit('addTask')">添加任务</button>
     </div>
   </div>
@@ -58,7 +58,7 @@ const emit = defineEmits(['addTask'])
 .operation-area {
   flex: 0 0 380px;
   background: #f7f8fa;
-  padding: 20px;
+  padding: 20px 20px 60px 20px;
   overflow-y: auto;
   border-right: 1px solid #e8e8e8;
 }
@@ -68,31 +68,6 @@ const emit = defineEmits(['addTask'])
   justify-content: center;
   gap: 20px;
   margin-top: 30px;
-}
-
-.btn {
-  height: 36px;
-  padding: 0 16px;
-  font-size: 14px;
-  border-radius: 4px;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-default {
-  background-color: #f5f7fa;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-}
-
-.btn-success {
-  background-color: #52c41a;
-  border-color: #52c41a;
-  color: white;
-}
-
-.btn:hover {
-  opacity: 0.9;
 }
 
 .form-group {

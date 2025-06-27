@@ -69,10 +69,10 @@ const loadShops = async () => {
     if (cachedShops && cachedShops.length > 0) {
       shopsList.value = cachedShops
     } else {
-      const department = getSelectedDepartment()
+    const department = getSelectedDepartment()
       if (!department || !department.deptNo) throw new Error('未选择事业部')
-      const deptId = department.deptNo.replace('CBU', '')
-      const shops = await getShopList(deptId)
+    const deptId = department.deptNo.replace('CBU', '')
+    const shops = await getShopList(deptId)
       shopsList.value = shops
       saveShopsList(shops)
     }
@@ -93,8 +93,8 @@ const loadWarehouses = async () => {
     if (cached && cached.length > 0) {
       warehousesList.value = cached
     } else {
-      const vendor = getSelectedVendor()
-      const department = getSelectedDepartment()
+    const vendor = getSelectedVendor()
+    const department = getSelectedDepartment()
       if (!vendor?.id || !department?.sellerId || !department?.deptNo)
         throw new Error('未选择供应商或事业部')
       const warehouses = await getWarehouseList(department.sellerId, department.deptNo.replace('CBU', ''))
@@ -212,8 +212,8 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         <div class="log-header">
           <h2 class="log-title">任务流执行日志</h2>
           <button @click="showTaskFlowLogs = false" class="close-btn">&times;</button>
-        </div>
-        <div class="logs-container">
+    </div>
+      <div class="logs-container">
           <div v-if="isRunning">执行中...</div>
           <div v-if="taskError" class="log-error">错误: {{ taskError }}</div>
           <div v-if="taskResult" class="log-success">完成: {{ taskResult.message }}</div>
@@ -223,7 +223,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         </div>
       </div>
     </div>
-  </div>
+    </div>
   <div v-else class="login-prompt">
     <h2>请先登录</h2>
   </div>
@@ -232,7 +232,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
 <style scoped>
 .warehouse-labeling-container {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - 50px);
 }
 .login-prompt {
   display: flex;

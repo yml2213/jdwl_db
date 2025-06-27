@@ -11,7 +11,7 @@
         <span>启用店铺商品</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.importProps" @change="handleImportPropsChange" />
+        <input type="checkbox" v-model="options.importProps" />
         <span>导入物流属性(参数)</span>
       </label>
       <label class="checkbox-label">
@@ -55,9 +55,7 @@
 </template>
 
 <script setup>
-import { computed, inject } from 'vue'
-
-const openLogisticsImporter = inject('openLogisticsImporter')
+import { computed } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -82,14 +80,6 @@ const options = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
 })
-
-// 处理导入物流属性选项变更
-const handleImportPropsChange = (event) => {
-  if (event.target.checked) {
-    // 勾选"导入物流属性"时，弹出导入对话框
-    openLogisticsImporter()
-  }
-}
 
 // 处理添加库存选项变更
 const handleAddInventoryChange = (event) => {
@@ -125,6 +115,11 @@ const handleAddInventoryChange = (event) => {
 
 .checkbox-label input[type='checkbox'] {
   margin-right: 6px;
+}
+
+.checkbox-label span {
+  color: #333;
+  font-size: 14px;
 }
 
 .small-margin-left {
