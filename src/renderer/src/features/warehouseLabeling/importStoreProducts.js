@@ -26,27 +26,26 @@ function _createExcelFileAsBuffer(skuList, departmentInfo) {
  * 通过IPC将文件和数据发送到主进程进行上传
  */
 async function execute(context, { log, isManual }) {
-  const { skuList, shopInfo, departmentInfo } = context
+  const { skus, store } = context
 
   // 参数校验
-  if (!shopInfo || !shopInfo.spShopNo) throw new Error('缺少有效的店铺信息或spShopNo')
-  if (!departmentInfo || !departmentInfo.deptNo) throw new Error('缺少有效的事业部信息')
-  if (!skuList || skuList.length === 0) throw new Error('SKU列表为空')
+  if (!store || !store.spShopNo) throw new Error('缺少有效的店铺信息或spShopNo')
+  if (!store || !store.deptNo) throw new Error('缺少有效的事业部信息')
+  if (!skus || skus.length === 0) throw new Error('SKU列表为空')
 
   if (!isManual) {
     log(`任务 "导入店铺商品" 开始...`, 'info')
   }
 
-  log(`开始为店铺 [${shopInfo.shopName}] 生成商品导入文件...`, 'info')
-  const fileBuffer = _createExcelFileAsBuffer(skuList, departmentInfo)
+  log(`开始为店铺 [${store.shopName}] 生成商品导入文件...`, 'info')
+  const fileBuffer = _createExcelFileAsBuffer(skus, store)
   log(`文件创建成功，大小: ${fileBuffer.length} bytes`, 'info')
 
   log('通过IPC请求主进程上传文件...', 'info')
   const result = await window.electron.ipcRenderer.invoke('upload-store-products', {
     fileBuffer,
-    // 确保传递的是纯净的数据对象，避免Proxy问题
-    shopInfo: JSON.parse(JSON.stringify(shopInfo)),
-    departmentInfo: JSON.parse(JSON.stringify(departmentInfo))
+    shopInfo: JSON.parse(JSON.stringify(store)),
+    departmentInfo: JSON.parse(JSON.stringify(store))
   })
 
   if (result && result.success) {

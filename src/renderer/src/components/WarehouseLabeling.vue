@@ -232,6 +232,7 @@ const handleExecuteTask = async (taskToRun) => {
   }
 
   isExecuting.value = false
+  activeTab.value = 'tasks'
 }
 
 const runAllTasks = async () => {
@@ -243,11 +244,11 @@ const runAllTasks = async () => {
   for (const task of tasksToRun) {
     task.status = '运行中'
     try {
-      // Correctly construct context from the flattened task object
+      const departmentInfo = getSelectedDepartment()
       const context = {
         skus: task.skus,
         options: task.options,
-        store: task.selectedStore,
+        store: { ...task.selectedStore, ...departmentInfo },
         warehouse: task.selectedWarehouse,
         taskName: task.featureName
       }
@@ -265,10 +266,11 @@ const runAllTasks = async () => {
     } catch (error) {
       console.error(`执行任务 ${task.id} 失败:`, error)
       task.status = '失败'
-      task.result = error.message || '客户端执行异常'
+      task.result = `执行失败: ${error.message}`
     }
   }
   isExecuting.value = false
+  activeTab.value = 'tasks'
 }
 
 const handleClearTasks = () => {
