@@ -35,7 +35,8 @@ export function useTask(featureDefinition) {
         state.logs = []
         state.results = []
         state.progress = { current: 0, total: 0 }
-        log(`任务 "${featureDefinition.label}" 开始...`, 'info')
+        const taskLabel = context.taskName || featureDefinition.label
+        log(`任务 "${taskLabel}" 开始...`, 'info')
 
         try {
             // 2. 定义传递给核心逻辑的辅助函数
@@ -53,11 +54,12 @@ export function useTask(featureDefinition) {
             // 4. 处理成功结果
             state.results = resultData
             state.status = 'success'
-            log(`任务 "${featureDefinition.label}" 成功完成。`, 'success')
+            log(`任务 "${taskLabel}" 成功完成。`, 'success')
             return resultData
         } catch (error) {
             // 5. 处理异常
-            console.error(`[useTask] 任务 "${featureDefinition.label}" 执行失败:`, error)
+            const taskLabel = context.taskName || featureDefinition.label
+            console.error(`[useTask] 任务 "${taskLabel}" 执行失败:`, error)
             state.status = 'error'
             const errorMessage = error.message || '发生未知错误'
             log(errorMessage, 'error')

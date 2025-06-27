@@ -74,7 +74,7 @@ export default {
                     log(`--- 开始执行步骤: ${step.name} ---`, 'step')
                 }
                 try {
-                    const result = await step.execute(context, { log, isRunning })
+                    const result = await step.execute(context, { log, isRunning, isManual })
                     if (result && result.success === false) {
                         log(`步骤 [${step.name}] 执行失败: ${result.message}`, 'error')
                         return result

@@ -1,7 +1,6 @@
 /**
  * 功能定义: 导入店铺商品
  */
-import { getAllCookies } from '../../utils/cookieHelper'
 import * as XLSX from 'xlsx'
 
 /**
@@ -26,14 +25,17 @@ function _createExcelFileAsBuffer(skuList, departmentInfo) {
  * 主执行函数
  * 通过IPC将文件和数据发送到主进程进行上传
  */
-async function execute(context, helpers) {
+async function execute(context, { log, isManual }) {
   const { skuList, shopInfo, departmentInfo } = context
-  const { log } = helpers
 
   // 参数校验
   if (!shopInfo || !shopInfo.spShopNo) throw new Error('缺少有效的店铺信息或spShopNo')
   if (!departmentInfo || !departmentInfo.deptNo) throw new Error('缺少有效的事业部信息')
   if (!skuList || skuList.length === 0) throw new Error('SKU列表为空')
+
+  if (!isManual) {
+    log(`任务 "导入店铺商品" 开始...`, 'info')
+  }
 
   log(`开始为店铺 [${shopInfo.shopName}] 生成商品导入文件...`, 'info')
   const fileBuffer = _createExcelFileAsBuffer(skuList, departmentInfo)
@@ -49,6 +51,9 @@ async function execute(context, helpers) {
 
   if (result && result.success) {
     log('主进程返回成功信息', 'success')
+    if (!isManual) {
+      log(`任务 "导入店铺商品" 所有步骤执行完毕。`, 'success')
+    }
     return { success: true, message: result.message }
   } else {
     log(`主进程返回错误: ${result.message}`, 'error')
