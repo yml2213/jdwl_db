@@ -896,16 +896,8 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
 async function uploadLogisticsData(batchSkus, department, cookies) {
   const excelBuffer = createLogisticsExcelBuffer(batchSkus, department)
   const FormData = require('form-data')
-  const temp = require('temp').track() // 自动清理临时文件
-  const fs = require('fs')
 
-  // 1. 同步获取一个唯一的临时文件路径
-  const tempFilePath = temp.path({ suffix: '.xls' });
-
-  // 2. 使用 await 确保文件被完全写入
-  await fs.promises.writeFile(tempFilePath, excelBuffer);
-
-  // 3. (调试功能) 同样保存一份到用户的下载目录
+  // (调试功能) 保存一份到用户的下载目录
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const debugFileName = `logistics-attributes-debug-${timestamp}.xls`
@@ -917,7 +909,10 @@ async function uploadLogisticsData(batchSkus, department, cookies) {
   const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
 
   const form = new FormData()
-  form.append('importAttributeFile', fs.createReadStream(tempFilePath))
+  form.append('importAttributeFile', excelBuffer, {
+    filename: 'logistics-attributes.xls',
+    contentType: 'application/vnd.ms-excel'
+  })
 
   const url = 'https://o.jdl.com/goods/doImportGoodsLogistics.do?_r=' + Math.random()
 
