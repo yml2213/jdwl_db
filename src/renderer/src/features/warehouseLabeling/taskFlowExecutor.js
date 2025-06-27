@@ -6,7 +6,6 @@ import {
     wait
 } from './utils/taskUtils'
 import importStoreProductsFeature from './importStoreProducts'
-import importLogisticsPropsFeature from './importLogisticsProperties'
 import addInventoryFeature from './addInventory'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
@@ -20,8 +19,13 @@ const taskFlowSteps = [{
 },
 {
     name: '导入物流属性',
-    option: 'importProps',
-    executor: importLogisticsPropsFeature
+    shouldExecute: (context) => context.formOptions.importProps,
+    execute: async (context, log, updateProgress) => {
+        const logisticsAttributesModule = await import('./logisticsAttributes.js')
+        const result = await logisticsAttributesModule.default.execute(context, { log, updateProgress })
+        log(`[导入物流属性] 步骤完成: ${result.message}`)
+        return result
+    }
 },
 {
     name: '添加库存',

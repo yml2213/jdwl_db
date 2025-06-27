@@ -4,7 +4,6 @@
  */
 import enableStoreProductsFeature from './enableStoreProducts'
 import importStoreProductsFeature from './importStoreProducts'
-import importLogisticsPropsFeature from './importLogisticsProperties'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
 import stockAllocationClearanceFeature from './stockAllocationClearance'
@@ -46,7 +45,6 @@ export async function executeOneTask(task, shopInfo, options = {}) {
     // 打印每个选项的值
     console.log('选项 - importStore (导入店铺商品):', taskOptions.importStore ? '启用' : '未启用')
     console.log('选项 - useStore (启用店铺商品):', taskOptions.useStore ? '启用' : '未启用')
-    console.log('选项 - importProps (导入物流属性):', taskOptions.importProps ? '启用' : '未启用')
     console.log('选项 - useMainData (添加库存):', taskOptions.useMainData ? '启用' : '未启用')
     console.log('选项 - useAddInventory (添加库存):', taskOptions.useAddInventory ? '启用' : '未启用')
     console.log('选项 - inventoryAmount (库存数量):', taskOptions.inventoryAmount || '默认1000')
@@ -168,23 +166,6 @@ export async function executeOneTask(task, shopInfo, options = {}) {
         task.importLogs.push({
           type: 'enable-result',
           message: `启用店铺商品结果: ${result.message}`,
-          timestamp: new Date().toLocaleString()
-        })
-      }
-
-      // 执行入仓打标功能 - 导入物流属性
-      if (taskOptions.importProps) {
-        console.log('执行入仓打标 - 导入物流属性功能')
-        const importLogisticsModule = await import('./importLogisticsProperties.js')
-        const result = await importLogisticsModule.default.execute(task.skuList, task)
-
-        // 更新任务状态
-        task.状态 = result.success ? '成功' : '失败'
-        task.结果 = result.message || (result.success ? '成功' : '失败')
-        task.importLogs = task.importLogs || []
-        task.importLogs.push({
-          type: 'props-result',
-          message: `导入物流属性结果: ${result.message}`,
           timestamp: new Date().toLocaleString()
         })
       }

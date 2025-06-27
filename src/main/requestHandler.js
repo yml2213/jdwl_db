@@ -511,6 +511,27 @@ export function setupRequestHandlers() {
     }
   })
 
+  // 导入物流属性
+  ipcMain.on('import-logistics-properties', async (event, payload) => {
+    const { skuList, departmentInfo, cookies } = payload
+    try {
+      console.log('接收到 import-logistics-properties 请求:', {
+        skuCount: skuList.length
+      })
+      const result = await processLogisticsProperties(skuList, departmentInfo, cookies, (log) => {
+        // 将子函数的日志发送回渲染器进程
+        event.sender.send('import-logistics-properties-log', log)
+      })
+      event.sender.send('import-logistics-properties-reply', { success: true, ...result })
+    } catch (error) {
+      console.error('[ipcMain] import-logistics-properties 处理器错误:', error)
+      event.sender.send('import-logistics-properties-reply', {
+        success: false,
+        message: error.message || '在主进程中导入物流属性时发生未知错误'
+      })
+    }
+  })
+
   console.log('主进程IPC事件处理器设置完毕。')
 }
 
@@ -584,6 +605,161 @@ async function processSingleBatch(skuList, storeInfo, department, cookies) {
     // 清理临时文件
     await fs.promises.unlink(filePath).catch(err => console.error('删除临时文件失败:', err));
   }
+}
+
+// --- 物流属性导入相关函数 (从 importLogisticsProperties.js 迁移) ---
+
+/**
+ * 处理物流属性导入的核心逻辑
+ */
+async function processLogisticsProperties(skuList, department, cookies, logCallback) {
+  const BATCH_SIZE = 2000
+  let processedCount = 0
+  let failedCount = 0
+  let totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
+  const failedResults = []
+
+  logCallback(`SKU总数: ${skuList.length}, 将分成 ${totalBatches} 批进行处理。`)
+
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    const startIdx = batchIndex * BATCH_SIZE
+    const endIdx = Math.min(startIdx + BATCH_SIZE, skuList.length)
+    const batchSkus = skuList.slice(startIdx, endIdx)
+
+    logCallback(`正在处理第 ${batchIndex + 1}/${totalBatches} 批, 包含 ${batchSkus.length} 个SKU...`)
+
+    try {
+      const result = await uploadLogisticsData(batchSkus, department, cookies)
+
+      if (result.success) {
+        processedCount += batchSkus.length
+        logCallback(`批次 ${batchIndex + 1} 处理成功。`)
+      } else {
+        failedCount += batchSkus.length
+        const errorMessage = result.data || result.message || `批次 ${batchIndex + 1} 处理失败`
+        failedResults.push(errorMessage)
+        logCallback(`批次 ${batchIndex + 1} 处理失败: ${errorMessage}`)
+
+        if (errorMessage.includes('5分钟内只能导入一次')) {
+          logCallback('检测到API频率限制，导入流程已中断。')
+          break
+        }
+      }
+
+      if (batchIndex < totalBatches - 1) {
+        const waitTime = 5 * 60 * 1000 + 5000 // 5分钟 + 5秒缓冲
+        logCallback(`批次处理完毕，将等待5分钟后继续...`)
+        await new Promise((resolve) => setTimeout(resolve, waitTime))
+      }
+    } catch (error) {
+      logCallback(`批次 ${batchIndex + 1} 处理时发生严重错误: ${error.message}`)
+      failedCount += batchSkus.length
+      failedResults.push(error.message || `批次 ${batchIndex + 1} 出现未知错误`)
+    }
+  }
+
+  const isPartialSuccess = processedCount > 0 && failedCount > 0
+  const finalMessage = `导入物流属性完成: 成功 ${processedCount}个, 失败 ${failedCount}个。`
+  logCallback(finalMessage)
+
+  return {
+    success: failedCount === 0,
+    message: finalMessage,
+    errorDetail: failedResults.length > 0 ? failedResults.join('; ') : null,
+    isPartialSuccess
+  }
+}
+
+/**
+ * 上传单批物流属性数据
+ */
+async function uploadLogisticsData(skuList, department, cookies) {
+  const excelBuffer = createLogisticsExcelBuffer(skuList, department)
+
+  // 将Buffer保存到临时文件以便上传
+  const tempDir = app.getPath('temp')
+  const fileName = `LogisticsImport-${Date.now()}.xls`
+  const filePath = path.join(tempDir, fileName)
+  await fs.promises.writeFile(filePath, excelBuffer)
+
+  const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+  const csrfToken = await getCsrfTokenFromCookies(cookies)
+
+  const payload = {
+    filePath,
+    fileName,
+    formFields: {
+      csrfToken: csrfToken
+    },
+    fileUploadKey: 'importAttributeFile'
+  }
+
+  const url = 'https://o.jdl.com/goods/doImportGoodsLogistics.do?_r=' + Math.random()
+
+  try {
+    const responseText = await sendRequest(url, {
+      method: 'POST',
+      headers: {
+        'Cookie': cookieString,
+        'Referer': 'https://o.jdl.com/goToMainIframe.do',
+        'Origin': 'https://o.jdl.com',
+      },
+      body: payload,
+      useFormData: true,
+      responseType: 'text' // 明确指定响应类型为文本
+    })
+
+    // HTML响应通常表示成功或需要进一步操作
+    if (typeof responseText === 'string') {
+      if (responseText.includes("导入成功")) {
+        const taskIdMatch = responseText.match(/任务编号:([^,]+)/)
+        const taskId = taskIdMatch ? taskIdMatch[1] : '未知'
+        return { success: true, message: `导入成功，任务ID: ${taskId}`, data: responseText }
+      }
+      if (responseText.includes("5分钟内只能导入一次")) {
+        return { success: false, message: "API限制：5分钟内只能导入一次。", data: responseText }
+      }
+      // 根据返回的HTML内容判断其他可能的失败情况
+      return { success: false, message: '导入失败，服务器返回未知HTML页面。', data: responseText }
+    }
+
+    // 假设非字符串是JSON或其他对象
+    // 如果是JSON对象并且有特定成功标识
+    if (typeof responseText === 'object' && responseText.result === true) {
+      return { success: true, message: responseText.msg || '导入成功' }
+    }
+
+    // 其他所有情况都视为失败
+    const errorMsg = responseText?.msg || responseText?.message || '未知错误'
+    return { success: false, message: errorMsg, data: responseText }
+
+  } catch (error) {
+    console.error('上传物流属性数据失败:', error)
+    return { success: false, message: `请求发送失败: ${error.message}` }
+  } finally {
+    await fs.promises.unlink(filePath).catch(err => console.error('删除物流属性临时文件失败:', err));
+  }
+}
+
+/**
+ * 创建物流属性Excel文件的Buffer
+ */
+function createLogisticsExcelBuffer(skuList, department) {
+  const headers = [
+    '事业部商品编码', '是否保健品', '是否易碎品', '是否液体', '是否贵品', '是否温度控制', '温控类型', '最低温度', '最高温度',
+    '是否需要SN管理', '是否保质期管理', '保质期(天)', '是否批次管理', '默认收货库位', '商品类别', '存储类型', '是否可退货',
+    '是否可换货', '是否可维修', '产品尺寸(长*宽*高)mm', '包装尺寸(长*宽*高)mm', '重量(g)'
+  ];
+  const data = skuList.map(sku => [
+    sku, '否', '否', '否', '否', '否', '', '', '', '否', '是', '1095', '是',
+    '', department.deptNo.startsWith('RDC') ? '10' : '20',
+    '10', '是', '是', '是', '', '', ''
+  ]);
+  const excelData = [headers, ...data];
+  const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+  return XLSX.write(workbook, { bookType: 'xls', type: 'buffer' });
 }
 
 export { sendRequest }

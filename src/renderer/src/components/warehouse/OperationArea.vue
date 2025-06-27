@@ -3,81 +3,64 @@
     <div class="form-group">
       <label class="form-label">快捷选择</label>
       <div class="select-wrapper">
-        <select v-model="form.quickSelect" class="form-select">
+        <select v-model="props.form.quickSelect" class="form-select">
           <option value="">请选择快捷方式</option>
           <option value="warehouseLabelingFlow">任务流 -- 入仓打标</option>
         </select>
       </div>
     </div>
 
-    <sku-input v-model="form.sku" @file-change="handleFileChange" @clear-file="handleClearFile" />
+    <sku-input v-model="props.form.sku" />
 
-    <feature-options v-model="form.options" />
+    <feature-options v-model="props.form.options" />
 
     <store-selector
-      :shops="shopsList"
-      :loading="isLoadingShops"
-      :error="shopLoadError"
-      v-model="form.selectedStore"
-      @change="handleStoreChange"
+      :shops="props.shopsList"
+      :loading="props.isLoadingShops"
+      :error="props.shopLoadError"
+      v-model="props.form.selectedStore"
     />
 
     <warehouse-selector
-      :warehouses="warehousesList"
-      :loading="isLoadingWarehouses"
-      :error="warehouseLoadError"
-      v-model="form.selectedWarehouse"
-      @change="handleWarehouseChange"
+      :warehouses="props.warehousesList"
+      :loading="props.isLoadingWarehouses"
+      :error="props.warehouseLoadError"
+      v-model="props.form.selectedWarehouse"
     />
 
     <div class="form-actions">
       <button class="btn btn-default">保存快捷</button>
-      <button class="btn btn-success" @click="handleAddTaskClick">添加任务</button>
+      <button class="btn btn-success" @click="emit('addTask')">添加任务</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { inject } from 'vue'
 import SkuInput from './SkuInput.vue'
 import FeatureOptions from './feature/FeatureOptions.vue'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
 
-const form = inject('form')
-const shopsList = inject('shopsList')
-const isLoadingShops = inject('isLoadingShops')
-const shopLoadError = inject('shopLoadError')
-const warehousesList = inject('warehousesList')
-const isLoadingWarehouses = inject('isLoadingWarehouses')
-const warehouseLoadError = inject('warehouseLoadError')
+const props = defineProps({
+  form: Object,
+  shopsList: Array,
+  isLoadingShops: Boolean,
+  shopLoadError: String,
+  warehousesList: Array,
+  isLoadingWarehouses: Boolean,
+  warehouseLoadError: String
+})
 
-// 获取从父组件注入的方法
-const handleAddTask = inject('handleAddTask')
-const handleStoreChange = inject('handleStoreChange')
-const handleWarehouseChange = inject('handleWarehouseChange')
-const handleFileChange = inject('handleFileChange')
-const handleClearFile = inject('handleClearFile')
-
-// 添加任务按钮点击处理函数
-const handleAddTaskClick = () => {
-  console.log('OperationArea: 添加任务按钮被点击')
-  // 确保handleAddTask存在
-  if (typeof handleAddTask === 'function') {
-    handleAddTask()
-  } else {
-    console.error('handleAddTask 函数未正确注入')
-    alert('系统错误：添加任务功能不可用')
-  }
-}
+const emit = defineEmits(['addTask'])
 </script>
 
 <style scoped>
 .operation-area {
   flex: 0 0 380px;
-  background: #fff;
+  background: #f7f8fa;
   padding: 20px;
   overflow-y: auto;
+  border-right: 1px solid #e8e8e8;
 }
 
 .form-actions {
@@ -112,11 +95,23 @@ const handleAddTaskClick = () => {
   opacity: 0.9;
 }
 
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #333;
+}
+
 .select-wrapper {
   position: relative;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   overflow: hidden;
+  background-color: white;
 }
 
 .form-select {
@@ -126,7 +121,7 @@ const handleAddTaskClick = () => {
   outline: none;
   height: 36px;
   cursor: pointer;
-  background-color: white;
+  background-color: transparent;
 }
 
 .form-select:focus {
