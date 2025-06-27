@@ -651,85 +651,58 @@ export function setupRequestHandlers() {
     }
   });
 
-  /**
-   * 根据上下文创建添加入库单的Excel文件Buffer
-   * @param {object} context - 包含goodsList等信息的任务上下文
-   * @returns {Buffer} - Excel文件的Buffer
-   */
-  function createInventoryExcelBuffer(context) {
-    const { goodsList } = context
-
-    const headers = [
-      '事业部商品编码', // CMG
-      '外部店铺商品编码', // SKU
-      '商品数量(个)',
-      '代贴条码(是/否)',
-      '单价(全球购采购单必填)',
-      '质检比例(大件且无开通质检服务)',
-      '0-100是否序列号入库(是/否)',
-      '商家自定义批次编码',
-      '包装规格编码',
-      '包装单位'
-    ]
-
-    const dataRows = goodsList.map((item) => [
-      item.goodsNo, // 事业部商品编码 (CMG)
-      item.sellerGoodsSign, // 外部店铺商品编码 (SKU)
-      item.applyInstoreQty, // 商品数量
-      '否', // 代贴条码
-      '', // 单价
-      '10', // 质检比例
-      '否', // 是否序列号入库
-      '', // 商家自定义批次编码
-      '', // 包装规格编码
-      '' // 包装单位
-    ])
-
-    const data = [headers, ...dataRows]
-    const ws = XLSX.utils.aoa_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-
-    // 返回Buffer
-    return XLSX.write(wb, { bookType: 'xls', type: 'buffer' })
-  }
-
   ipcMain.handle('add-inventory', async (event, context) => {
-    const { cookies } = context
+    const { goodsList, store, warehouse, vendor, cookies } = context
 
     try {
       const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+      const goodsJson = JSON.stringify(goodsList)
 
-      // 1. 在内存中创建Excel Buffer
-      const excelBuffer = createInventoryExcelBuffer(context)
-
-      // 2. [调试用] 将生成的Excel文件保存到下载目录
-      try {
-        const downloadsPath = app.getPath('downloads')
-        const debugFilePath = path.join(
-          downloadsPath,
-          `jdwl-inventory-upload-${Date.now()}.xls`
-        )
-        fs.writeFileSync(debugFilePath, excelBuffer)
-        console.log(`[add-inventory] 调试用Excel文件已保存至: ${debugFilePath}`)
-      } catch (e) {
-        console.error('[add-inventory] 保存调试文件失败:', e)
+      let supplierIdValue = vendor.id
+      if (typeof supplierIdValue === 'string' && /^[A-Za-z]+/.test(supplierIdValue)) {
+        supplierIdValue = supplierIdValue.replace(/^[A-Za-z]+/, '')
       }
 
-      // 3. 创建FormData并模拟文件上传
       const formData = new FormData()
-      // undici的FormData在提供文件名时要求第二个参数是Blob类型
-      const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.ms-excel' })
-      formData.append('batchImportPoFiles', excelBlob, '采购入库单商品导入模板.xls')
+      formData.append('id', '')
+      formData.append('poNo', '')
+      formData.append('goods', goodsJson)
+      formData.append('deptId', store.deptId || store.id)
+      formData.append('deptName', store.deptName || store.name)
+      formData.append('supplierId', supplierIdValue)
+      formData.append('warehouseId', warehouse.id)
+      formData.append('billOfLading', '')
+      formData.append('qualityCheckFlag', '')
+      formData.append('sidChange', '0')
+      formData.append('poType', '1')
+      formData.append('address.senderName', '')
+      formData.append('address.senderMobile', '')
+      formData.append('address.senderPhone', '')
+      formData.append('address.senderProvinceName', '-请选择-')
+      formData.append('address.senderCityName', '-请选择-')
+      formData.append('address.senderCountyName', '-请选择-')
+      formData.append('address.senderTownName', '')
+      formData.append('address.senderProvinceCode', '')
+      formData.append('address.senderCityCode', '')
+      formData.append('address.senderCountyCode', '')
+      formData.append('address.senderTownCode', '')
+      formData.append('address.senderAddress', '')
+      formData.append('pickUpFlag', '0')
+      formData.append('outPoNo', '')
+      formData.append('crossDockingFlag', '0')
+      formData.append('crossDockingSoNos', '')
+      formData.append('isPorterTeam', '0')
+      formData.append('orderType', 'CGRK')
+      formData.append('poReturnMode', '1')
+      formData.append('importFiles', '')
 
-      // 4. 发送请求
-      const response = await fetch('https://o.jdl.com/poMain/batchImportPo.do', {
+      const response = await fetch('https://o.jdl.com/poMain/downPoMain.do', {
         method: 'POST',
         body: formData,
         headers: {
           Cookie: cookieString,
           'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
           Accept:
             'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
           Referer: 'https://o.jdl.com/goToMainIframe.do',
@@ -739,29 +712,28 @@ export function setupRequestHandlers() {
 
       const responseText = await response.text()
       if (!response.ok) {
-        console.error('上传库存失败，响应状态:', response.status, '响应内容:', responseText)
+        console.error('添加入库单失败，响应状态:', response.status, '响应内容:', responseText)
         throw new Error(`网络响应错误: ${response.statusText}`)
       }
 
-      console.log('[add-inventory] 上传库存文件成功，响应内容:', responseText)
+      console.log('[add-inventory] 添加入库单成功，响应内容:', responseText)
 
-      // 5. 解析HTML响应
-      if (responseText.includes('导入成功') || responseText.includes('message success')) {
-        const match = responseText.match(/采购单号【([^】]+)】/)
-        const poNo = match ? match[1] : '未知'
-
-        return {
-          success: true,
-          message: `库存添加成功，采购单号: ${poNo}`,
-          poNumber: poNo
-        }
-      } else {
+      // 假设操作成功，因为接口通常会返回一个页面而不是直接的JSON成功标识
+      // 更好的做法是检查响应中是否有错误信息
+      if (responseText.includes('error') || responseText.includes('失败')) {
         const errorMatch = responseText.match(/class="message error">([^<]+)</)
-        const errorMessage = errorMatch ? errorMatch[1].trim() : '未知错误，请检查下载文件夹中的Excel文件'
-        return {
-          success: false,
-          message: `库存添加失败: ${errorMessage}`
-        }
+        const errorMessage = errorMatch ? errorMatch[1].trim() : '未知错误，请检查返回的HTML'
+        return { success: false, message: `库存添加失败: ${errorMessage}` }
+      }
+
+      // 尝试从返回的页面中解析出采购单号
+      const match = responseText.match(/id="poNo" value="([^"]+)"/)
+      const poNo = match ? match[1] : '未知'
+
+      return {
+        success: true,
+        message: `库存添加成功，采购单号: ${poNo}`,
+        poNumber: poNo
       }
     } catch (error) {
       console.error('主进程[add-inventory]处理失败:', error)
