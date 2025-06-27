@@ -20,7 +20,12 @@
     </div>
     <div class="tab-content">
       <div :class="['tab-pane', { active: activeTab === 'tasks' }]">
-        <task-list-table :tasks="tasks" @execute-one="onExecuteOne" @delete-task="onDeleteTask" />
+        <task-list-table
+          v-if="activeTab === 'tasks'"
+          :tasks="tasks"
+          @delete-task="$emit('delete-task', $event)"
+          @execute-task="$emit('execute-task', $event)"
+        />
       </div>
       <div :class="['tab-pane', { active: activeTab === 'logs' }]">
         <logs-table :logs="logs" />
@@ -66,26 +71,23 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['execute-one', 'delete-task', 'enable-products'])
+const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-task', 'enable-products'])
 
 const activeTab = ref('tasks')
 
 watch(
   () => props.isRunning,
-  (running) => {
+  (running, wasRunning) => {
     if (running) {
       activeTab.value = 'logs'
+    } else if (wasRunning && !running) {
+      // 任务完成，延迟1秒后切回任务列表
+      setTimeout(() => {
+        activeTab.value = 'tasks'
+      }, 1000)
     }
   }
 )
-
-const onExecuteOne = (task, index) => {
-  emit('execute-one', task, index)
-}
-
-const onDeleteTask = (index) => {
-  emit('delete-task', index)
-}
 
 const onEnableProducts = (products) => {
   emit('enable-products', products)

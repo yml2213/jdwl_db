@@ -7,6 +7,7 @@ import logisticsAttributesFeature from './logisticsAttributes'
 import addInventoryFeature from './addInventory'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
+import enableStoreProductsFeature from './enableStoreProducts'
 
 // 定义任务流的每个步骤
 const taskFlowSteps = [
@@ -14,6 +15,11 @@ const taskFlowSteps = [
         name: '导入店铺商品',
         shouldExecute: (context) => context.options.importStore,
         execute: (context, helpers) => importStoreProductsFeature.execute(context, helpers)
+    },
+    {
+        name: '启用店铺商品',
+        shouldExecute: (context) => context.options.useStore,
+        execute: (context, helpers) => enableStoreProductsFeature.execute(context, helpers)
     },
     {
         name: '等待后台任务处理',

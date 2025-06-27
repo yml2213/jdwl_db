@@ -11,7 +11,10 @@ const STORAGE_KEYS = {
   SHOP: 'selected_shop',
   SHOPS_LIST: 'shops_list',
   WAREHOUSE: 'selected_warehouse',
-  WAREHOUSES_LIST: 'warehouses_list'
+  WAREHOUSES_LIST: 'warehouses_list',
+  LAST_WORKFLOW: 'last_workflow',
+  MANUAL_OPTIONS: 'manual_options',
+  LAST_SKU_INPUT: 'last_sku_input'
 }
 
 /**
@@ -69,6 +72,34 @@ export function saveWarehousesList(warehouses) {
 }
 
 /**
+ * 保存上次选择的工作流
+ * @param {string} workflowId 工作流ID
+ */
+export function saveLastWorkflow(workflowId) {
+  if (!workflowId) return
+  localStorage.setItem(STORAGE_KEYS.LAST_WORKFLOW, workflowId)
+}
+
+/**
+ * 保存手动模式下的选项
+ * @param {Object} options 选项对象
+ */
+export function saveManualOptions(options) {
+  if (!options) return
+  localStorage.setItem(STORAGE_KEYS.MANUAL_OPTIONS, JSON.stringify(options))
+}
+
+/**
+ * 保存上次输入的SKU
+ * @param {string} skuText
+ */
+export function saveLastSkuInput(skuText) {
+  if (typeof skuText === 'string') {
+    localStorage.setItem(STORAGE_KEYS.LAST_SKU_INPUT, skuText)
+  }
+}
+
+/**
  * 获取店铺列表
  * @returns {Array} 店铺列表，如果不存在则返回空数组
  */
@@ -96,6 +127,37 @@ export function getWarehousesList() {
     console.error('解析存储的仓库列表数据失败', e)
     return []
   }
+}
+
+/**
+ * 获取上次选择的工作流
+ * @returns {string|null} 工作流ID
+ */
+export function getLastWorkflow() {
+  return localStorage.getItem(STORAGE_KEYS.LAST_WORKFLOW)
+}
+
+/**
+ * 获取手动模式下的选项
+ * @returns {Object|null} 选项对象
+ */
+export function getManualOptions() {
+  const data = localStorage.getItem(STORAGE_KEYS.MANUAL_OPTIONS)
+  if (!data) return null
+  try {
+    return JSON.parse(data)
+  } catch (e) {
+    console.error('解析存储的手动模式选项失败', e)
+    return null
+  }
+}
+
+/**
+ * 获取上次输入的SKU
+ * @returns {string}
+ */
+export function getLastSkuInput() {
+  return localStorage.getItem(STORAGE_KEYS.LAST_SKU_INPUT) || ''
 }
 
 /**
@@ -184,4 +246,7 @@ export function clearSelections() {
   localStorage.removeItem(STORAGE_KEYS.SHOPS_LIST)
   localStorage.removeItem(STORAGE_KEYS.WAREHOUSE)
   localStorage.removeItem(STORAGE_KEYS.WAREHOUSES_LIST)
+  localStorage.removeItem(STORAGE_KEYS.LAST_WORKFLOW)
+  localStorage.removeItem(STORAGE_KEYS.MANUAL_OPTIONS)
+  localStorage.removeItem(STORAGE_KEYS.LAST_SKU_INPUT)
 }

@@ -10,11 +10,17 @@ import {
   saveWarehousesList,
   getWarehousesList,
   getSelectedDepartment,
-  getSelectedVendor
+  getSelectedVendor,
+  saveLastWorkflow,
+  getLastWorkflow,
+  saveManualOptions,
+  getManualOptions,
+  saveLastSkuInput,
+  getLastSkuInput
 } from '../utils/storageHelper'
 import { getShopList, getWarehouseList } from '../services/apiService'
-import { useTask } from '../composables/useTask'
-import warehouseLabelingFlow from '../features/warehouseLabeling/taskFlowExecutor'
+import { useTask } from '@/composables/useTask.js'
+import taskFlowExecutor from '@/features/warehouseLabeling/taskFlowExecutor'
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
@@ -60,7 +66,7 @@ const workflows = {
 const form = ref({
   quickSelect: 'warehouseLabeling',
   sku: '',
-  options: { ...workflows.warehouseLabeling.options },
+  options: {}, // Initialize empty, will be populated on mount
   selectedStore: '',
   selectedWarehouse: ''
 })
@@ -72,6 +78,8 @@ const isLoadingShops = ref(false)
 const isLoadingWarehouses = ref(false)
 const shopLoadError = ref('')
 const warehouseLoadError = ref('')
+const isExecuting = ref(false) // 全局执行状态
+const activeTab = ref('tasks') // 'tasks' or 'logs'
 
 // === COMPUTED PROPERTIES ===
 const isManualMode = computed(() => form.value.quickSelect === 'manual')
@@ -92,10 +100,10 @@ const loadShops = async () => {
     if (cachedShops && cachedShops.length > 0) {
       shopsList.value = cachedShops
     } else {
-    const department = getSelectedDepartment()
+      const department = getSelectedDepartment()
       if (!department || !department.deptNo) throw new Error('未选择事业部')
-    const deptId = department.deptNo.replace('CBU', '')
-    const shops = await getShopList(deptId)
+      const deptId = department.deptNo.replace('CBU', '')
+      const shops = await getShopList(deptId)
       shopsList.value = shops
       saveShopsList(shops)
     }
@@ -116,11 +124,14 @@ const loadWarehouses = async () => {
     if (cached && cached.length > 0) {
       warehousesList.value = cached
     } else {
-    const vendor = getSelectedVendor()
-    const department = getSelectedDepartment()
+      const vendor = getSelectedVendor()
+      const department = getSelectedDepartment()
       if (!vendor?.id || !department?.sellerId || !department?.deptNo)
         throw new Error('未选择供应商或事业部')
-      const warehouses = await getWarehouseList(department.sellerId, department.deptNo.replace('CBU', ''))
+      const warehouses = await getWarehouseList(
+        department.sellerId,
+        department.deptNo.replace('CBU', '')
+      )
       warehousesList.value = warehouses
       saveWarehousesList(warehouses)
     }
@@ -134,47 +145,138 @@ const loadWarehouses = async () => {
 }
 
 // === TASK EXECUTION LOGIC ===
-const {
-  execute,
-  isRunning,
-  logs,
-  error: taskError,
-  result: taskResult,
-  cancel: cancelTask
-} = useTask(warehouseLabelingFlow, {
-  onLog: (log) => console.log(log.message)
-})
+const { execute: executeTaskFlow, ...taskFlowState } = useTask(taskFlowExecutor)
 
-const handleExecuteTask = async (task) => {
-  if (isRunning.value) {
-    alert('已有任务在执行中，请稍后再试。')
+const featureNameMap = {
+  importStore: '导入店铺商品',
+  useStore: '启用店铺商品',
+  importProps: '导入物流属性',
+  useMainData: '启用库存分配',
+  useWarehouse: '添加库存',
+  useJdEffect: '京东打标生效',
+  importProductNames: '导入商品简称',
+  useAddInventory: '添加库存'
+}
+
+const handleAddTask = () => {
+  const skus = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
+  if (skus.length === 0) return alert('请输入有效的SKU')
+  if (!currentShopInfo.value) return alert('请选择店铺')
+
+  let featureName = ''
+  if (form.value.quickSelect === 'manual') {
+    featureName = Object.entries(form.value.options)
+      .filter(([, value]) => value === true)
+      .map(([key]) => featureNameMap[key] || key)
+      .join(' | ')
+    if (!featureName) featureName = '手动任务'
+  } else {
+    featureName = workflows[form.value.quickSelect].name
+  }
+
+  const newTask = {
+    id: `task-${Date.now()}`,
+    // Properties for display in TaskListTable
+    displaySku: `任务 (${skus.length}个SKU)`,
+    featureName,
+    storeName: currentShopInfo.value.shopName,
+    warehouseName: currentWarehouseInfo.value?.warehouseName || '未指定',
+    createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    status: '等待中',
+    result: '',
+
+    // Raw data for execution
+    skus: skus,
+    options: JSON.parse(JSON.stringify(form.value.options)),
+    selectedStore: currentShopInfo.value,
+    selectedWarehouse: currentWarehouseInfo.value
+  }
+  taskList.value.push(newTask)
+}
+
+const handleExecuteTask = async (taskToRun) => {
+  isExecuting.value = true
+  activeTab.value = 'logs'
+
+  const task = taskList.value.find(t => t.id === taskToRun.id)
+  if (!task) {
+    isExecuting.value = false
     return
   }
 
-  const tasksToRun = task ? [task] : taskList.value.filter((t) => ['等待中', '失败'].includes(t.状态))
+  task.status = '运行中'
+  try {
+    const context = {
+      skus: task.skus,
+      options: task.options,
+      store: task.selectedStore,
+      warehouse: task.selectedWarehouse,
+      taskName: task.featureName
+    }
+    
+    await executeTaskFlow(context)
 
-  if (tasksToRun.length === 0) {
-    alert('没有可执行的任务。')
-    return
-  }
-
-  for (const t of tasksToRun) {
-    t.状态 = '执行中'
-    t.结果 = '正在处理...'
-    const result = await execute(t.context)
-
-    if (result && result.success) {
-      t.状态 = '成功'
-      t.结果 = result.message || '执行成功'
+    if (taskFlowState.status.value === 'success') {
+      task.status = '成功'
+      task.result = '任务执行成功'
     } else {
-      t.状态 = '失败'
-      t.结果 = result?.message || '未知错误'
+      task.status = '失败'
+      const errorLog = taskFlowState.logs.value.slice().reverse().find(l => l.type === 'error')
+      task.result = errorLog ? errorLog.message : '执行失败，未知错误'
     }
+  } catch (error) {
+    console.error(`执行任务 ${task.id} 失败:`, error)
+    task.status = '失败'
+    task.result = error.message || '客户端执行异常'
+  }
 
-    if (!task && tasksToRun.length > 1 && tasksToRun.indexOf(t) < tasksToRun.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+  isExecuting.value = false
+}
+
+const runAllTasks = async () => {
+  isExecuting.value = true
+  activeTab.value = 'logs'
+
+  const tasksToRun = taskList.value.filter((task) => ['等待中', '失败'].includes(task.status))
+
+  for (const task of tasksToRun) {
+    task.status = '运行中'
+    try {
+      // Correctly construct context from the flattened task object
+      const context = {
+        skus: task.skus,
+        options: task.options,
+        store: task.selectedStore,
+        warehouse: task.selectedWarehouse,
+        taskName: task.featureName
+      }
+      
+      await executeTaskFlow(context)
+
+      if (taskFlowState.status.value === 'success') {
+        task.status = '成功'
+        task.result = '任务执行成功'
+      } else {
+        task.status = '失败'
+        const errorLog = taskFlowState.logs.value.slice().reverse().find(l => l.type === 'error')
+        task.result = errorLog ? errorLog.message : '执行失败，未知错误'
+      }
+    } catch (error) {
+      console.error(`执行任务 ${task.id} 失败:`, error)
+      task.status = '失败'
+      task.result = error.message || '客户端执行异常'
     }
   }
+  isExecuting.value = false
+}
+
+const handleClearTasks = () => {
+  taskList.value = []
+  taskFlowState.logs.value = []
+}
+
+const handleDeleteTask = (taskId) => {
+  taskList.value = taskList.value.filter((task) => task.id !== taskId)
 }
 
 // === WATCHERS ===
@@ -183,72 +285,47 @@ watch(
   (newFlow) => {
     if (workflows[newFlow]) {
       form.value.options = { ...workflows[newFlow].options }
+      saveLastWorkflow(newFlow)
     }
+  },
+  { deep: true }
+)
+
+watch(
+  () => form.value.options,
+  (newOptions) => {
+    if (isManualMode.value) {
+      saveManualOptions(newOptions)
+    }
+  },
+  { deep: true }
+)
+
+watch(
+  () => form.value.sku,
+  (newSku) => {
+    saveLastSkuInput(newSku)
   }
 )
 
-// === EVENT HANDLERS ===
-const handleAddTask = () => {
-  const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
-  if (skuList.length === 0) return alert('请输入有效的SKU')
-  if (!currentShopInfo.value) return alert('请选择店铺')
-
-  const selectedOptions = Object.entries(form.value.options)
-    .filter(([, value]) => value === true)
-    .map(([key]) => {
-      const optionMap = {
-        importStore: '导入店铺商品',
-        useStore: '启用店铺商品',
-        importProps: '导入物流属性',
-        useMainData: '启用库存分配',
-        useWarehouse: '添加库存',
-        useJdEffect: '京东打标生效',
-        importProductNames: '导入商品简称',
-        useAddInventory: '添加库存'
-      }
-      return optionMap[key]
-    })
-    .filter(Boolean)
-    .join(' | ')
-
-  const featureDisplayName =
-    form.value.quickSelect === 'manual'
-      ? selectedOptions || '手动任务'
-      : workflows[form.value.quickSelect].name
-
-  const newTask = {
-    id: `task-${Date.now()}`,
-    sku: `任务 (${skuList.length}个SKU)`,
-    status: '等待中',
-    result: '',
-    featureName: featureDisplayName,
-    店铺: currentShopInfo.value.shopName,
-    仓库: currentWarehouseInfo.value?.warehouseName || '未指定',
-    创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    状态: '等待中',
-    结果: '',
-    功能: featureDisplayName,
-    options: JSON.parse(JSON.stringify(form.value.options)),
-    shopInfo: currentShopInfo.value,
-    warehouseInfo: currentWarehouseInfo.value,
-    context: {
-      quickSelect: form.value.quickSelect,
-      taskName: featureDisplayName,
-      skuList,
-      shopInfo: currentShopInfo.value,
-      departmentInfo: getSelectedDepartment(),
-      options: form.value.options
-    }
-  }
-  taskList.value.push(newTask)
-}
-
-const handleClearTasks = () => {
-  taskList.value = []
-}
-
 // === LIFECYCLE HOOKS ===
 onMounted(() => {
+  const lastWorkflow = getLastWorkflow() || 'warehouseLabeling'
+  form.value.quickSelect = lastWorkflow
+
+  if (lastWorkflow === 'manual') {
+    const manualOptions = getManualOptions()
+    if (manualOptions) {
+      form.value.options = manualOptions
+    } else {
+      form.value.options = { ...workflows.manual.options }
+    }
+  } else {
+    form.value.options = { ...workflows[lastWorkflow].options }
+  }
+
+  form.value.sku = getLastSkuInput()
+
   if (props.isLoggedIn) {
     loadShops()
     loadWarehouses()
@@ -277,22 +354,27 @@ watch(currentWarehouseInfo, (newWarehouse) => {
       <OperationArea
         :form="form"
         :is-manual-mode="isManualMode"
+        :workflows="workflows"
         :shops-list="shopsList"
-        :is-loading-shops="isLoadingShops"
-        :shop-load-error="shopLoadError"
         :warehouses-list="warehousesList"
+        :is-loading-shops="isLoadingShops"
         :is-loading-warehouses="isLoadingWarehouses"
+        :shop-load-error="shopLoadError"
         :warehouse-load-error="warehouseLoadError"
+        :is-executing="isExecuting"
         @add-task="handleAddTask"
+        @update:form="Object.assign(form, $event)"
       />
       <TaskArea
         :task-list="taskList"
-        :logs="logs"
-        :is-running="isRunning"
-        :task-error="taskError"
-        :task-result="taskResult"
-        @execute-task="handleExecuteTask"
+        :logs="taskFlowState.logs.value"
+        :is-running="isExecuting"
+        :active-tab="activeTab"
+        @execute-tasks="runAllTasks"
         @clear-tasks="handleClearTasks"
+        @delete-task="handleDeleteTask"
+        @execute-task="handleExecuteTask"
+        @update:active-tab="activeTab = $event"
       />
     </div>
   </div>

@@ -1,75 +1,42 @@
-import { queryProductStatus } from '../../services/apiService'
-import { getSelectedDepartment } from '../../utils/storageHelper'
+import { queryProductStatus, enableShopProducts } from '../../services/apiService'
 
 /**
  * 检查批次中商品的状态并找出停用的商品
- * @param {Array} skuList - 商品SKU列表
- * @param {Object} shopInfo - 店铺信息
- * @param {Number} currentBatch - 当前批次索引
- * @param {Number} totalBatches - 总批次数
- * @param {Array} allDisabledProducts - 收集所有停用商品的数组
+ * @param {object} params - 参数对象
+ * @param {Array<string>} params.skus - 商品SKU列表
+ * @param {string} params.shopNo - 店铺编号
+ * @param {string} params.deptNo - 事业部编号
+ * @param {object} helpers - 辅助函数，包含 log
+ * @returns {Promise<Array<string>>} - 返回停用的SKU列表
  */
-async function checkProductStatus(
-  skuList,
-  shopInfo,
-  currentBatch,
-  totalBatches,
-  allDisabledProducts
-) {
-  console.log(`开始检查批次 ${currentBatch}/${totalBatches} 的商品状态`)
-
+async function findDisabledProducts({ skus, shopNo, deptNo }, helpers) {
+  const allDisabledProducts = []
   try {
-    // 获取事业部和店铺信息
-    const department = getSelectedDepartment()
-
-    if (!department) {
-      throw new Error('缺少事业部信息')
-    }
-
-    // 将SKU按1000个一组进行分割
     const QUERY_BATCH_SIZE = 1000
     const skuGroups = []
-
-    for (let i = 0; i < skuList.length; i += QUERY_BATCH_SIZE) {
-      skuGroups.push(skuList.slice(i, i + QUERY_BATCH_SIZE))
+    for (let i = 0; i < skus.length; i += QUERY_BATCH_SIZE) {
+      skuGroups.push(skus.slice(i, i + QUERY_BATCH_SIZE))
     }
+    helpers.log(`将 ${skus.length} 个SKU分成 ${skuGroups.length} 组进行状态查询`)
 
-    console.log(`将${skuList.length}个SKU分成${skuGroups.length}组进行状态查询`)
+    for (let i = 0; i < skuGroups.length; i++) {
+      const group = skuGroups[i]
+      helpers.log(`查询第 ${i + 1}/${skuGroups.length} 组, ${group.length}个SKU...`)
+      const statusResult = await queryProductStatus(group, shopNo, deptNo)
 
-    // 遍历每个SKU组，查询状态
-    for (let groupIndex = 0; groupIndex < skuGroups.length; groupIndex++) {
-      const skuGroup = skuGroups[groupIndex]
-      console.log(
-        `查询第${groupIndex + 1}/${skuGroups.length}组SKU状态，包含${skuGroup.length}个SKU`
-      )
-
-      // 调用API查询商品状态
-      const statusResult = await queryProductStatus(skuGroup, shopInfo, department)
-
-      if (statusResult.success) {
-        if (statusResult.disabledItems.length > 0) {
-          console.log(`发现${statusResult.disabledItems.length}个停用商品`)
-
-          // 将找到的停用商品添加到全局列表
-          allDisabledProducts.push(...statusResult.disabledItems)
-        }
-      } else {
-        console.warn(`查询商品状态出错: ${statusResult.message}`)
+      if (statusResult.success && statusResult.disabledItems.length > 0) {
+        helpers.log(`发现 ${statusResult.disabledItems.length} 个停用商品`)
+        allDisabledProducts.push(...statusResult.disabledItems)
+      } else if (!statusResult.success) {
+        helpers.log(`查询商品状态出错: ${statusResult.message}`, 'warning')
       }
-
-      // 如果不是最后一组，添加短暂延迟避免频繁请求
-      if (groupIndex < skuGroups.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
+      if (i < skuGroups.length - 1) await new Promise((r) => setTimeout(r, 500))
     }
-
-    console.log(
-      `批次${currentBatch}/${totalBatches}状态检查完成，累计发现${allDisabledProducts.length}个停用商品`
-    )
   } catch (error) {
-    console.error('检查商品状态失败:', error)
+    helpers.log(`检查商品状态失败: ${error.message}`, 'error')
     throw error
   }
+  return allDisabledProducts
 }
 
 export default {
@@ -78,41 +45,44 @@ export default {
 
   /**
    * 执行启用店铺商品功能
-   * @param {Array<string>} skuList - SKU列表
-   * @param {Object} shopInfo - 店铺信息
+   * @param {object} context - 上下文对象
+   * @param {object} helpers - 辅助函数对象
    * @returns {Promise<Object>} 执行结果
    */
-  async execute(skuList, shopInfo) {
-    console.log('执行[启用店铺商品]功能，SKU列表:', skuList)
-    console.log('选项状态: useStore = true, importStore = false')
+  async execute(context, helpers) {
+    helpers.log(`开始执行 [${this.label}] 功能...`)
+    const { skus, store } = context
 
-    // 获取事业部信息
-    const department = getSelectedDepartment()
-    if (!department) {
-      console.error('未选择事业部，无法启用店铺商品')
-      throw new Error('未选择事业部，无法启用店铺商品')
+    if (!store || !store.shopNo || !store.deptNo) {
+      throw new Error('未提供有效的店铺或事业部信息 (shopNo, deptNo)')
+    }
+    const { shopNo, deptNo } = store
+
+    if (!skus || skus.length === 0) {
+      helpers.log('SKU列表为空，无需执行。')
+      return { success: true, message: 'SKU列表为空，跳过执行。' }
+    }
+    helpers.log(`店铺: ${shopNo}, 事业部: ${deptNo}`)
+
+    // 1. 查找所有停用的商品
+    const disabledSkus = await findDisabledProducts({ skus, shopNo, deptNo }, helpers)
+    helpers.log(`状态检查完成，共发现 ${disabledSkus.length} 个停用商品。`)
+
+    // 2. 如果有停用的商品，则启用它们
+    if (disabledSkus.length > 0) {
+      helpers.log(`准备启用 ${disabledSkus.length} 个商品...`)
+      const enableResult = await enableShopProducts({ shopNo, deptNo, skuList: disabledSkus })
+
+      if (enableResult.success) {
+        helpers.log(`成功启用 ${disabledSkus.length} 个商品。`, 'success')
+        return { success: true, message: `成功启用 ${disabledSkus.length} 个商品。` }
+      } else {
+        throw new Error(enableResult.message || '启用商品时发生未知 API 错误')
+      }
     }
 
-    console.log('使用事业部:', department.deptName)
-    console.log('使用店铺:', shopInfo.shopName)
-
-    // 收集停用商品
-    const allDisabledProducts = []
-
-    // 查询商品状态
-    await checkProductStatus(skuList, shopInfo, 1, 1, allDisabledProducts)
-
-    console.log(`商品状态查询完成，发现${allDisabledProducts.length}个停用商品`)
-
-    return {
-      success: true,
-      message: `商品状态查询完成，发现${allDisabledProducts.length}个停用商品`,
-      disabledProducts: allDisabledProducts,
-      skuCount: skuList.length,
-      processedCount: skuList.length,
-      failedCount: 0,
-      skippedCount: 0
-    }
+    helpers.log('所有商品状态正常，无需启用。', 'success')
+    return { success: true, message: '所有商品状态均正常。' }
   },
 
   /**

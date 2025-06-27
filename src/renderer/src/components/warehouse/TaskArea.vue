@@ -1,98 +1,103 @@
 <template>
   <div class="task-area">
-    <div class="task-header">
-      <div class="task-title">任务列表</div>
-      <div class="task-actions">
-        <button class="btn btn-success" @click="emit('executeTask', null)">批量执行</button>
-        <button class="btn btn-danger" @click="emit('clearTasks')">清空列表</button>
-      </div>
+    <div class="actions-header">
+      <button
+        class="action-btn execute-btn"
+        @click="$emit('execute-tasks')"
+        :disabled="isRunning || taskList.length === 0"
+      >
+        {{ isRunning ? '执行中...' : '批量执行' }}
+      </button>
+      <button
+        class="action-btn clear-btn"
+        @click="$emit('clear-tasks')"
+        :disabled="isRunning || taskList.length === 0"
+      >
+        清空列表
+      </button>
     </div>
-
-    <div class="task-table-container">
-      <tab-panel
-        v-if="props.taskList.length > 0"
-        :tasks="props.taskList"
-        :logs="props.logs"
-        :is-running="props.isRunning"
-        :task-error="props.taskError"
-        :task-result="props.taskResult"
-        @execute-one="(task) => emit('executeTask', task)"
-      />
-      <div v-else class="no-tasks">
-        <p>无任务数据，请先添加任务</p>
-      </div>
-    </div>
-
-    <div class="task-footer">
-      <!-- 页脚内容可以根据需要添加回来 -->
-    </div>
+    <TabPanel
+      :tasks="taskList"
+      :logs="logs"
+      :active-tab="activeTab"
+      @update:active-tab="$emit('update:active-tab', $event)"
+      @delete-task="$emit('delete-task', $event)"
+      @execute-task="$emit('execute-task', $event)"
+    />
   </div>
 </template>
 
 <script setup>
 import TabPanel from './TabPanel.vue'
 
-const props = defineProps({
+defineProps({
   taskList: {
     type: Array,
     required: true
   },
   logs: {
     type: Array,
-    default: () => []
+    required: true
   },
-  isRunning: Boolean,
-  taskError: String,
-  taskResult: Object
+  isRunning: {
+    type: Boolean,
+    required: true
+  },
+  activeTab: {
+    type: String,
+    required: true
+  }
 })
 
-const emit = defineEmits(['executeTask', 'clearTasks'])
+defineEmits(['execute-tasks', 'clear-tasks', 'delete-task', 'update:active-tab', 'execute-task'])
 </script>
 
 <style scoped>
 .task-area {
-  flex: 1;
-  background: #fff;
-  padding: 20px;
   display: flex;
   flex-direction: column;
-}
-
-.task-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.task-title {
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.task-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.task-table-container {
   flex: 1;
-  overflow: auto;
+  padding: 0 20px 20px 20px;
+  background-color: #fff;
+  min-width: 0;
 }
 
-.task-footer {
+.actions-header {
   display: flex;
-  justify-content: flex-end;
-  padding-top: 20px;
-  margin-top: 20px;
-  border-top: 1px solid #ebeef5;
+  gap: 10px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 15px;
 }
 
-.no-tasks {
-  padding: 20px;
-  text-align: center;
-  color: #909399;
+.action-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.execute-btn {
+  background-color: #2563eb;
+  color: white;
+}
+.execute-btn:not(:disabled):hover {
+  background-color: #1d4ed8;
+}
+
+.clear-btn {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+.clear-btn:not(:disabled):hover {
+  background-color: #bfdbfe;
 }
 </style>

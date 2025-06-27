@@ -509,8 +509,6 @@ export async function getProductImportTemplate() {
   }
 }
 
-
-
 /**
  * 查询商品状态 - 检查是否有停用商品
  * @param {Array<string>} skuList - 商品编号列表
@@ -690,65 +688,55 @@ export async function queryProductStatus(skuList, shopInfo, deptInfo) {
 
 /**
  * 启用店铺商品
- * @param {Array} disabledItems - 停用商品列表
- * @returns {Promise<Object>} 启用结果
+ * @param {Array} disabledItems - 包含停用商品信息的数组
+ * @returns {Promise<Object>} 启用操作的结果
  */
 export async function enableShopProducts(disabledItems) {
-  if (!disabledItems || disabledItems.length === 0) {
-    return { success: false, message: '未提供需要启用的商品列表' }
-  }
-
-  console.log(`开始启用${disabledItems.length}个商品`)
-  const url = `${BASE_URL}/shopGoods/batchOnShopGoods.do`
+  console.log('开始执行 enableShopProducts，收到的停用商品:', disabledItems)
+  const url = `${BASE_URL}/vender/product/updateStatusByIds.do`
   const csrfToken = await getCsrfToken()
 
+  // 构建请求体
+  const data = qs.stringify({
+    csrfToken: csrfToken,
+    ids: disabledItems.map((item) => item.id).join(','),
+    status: '1' // 1 表示启用
+  })
+
+  console.log('发送启用商品请求:', {
+    url,
+    csrfToken: csrfToken ? '已获取' : '未获取',
+    body: data
+  })
+
   try {
-    // 提取所有商品ID，转换为JSON字符串格式
-    const idsArray = disabledItems.map((item) => item.id)
-    const idsJsonString = JSON.stringify(idsArray)
-
-    // 构建请求数据
-    const data = qs.stringify({
-      csrfToken: csrfToken,
-      ids: idsJsonString
-    })
-
-    console.log('启用商品请求参数:', data)
-
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Accept: 'application/json, text/javascript, */*; q=0.01',
         Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
+        Referer: `${BASE_URL}/vender/product/view.action`,
         'X-Requested-With': 'XMLHttpRequest'
       },
       body: data
     })
 
-    console.log('启用商品响应:', response)
+    console.log('启用商品API原始响应:', response)
 
-    if (response && (response.result || response.resultCode === 1)) {
-      return {
-        success: true,
-        message: response.resultMessage || `成功启用${disabledItems.length}个商品`,
-        data: response
-      }
+    if (response && response.code === 200) {
+      console.log('启用商品成功:', response.message)
+      return { success: true, message: response.message || '启用成功' }
     } else {
-      return {
-        success: false,
-        message: response?.resultMessage || response?.msg || '启用商品失败，未返回成功状态',
-        data: response
-      }
+      console.error('启用商品失败:', response)
+      const message =
+        response?.message ||
+        response?.msg ||
+        (response?.code ? `错误码: ${response.code}` : '未知错误')
+      return { success: false, message }
     }
   } catch (error) {
-    console.error('启用商品失败:', error)
-    return {
-      success: false,
-      message: `启用商品失败: ${error.message || '未知错误'}`,
-      error
-    }
+    console.error('调用启用商品API时发生网络错误:', error)
+    return { success: false, message: `网络请求失败: ${error.message}` }
   }
 }
 
