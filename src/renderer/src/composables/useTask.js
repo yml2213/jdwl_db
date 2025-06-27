@@ -54,11 +54,14 @@ export function useTask(featureDefinition) {
             state.results = resultData
             state.status = 'success'
             log(`任务 "${featureDefinition.label}" 成功完成。`, 'success')
+            return resultData
         } catch (error) {
             // 5. 处理异常
             console.error(`[useTask] 任务 "${featureDefinition.label}" 执行失败:`, error)
             state.status = 'error'
-            log(error.message || '发生未知错误', 'error')
+            const errorMessage = error.message || '发生未知错误'
+            log(errorMessage, 'error')
+            return { success: false, message: errorMessage }
         } finally {
             // 6. 结束运行状态
             state.isRunning = false

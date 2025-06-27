@@ -22,23 +22,45 @@ const props = defineProps({
   isLoggedIn: Boolean
 })
 
+// === WORKFLOW DEFINITIONS ===
+const workflows = {
+  manual: {
+    name: '手动选择',
+    options: {
+      importStore: false,
+      useStore: false,
+      importProps: false,
+      useMainData: false,
+      useWarehouse: false,
+      useJdEffect: false,
+      importProductNames: false,
+      skipConfigErrors: true,
+      useAddInventory: false,
+      inventoryAmount: 1000
+    }
+  },
+  warehouseLabeling: {
+    name: '入仓打标',
+    options: {
+      importStore: true,
+      useStore: false,
+      importProps: true,
+      useMainData: false,
+      useWarehouse: true,
+      useJdEffect: true,
+      importProductNames: false,
+      skipConfigErrors: true,
+      useAddInventory: true,
+      inventoryAmount: 1000
+    }
+  }
+}
+
 // === STATE MANAGEMENT ===
 const form = ref({
-  quickSelect: 'warehouseLabelingFlow',
+  quickSelect: 'warehouseLabeling',
   sku: '',
-  options: {
-    importStore: true,
-    useStore: false,
-    importProps: true,
-    useMainData: false,
-    useWarehouse: true,
-    useJdEffect: true,
-    importTitle: false,
-    importProductNames: false,
-    skipConfigErrors: true,
-    useAddInventory: true,
-    inventoryAmount: 1000
-  },
+  options: { ...workflows.warehouseLabeling.options },
   selectedStore: '',
   selectedWarehouse: ''
 })
@@ -52,6 +74,8 @@ const shopLoadError = ref('')
 const warehouseLoadError = ref('')
 
 // === COMPUTED PROPERTIES ===
+const isManualMode = computed(() => form.value.quickSelect === 'manual')
+
 const currentShopInfo = computed(() =>
   shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
 )
@@ -121,9 +145,47 @@ const {
   onLog: (log) => console.log(log.message)
 })
 
-const runTaskFlow = (taskContext) => {
-  execute(taskContext)
+const handleExecuteTask = async (task) => {
+  if (isRunning.value) {
+    alert('已有任务在执行中，请稍后再试。')
+    return
+  }
+
+  const tasksToRun = task ? [task] : taskList.value.filter((t) => ['等待中', '失败'].includes(t.状态))
+
+  if (tasksToRun.length === 0) {
+    alert('没有可执行的任务。')
+    return
+  }
+
+  for (const t of tasksToRun) {
+    t.状态 = '执行中'
+    t.结果 = '正在处理...'
+    const result = await execute(t.context)
+
+    if (result && result.success) {
+      t.状态 = '成功'
+      t.结果 = result.message || '执行成功'
+    } else {
+      t.状态 = '失败'
+      t.结果 = result?.message || '未知错误'
+    }
+
+    if (!task && tasksToRun.length > 1 && tasksToRun.indexOf(t) < tasksToRun.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+  }
 }
+
+// === WATCHERS ===
+watch(
+  () => form.value.quickSelect,
+  (newFlow) => {
+    if (workflows[newFlow]) {
+      form.value.options = { ...workflows[newFlow].options }
+    }
+  }
+)
 
 // === EVENT HANDLERS ===
 const handleAddTask = () => {
@@ -141,44 +203,44 @@ const handleAddTask = () => {
         useMainData: '启用库存分配',
         useWarehouse: '添加库存',
         useJdEffect: '京东打标生效',
-        importProductNames: '导入商品简称'
+        importProductNames: '导入商品简称',
+        useAddInventory: '添加库存'
       }
       return optionMap[key]
     })
     .filter(Boolean)
     .join(' | ')
 
+  const featureDisplayName =
+    form.value.quickSelect === 'manual'
+      ? selectedOptions || '手动任务'
+      : workflows[form.value.quickSelect].name
+
   const newTask = {
     id: `task-${Date.now()}`,
     sku: `任务 (${skuList.length}个SKU)`,
-    skuList,
-    shopName: currentShopInfo.value.shopName,
-    warehouseName: currentWarehouseInfo.value?.warehouseName || '未指定',
-    creationTime: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     status: '等待中',
     result: '',
-    featureName: selectedOptions,
+    featureName: featureDisplayName,
     店铺: currentShopInfo.value.shopName,
     仓库: currentWarehouseInfo.value?.warehouseName || '未指定',
     创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     状态: '等待中',
     结果: '',
-    功能: selectedOptions,
+    功能: featureDisplayName,
     options: JSON.parse(JSON.stringify(form.value.options)),
     shopInfo: currentShopInfo.value,
     warehouseInfo: currentWarehouseInfo.value,
     context: {
-        skuList,
-        shopInfo: currentShopInfo.value,
-        departmentInfo: getSelectedDepartment(),
-        options: form.value.options
+      quickSelect: form.value.quickSelect,
+      taskName: featureDisplayName,
+      skuList,
+      shopInfo: currentShopInfo.value,
+      departmentInfo: getSelectedDepartment(),
+      options: form.value.options
     }
   }
   taskList.value.push(newTask)
-}
-
-const handleExecuteTask = (task) => {
-  runTaskFlow(task.context)
 }
 
 const handleClearTasks = () => {
@@ -214,6 +276,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
     <div class="main-content">
       <OperationArea
         :form="form"
+        :is-manual-mode="isManualMode"
         :shops-list="shopsList"
         :is-loading-shops="isLoadingShops"
         :shop-load-error="shopLoadError"
@@ -231,21 +294,6 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         @execute-task="handleExecuteTask"
         @clear-tasks="handleClearTasks"
       />
-    </div>
-    <!-- Log Panel -->
-    <div v-if="logs.length > 0" class="log-panel-wrapper">
-      <div class="log-panel-header">
-        <h3>执行日志</h3>
-        <button @click="logs = []" class="close-btn">&times;</button>
-      </div>
-      <div class="logs-container">
-        <div v-if="isRunning">执行中...</div>
-        <div v-if="taskError" class="log-error">错误: {{ taskError }}</div>
-        <div v-if="taskResult" class="log-success">完成: {{ taskResult.message }}</div>
-        <div v-for="(log, index) in logs" :key="index" :class="`log-${log.type}`">
-          [{{ log.time }}] {{ log.message }}
-        </div>
-      </div>
     </div>
   </div>
   <div v-else class="login-prompt">
@@ -272,61 +320,5 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   align-items: center;
   height: 100%;
   font-size: 1.5rem;
-}
-
-/* Log Panel Styles */
-.log-panel-wrapper {
-  flex-shrink: 0;
-  height: 200px;
-  display: flex;
-  flex-direction: column;
-  background-color: #f7f7f7;
-  border-top: 1px solid #ccc;
-  padding: 10px;
-  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.log-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.log-panel-header h3 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.log-panel-header .close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-}
-
-.logs-container {
-  flex-grow: 1;
-  overflow-y: auto;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 0.85rem;
-  background-color: #fff;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-
-.log-error {
-  color: #d9534f;
-}
-
-.log-success {
-  color: #5cb85c;
-}
-
-.log-info {
-  color: #333;
 }
 </style>

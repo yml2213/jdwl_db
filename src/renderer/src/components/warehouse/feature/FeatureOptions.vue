@@ -3,24 +3,24 @@
     <label class="form-label">功能选项</label>
     <div class="checkbox-group">
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.importStore" />
+        <input type="checkbox" v-model="options.importStore" :disabled="!isManualMode" />
         <span>导入店铺商品</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.useStore" />
+        <input type="checkbox" v-model="options.useStore" :disabled="!isManualMode" />
         <span>启用店铺商品</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.importProps" />
+        <input type="checkbox" v-model="options.importProps" :disabled="!isManualMode" />
         <span>导入物流属性(参数)</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.useWarehouse" />
+        <input type="checkbox" v-model="options.useWarehouse" :disabled="!isManualMode" />
         <span>启用库存商品分配</span>
       </label>
 
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.useJdEffect" />
+        <input type="checkbox" v-model="options.useJdEffect" :disabled="!isManualMode" />
         <span>启用京配打标生效</span>
       </label>
       <label class="checkbox-label">
@@ -28,6 +28,7 @@
           type="checkbox"
           v-model="options.useAddInventory"
           @change="handleAddInventoryChange"
+          :disabled="!isManualMode"
         />
         <span>添加库存</span>
       </label>
@@ -36,7 +37,7 @@
         <span>导入商品标题</span>
       </label> -->
       <label class="checkbox-label">
-        <input type="checkbox" v-model="options.importProductNames" />
+        <input type="checkbox" v-model="options.importProductNames" :disabled="!isManualMode" />
         <span>导入商品简称</span>
       </label>
     </div>
@@ -49,6 +50,7 @@
         min="1"
         max="10000"
         class="inventory-input"
+        :disabled="!isManualMode"
       />
     </div>
   </div>
@@ -71,6 +73,10 @@ const props = defineProps({
       importTitle: false,
       importProductNames: false
     })
+  },
+  isManualMode: {
+    type: Boolean,
+    default: true
   }
 })
 

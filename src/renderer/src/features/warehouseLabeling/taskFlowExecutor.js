@@ -2,9 +2,6 @@
  * 任务流执行器
  * 专用于处理'入仓打标'等多步骤、有顺序、有延迟的任务流
  */
-import {
-    wait
-} from './utils/taskUtils'
 import importStoreProductsFeature from './importStoreProducts'
 import logisticsAttributesFeature from './logisticsAttributes'
 import addInventoryFeature from './addInventory'
@@ -54,35 +51,46 @@ export default {
     name: 'warehouseLabelingFlow',
     label: '入仓打标流程',
 
-    async execute(context, helpers) {
-        const { log, isRunning } = helpers;
+    async execute(context, { log: originalLog, isRunning }) {
+        const isManual = context.quickSelect === 'manual'
 
-        log('入仓打标流程开始...', 'info');
+        const log = (message, type) => {
+            if (isManual && type === 'step') {
+                return // 在手动模式下，不记录步骤信息
+            }
+            originalLog(message, type)
+        }
+
+        log(`任务 "${context.taskName}" 开始...`, 'info')
 
         for (const step of taskFlowSteps) {
-            if (!isRunning.value) {
-                log('任务被取消，停止执行。', 'warning');
-                return { success: false, message: '任务已取消' };
-            }
-
             if (step.shouldExecute(context)) {
-                log(`--- 开始执行步骤: ${step.name} ---`, 'info');
+                if (!isRunning.value) {
+                    log('任务被手动取消。', 'warning')
+                    return { success: false, message: '任务已取消' }
+                }
+
+                if (!isManual) {
+                    log(`--- 开始执行步骤: ${step.name} ---`, 'step')
+                }
                 try {
-                    const result = await step.execute(context, helpers);
+                    const result = await step.execute(context, { log, isRunning })
                     if (result && result.success === false) {
-                        // 如果步骤执行返回明确的失败，则中断流程
-                        throw new Error(result.message || `步骤 [${step.name}] 执行失败，但未提供明确错误信息。`);
+                        log(`步骤 [${step.name}] 执行失败: ${result.message}`, 'error')
+                        return result
                     }
-                    log(`步骤 [${step.name}] 执行成功。`, 'success');
-                } catch (error) {
-                    const errorMessage = `步骤 [${step.name}] 发生错误: ${error.message}`;
-                    log(errorMessage, 'error');
-                    throw new Error(errorMessage);
+                    if (!isManual) {
+                        log(`步骤 [${step.name}] 执行成功。`, 'success')
+                    }
+                } catch (e) {
+                    const errorMessage = e.message || '未知错误'
+                    log(`步骤 [${step.name}] 发生意外错误: ${errorMessage}`, 'error')
+                    return { success: false, message: `步骤 [${step.name}] 失败: ${errorMessage}` }
                 }
             }
         }
 
-        log('入仓打标流程所有步骤执行完毕。', 'success');
-        return { success: true, message: '入仓打标流程执行成功' };
+        log(`任务 "${context.taskName}" 所有步骤执行完毕。`, 'success')
+        return { success: true, message: '任务执行成功' }
     }
 } 

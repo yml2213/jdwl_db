@@ -4,15 +4,15 @@
       <label class="form-label">快捷选择</label>
       <div class="select-wrapper">
         <select v-model="props.form.quickSelect" class="form-select">
-          <option value="">请选择快捷方式</option>
-          <option value="warehouseLabelingFlow">任务流 -- 入仓打标</option>
+          <option value="manual">手动选择</option>
+          <option value="warehouseLabeling">任务流 -- 入仓打标</option>
         </select>
       </div>
     </div>
 
     <sku-input v-model="props.form.sku" />
 
-    <feature-options v-model="props.form.options" />
+    <feature-options v-model="props.form.options" :is-manual-mode="props.isManualMode" />
 
     <store-selector
       :shops="props.shopsList"
@@ -43,6 +43,7 @@ import WarehouseSelector from './WarehouseSelector.vue'
 
 const props = defineProps({
   form: Object,
+  isManualMode: Boolean,
   shopsList: Array,
   isLoadingShops: Boolean,
   shopLoadError: String,
