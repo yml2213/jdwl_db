@@ -2,10 +2,12 @@ import axios from 'axios'
 import { app, session, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import XLSX from 'xlsx'
+import * as XLSX from 'xlsx'
 import qs from 'qs'
 import { loadCookies } from './loginManager'
 import { saveBufferToDownloads } from './fileHandler'
+
+const BASE_URL = 'https://o.jdl.com'
 
 // 日志文件路径
 const logPath = path.join(app.getPath('userData'), 'request-logs.txt')
@@ -649,56 +651,116 @@ export function setupRequestHandlers() {
     }
   });
 
+  /**
+   * 根据上下文创建添加入库单的Excel文件Buffer
+   * @param {object} context - 包含goodsList等信息的任务上下文
+   * @returns {Buffer} - Excel文件的Buffer
+   */
+  function createInventoryExcelBuffer(context) {
+    const { goodsList } = context
+
+    const headers = [
+      '事业部商品编码', // CMG
+      '外部店铺商品编码', // SKU
+      '商品数量(个)',
+      '代贴条码(是/否)',
+      '单价(全球购采购单必填)',
+      '质检比例(大件且无开通质检服务)',
+      '0-100是否序列号入库(是/否)',
+      '商家自定义批次编码',
+      '包装规格编码',
+      '包装单位'
+    ]
+
+    const dataRows = goodsList.map((item) => [
+      item.goodsNo, // 事业部商品编码 (CMG)
+      item.sellerGoodsSign, // 外部店铺商品编码 (SKU)
+      item.applyInstoreQty, // 商品数量
+      '否', // 代贴条码
+      '', // 单价
+      '10', // 质检比例
+      '否', // 是否序列号入库
+      '', // 商家自定义批次编码
+      '', // 包装规格编码
+      '' // 包装单位
+    ])
+
+    const data = [headers, ...dataRows]
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+
+    // 返回Buffer
+    return XLSX.write(wb, { bookType: 'xls', type: 'buffer' })
+  }
+
   ipcMain.handle('add-inventory', async (event, context) => {
-    const { goodsList, store, warehouse, vendor, cookies, csrfToken } = context
+    const { cookies } = context
 
     try {
       const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-      const goodsJson = JSON.stringify(goodsList)
-      let supplierIdValue = vendor.id
-      if (typeof supplierIdValue === 'string' && /^[A-Za-z]+/.test(supplierIdValue)) {
-        supplierIdValue = supplierIdValue.replace(/^[A-Za-z]+/, '')
+
+      // 1. 在内存中创建Excel Buffer
+      const excelBuffer = createInventoryExcelBuffer(context)
+
+      // 2. [调试用] 将生成的Excel文件保存到下载目录
+      try {
+        const downloadsPath = app.getPath('downloads')
+        const debugFilePath = path.join(
+          downloadsPath,
+          `jdwl-inventory-upload-${Date.now()}.xls`
+        )
+        fs.writeFileSync(debugFilePath, excelBuffer)
+        console.log(`[add-inventory] 调试用Excel文件已保存至: ${debugFilePath}`)
+      } catch (e) {
+        console.error('[add-inventory] 保存调试文件失败:', e)
       }
 
+      // 3. 创建FormData并模拟文件上传
       const formData = new FormData()
-      formData.append('goodsJson', goodsJson)
-      formData.append('deptId', store.deptId)
-      formData.append('deptName', store.deptName)
-      formData.append('warehouseId', warehouse.id)
-      formData.append('warehouseName', warehouse.warehouseName)
-      formData.append('supplierId', supplierIdValue)
-      formData.append('supplierName', vendor.name)
-      formData.append('poType', '01')
-      formData.append('businessType', '1')
+      // undici的FormData在提供文件名时要求第二个参数是Blob类型
+      const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.ms-excel' })
+      formData.append('batchImportPoFiles', excelBlob, '采购入库单商品导入模板.xls')
 
-      const response = await fetch('https://jdi.jd.com/stock/initialization/import.action', {
+      // 4. 发送请求
+      const response = await fetch('https://o.jdl.com/poMain/batchImportPo.do', {
         method: 'POST',
         body: formData,
         headers: {
-          Cookie: cookieString
+          Cookie: cookieString,
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          Referer: 'https://o.jdl.com/goToMainIframe.do',
+          Origin: 'https://o.jdl.com'
         }
       })
 
+      const responseText = await response.text()
       if (!response.ok) {
+        console.error('上传库存失败，响应状态:', response.status, '响应内容:', responseText)
         throw new Error(`网络响应错误: ${response.statusText}`)
       }
 
-      const responseData = await response.json()
+      console.log('[add-inventory] 上传库存文件成功，响应内容:', responseText)
 
-      if (responseData.resultCode === 1 || responseData.resultCode === '1') {
+      // 5. 解析HTML响应
+      if (responseText.includes('导入成功') || responseText.includes('message success')) {
+        const match = responseText.match(/采购单号【([^】]+)】/)
+        const poNo = match ? match[1] : '未知'
+
         return {
           success: true,
-          message: `库存添加成功，采购单号: ${responseData.poNo}`,
-          poNumber: responseData.poNo,
-          processedCount: goodsList.length,
-          failedCount: 0
+          message: `库存添加成功，采购单号: ${poNo}`,
+          poNumber: poNo
         }
       } else {
+        const errorMatch = responseText.match(/class="message error">([^<]+)</)
+        const errorMessage = errorMatch ? errorMatch[1].trim() : '未知错误，请检查下载文件夹中的Excel文件'
         return {
           success: false,
-          message: `库存添加失败: ${responseData.message || '未知错误'}`,
-          processedCount: 0,
-          failedCount: goodsList.length
+          message: `库存添加失败: ${errorMessage}`
         }
       }
     } catch (error) {
@@ -934,9 +996,9 @@ function createLogisticsExcelBuffer(skuList, department) {
     sku, // 商家商品编号
     '120.00', // 长(mm)
     '60.00', // 宽(mm)
-    '60.00', // 高(mm)
+    '6.00', // 高(mm)
     '', // 净重(kg)
-    '100.00' // 毛重(kg)
+    '0.1' // 毛重(kg)
   ])
   const excelData = [headers, ...data]
   const worksheet = XLSX.utils.aoa_to_sheet(excelData)

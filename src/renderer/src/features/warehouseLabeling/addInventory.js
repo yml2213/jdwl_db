@@ -30,11 +30,19 @@ async function _uploadInventoryData(goodsList, context, helpers) {
   try {
     log(`通过IPC调用主进程添加库存，商品数量: ${goodsList.length}`, 'debug')
 
-    // 将 goodsList 添加到 context 中，以便传递给主进程
-    const newContext = { ...context, goodsList }
+    // 获取 cookies 和 csrfToken
+    const cookies = await getAllCookies()
+    const tokenCookie = cookies.find((c) => c.name === 'csrfToken')
+    const csrfToken = tokenCookie ? tokenCookie.value : ''
+
+    // 将 goodsList, cookies, csrfToken 添加到 context 中，以便传递给主进程
+    const newContext = { ...context, goodsList, cookies, csrfToken }
+
+    // 克隆对象以移除响应式代理，防止IPC错误
+    const plainContext = JSON.parse(JSON.stringify(newContext))
 
     // 通过IPC调用主进程执行上传
-    const result = await window.api.addInventory(newContext)
+    const result = await window.api.addInventory(plainContext)
 
     log('主进程添加库存操作结果:', 'debug', result)
 
