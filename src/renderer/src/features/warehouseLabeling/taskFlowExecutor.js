@@ -22,15 +22,10 @@ const taskFlowSteps = [
         name: '等待后台任务处理',
         shouldExecute: (context) => context.options.importStore,
         execute: async (context, { log, isRunning }) => {
-            log('等待15秒，以便服务器处理后台任务...', 'info')
-            for (let i = 0; i < 15; i++) {
-                if (!isRunning.value) {
-                    log('任务被取消，停止等待。', 'warning')
-                    return { success: false, message: '任务已取消' }
-                }
-                await wait(1000)
-            }
-            return { success: true, message: '等待完成' }
+            log('--- 开始执行步骤: 等待后台任务处理 ---', 'step')
+            log('等待3秒，以便服务器处理后台任务...', 'info')
+            await new Promise((resolve) => setTimeout(resolve, 3000))
+            log('步骤 [等待后台任务处理] 执行成功.', 'success')
         }
     },
     {
