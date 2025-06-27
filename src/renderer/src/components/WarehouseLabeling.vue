@@ -131,6 +131,23 @@ const handleAddTask = () => {
   if (skuList.length === 0) return alert('请输入有效的SKU')
   if (!currentShopInfo.value) return alert('请选择店铺')
 
+  const selectedOptions = Object.entries(form.value.options)
+    .filter(([, value]) => value === true)
+    .map(([key]) => {
+      const optionMap = {
+        importStore: '导入店铺商品',
+        useStore: '启用店铺商品',
+        importProps: '导入物流属性',
+        useMainData: '启用库存分配',
+        useWarehouse: '添加库存',
+        useJdEffect: '京东打标生效',
+        importProductNames: '导入商品简称'
+      }
+      return optionMap[key]
+    })
+    .filter(Boolean)
+    .join(' | ')
+
   const newTask = {
     id: `task-${Date.now()}`,
     sku: `任务 (${skuList.length}个SKU)`,
@@ -140,13 +157,13 @@ const handleAddTask = () => {
     creationTime: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     status: '等待中',
     result: '',
-    featureName: '任务流 - 入仓打标',
+    featureName: selectedOptions,
     店铺: currentShopInfo.value.shopName,
     仓库: currentWarehouseInfo.value?.warehouseName || '未指定',
     创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     状态: '等待中',
     结果: '',
-    功能: '任务流 - 入仓打标',
+    功能: selectedOptions,
     options: JSON.parse(JSON.stringify(form.value.options)),
     shopInfo: currentShopInfo.value,
     warehouseInfo: currentWarehouseInfo.value,
@@ -215,6 +232,21 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         @clear-tasks="handleClearTasks"
       />
     </div>
+    <!-- Log Panel -->
+    <div v-if="logs.length > 0" class="log-panel-wrapper">
+      <div class="log-panel-header">
+        <h3>执行日志</h3>
+        <button @click="logs = []" class="close-btn">&times;</button>
+      </div>
+      <div class="logs-container">
+        <div v-if="isRunning">执行中...</div>
+        <div v-if="taskError" class="log-error">错误: {{ taskError }}</div>
+        <div v-if="taskResult" class="log-success">完成: {{ taskResult.message }}</div>
+        <div v-for="(log, index) in logs" :key="index" :class="`log-${log.type}`">
+          [{{ log.time }}] {{ log.message }}
+        </div>
+      </div>
+    </div>
   </div>
   <div v-else class="login-prompt">
     <h2>请先登录</h2>
@@ -230,7 +262,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
 
 .main-content {
   display: flex;
-  flex: 1;
+  flex-grow: 1;
   overflow: hidden;
 }
 
@@ -240,5 +272,61 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   align-items: center;
   height: 100%;
   font-size: 1.5rem;
+}
+
+/* Log Panel Styles */
+.log-panel-wrapper {
+  flex-shrink: 0;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  background-color: #f7f7f7;
+  border-top: 1px solid #ccc;
+  padding: 10px;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.log-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.log-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.log-panel-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.logs-container {
+  flex-grow: 1;
+  overflow-y: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  background-color: #fff;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.log-error {
+  color: #d9534f;
+}
+
+.log-success {
+  color: #5cb85c;
+}
+
+.log-info {
+  color: #333;
 }
 </style>

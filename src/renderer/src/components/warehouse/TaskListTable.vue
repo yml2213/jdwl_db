@@ -19,16 +19,16 @@
         :key="index"
         :class="{ expanded: expandedTasks.includes(index) }"
       >
-        <td><input type="checkbox" v-model="selectedTasks" :value="index" /></td>
-        <td>{{ task.sku }}</td>
-        <td>{{ getTaskFeatureName(task) }}</td>
-        <td>{{ task.店铺 }}</td>
-        <td>{{ task.仓库 || '' }}</td>
-        <td>{{ task.创建时间 }}</td>
-        <td>
+        <td class="task-cell"><input type="checkbox" v-model="selectedTasks" :value="index" /></td>
+        <td class="task-cell">{{ task.sku }}</td>
+        <td class="task-cell">{{ getTaskFeatureName(task) }}</td>
+        <td class="task-cell">{{ task.店铺 }}</td>
+        <td class="task-cell">{{ task.仓库 || '' }}</td>
+        <td class="task-cell">{{ task.创建时间 }}</td>
+        <td class="task-cell">
           <status-tag :status="task.状态" />
         </td>
-        <td>
+        <td class="task-cell">
           <span v-if="task.状态 === '等待中'">等待执行...</span>
           <span v-else-if="task.状态 === '执行中'">处理中...</span>
           <span v-else-if="task.状态 === '暂存'" class="result-text">{{
@@ -76,7 +76,7 @@
             {{ expandedTasks.includes(index) ? '收起日志' : '查看日志' }}
           </button>
         </td>
-        <td>
+        <td class="task-cell">
           <button
             class="btn btn-small btn-primary"
             @click="executeOneTask(task, index)"
@@ -490,9 +490,11 @@ const deleteTask = (index) => {
 }
 
 .task-table th {
-  color: #909399;
+  padding: 12px 15px;
+  color: #606266;
   font-weight: 500;
-  padding-bottom: 8px;
+  background-color: #f5f7fa;
+  border-bottom: 2px solid #ebeef5;
 }
 
 .no-data {
@@ -913,5 +915,15 @@ const deleteTask = (index) => {
 
 .summary-content {
   padding: 15px;
+}
+
+.task-cell {
+  padding: 12px 15px;
+  color: #606266;
+  border-bottom: 1px solid #ebeef5;
+}
+
+tbody tr:hover {
+  background-color: #f5f7fa;
 }
 </style>
