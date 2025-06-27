@@ -579,6 +579,66 @@ export function setupRequestHandlers() {
     }
   )
 
+  ipcMain.handle('upload-status-update-file', async (event, { fileBuffer, csrfToken, cookies }) => {
+    const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsStatus.do?_r=${Math.random()}`;
+    const FormData = require('form-data');
+    const temp = require('temp').track(); // For automatic cleanup of temp files
+
+    let tempFilePath;
+    try {
+      // 1. Write buffer to a temporary file
+      const tempStream = temp.createWriteStream({ suffix: '.xls' });
+      tempFilePath = tempStream.path;
+      tempStream.end(Buffer.from(fileBuffer));
+
+      await logRequest(`[IPC] Status Update: Temporary file created at ${tempFilePath}`);
+
+      // 2. Prepare FormData
+      const formData = new FormData();
+      formData.append('csrfToken', csrfToken);
+      formData.append('updateShopGoodsStatusListFile', fs.createReadStream(tempFilePath));
+
+      // 3. Prepare headers
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+      const headers = {
+        ...formData.getHeaders(),
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+        'origin': 'https://o.jdl.com',
+        'referer': 'https://o.jdl.com/goToMainIframe.do',
+        'upgrade-insecure-requests': '1',
+        'Cookie': cookieString
+      };
+
+      // 4. Send request with axios
+      await logRequest(`[IPC] Status Update: Uploading ${tempFilePath} to ${url}`);
+      const response = await axiosInstance.post(url, formData, {
+        headers,
+        responseType: 'text' // Ensure we always get a string back
+      });
+
+      const responseText = response.data;
+      await logRequest(`[IPC] Status Update Response: ${responseText}`);
+
+      // 5. Check response
+      if (typeof responseText === 'string' && responseText.includes('成功')) {
+        return { success: true, message: responseText };
+      } else {
+        const match = typeof responseText === 'string' ? responseText.match(/id="message" value="([^"]+)"/) : null;
+        const errorMessage = match ? match[1] : `启用商品失败，服务器响应: ${responseText.trim()}`;
+        return { success: false, message: errorMessage };
+      }
+
+    } catch (error) {
+      const errorMessage = error.response?.data || error.message;
+      await logRequest(`[IPC] Status Update Upload Failed: ${errorMessage}`);
+      return { success: false, message: `文件上传失败: ${errorMessage}` };
+    } finally {
+      // Cleanup is handled automatically by temp.track()
+    }
+  });
+
   console.log('主进程IPC事件处理器设置完毕。')
 }
 

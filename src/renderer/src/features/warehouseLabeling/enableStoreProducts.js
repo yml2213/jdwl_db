@@ -127,11 +127,29 @@ export default {
     // 2. 如果有停用的商品，则启用它们
     if (disabledSkus.length > 0) {
       helpers.log(`准备启用 ${disabledSkus.length} 个商品...`);
-      const enableResult = await enableShopProducts(disabledSkus);
+      const enableResult = await enableShopProducts(disabledSkus, store);
 
       if (enableResult.success) {
-        helpers.log(`成功启用 ${disabledSkus.length} 个商品。`, 'success');
-        return { success: true, message: `成功启用 ${disabledSkus.length} 个商品。` };
+        let successMessage = `成功启用 ${disabledSkus.length} 个商品。`; // Default message
+        if (enableResult.message) {
+          try {
+            const serverResponse = JSON.parse(enableResult.message);
+            // Combine the message and data from server for a more informative response
+            if (serverResponse.resultMessage && serverResponse.resultData) {
+              successMessage = `${serverResponse.resultMessage} ${serverResponse.resultData}`;
+            } else if (serverResponse.resultMessage) {
+              successMessage = serverResponse.resultMessage;
+            } else {
+              // It's a JSON but with unknown format, just show the string.
+              successMessage = enableResult.message;
+            }
+          } catch (e) {
+            // Not a JSON string, use the raw message.
+            successMessage = enableResult.message;
+          }
+        }
+        helpers.log(successMessage, 'success');
+        return { success: true, message: successMessage };
       } else {
         throw new Error(enableResult.message || '启用商品时发生未知 API 错误');
       }

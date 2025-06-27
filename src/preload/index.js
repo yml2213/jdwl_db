@@ -38,6 +38,11 @@ const api = {
   // 直接保存文件到下载文件夹
   saveFileToDownloads: (data, fileName) => {
     return ipcRenderer.invoke('saveFileToDownloads', data, fileName)
+  },
+
+  // 通过主进程上传状态更新文件
+  uploadStatusUpdateFile: (payload) => {
+    return ipcRenderer.invoke('upload-status-update-file', payload)
   }
 }
 
