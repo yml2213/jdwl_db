@@ -694,46 +694,86 @@ export async function queryProductStatus(skuList, shopInfo, deptInfo) {
  */
 export async function enableShopProducts(disabledItems) {
   console.log('开始执行 enableShopProducts，收到的停用商品:', disabledItems)
-  const url = `${BASE_URL}/shopGoods/updateStatusByIds.do`
+
+  if (!disabledItems || disabledItems.length === 0) {
+    return { success: true, message: '没有需要启用的商品。' }
+  }
+
+  const url = `${BASE_URL}/shopGoods/importUpdateShopGoodsStatus.do?_r=${Math.random()}`
   const csrfToken = await getCsrfToken()
 
-  // 构建请求体
-  const data = qs.stringify({
-    csrfToken: csrfToken,
-    ids: disabledItems.map((item) => item.id).join(','),
-    status: '1' // 1 表示启用
-  })
+  // 1. 创建Excel数据
+  const headers = ['店铺商品编号 (CSG编码)', '商品状态(1启用, 2停用)']
+  const dataRows = disabledItems.map((item) => [item.shopGoodsNo, 1])
+  const data = [headers, ...dataRows]
 
-  console.log('发送启用商品请求:', {
-    url,
-    csrfToken: csrfToken ? '已获取' : '未获取',
-    body: data
-  })
+  // 2. 创建工作簿和工作表
+  const ws = XLSX.utils.aoa_to_sheet(data)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+
+  // 3. 将工作簿转换为Blob对象
+  const wbout = XLSX.write(wb, { bookType: 'xls', type: 'array' })
+  const blob = new Blob([wbout], { type: 'application/vnd.ms-excel' })
+
+  // -- 新增：保存文件到本地以供调试 --
+  try {
+    // 直接传递 ArrayBuffer (wbout) 到主进程，避免在渲染进程中使用 Buffer 对象
+    await window.api.saveFileToDownloads(wbout, 'generated-import.xls');
+    console.log('生成的Excel文件已保存到下载文件夹: generated-import.xls');
+  } catch (saveError) {
+    console.error('保存调试文件失败:', saveError);
+  }
+  // -- 调试代码结束 --
+
+  // 4. 创建FormData
+  const formData = new FormData()
+  formData.append('csrfToken', csrfToken)
+  formData.append(
+    'updateShopGoodsStatusListFile',
+    blob,
+    'updateShopGoodsStatusImportTemplate.xls'
+  )
+
+  console.log('发送启用商品请求: (通过上传Excel文件)')
 
   try {
+    // 5. 发送请求
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/shopGoods/view.action`,
-        'X-Requested-With': 'XMLHttpRequest'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+        'cache-control': 'max-age=0',
+        'origin': 'https://o.jdl.com',
+        'priority': 'u=0, i',
+        'referer': 'https://o.jdl.com/goToMainIframe.do',
+        'sec-ch-ua': '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'sec-fetch-dest': 'iframe',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
       },
-      body: data
+      body: formData
     })
 
     console.log('启用商品API原始响应:', response)
 
-    if (response && response.code === 200) {
-      console.log('启用商品成功:', response.message)
-      return { success: true, message: response.message || '启用成功' }
+    // 响应通常是HTML片段，需要检查其中的特定文本来判断成功或失败
+    if (typeof response === 'string' && response.includes('成功')) {
+      const match = response.match(/成功导入(?<successCount>\d+)条/)
+      const successCount = match ? match.groups.successCount : disabledItems.length
+      console.log(`启用商品成功，数量: ${successCount}`)
+      return { success: true, message: `成功启用 ${successCount} 个商品。` }
     } else {
-      console.error('启用商品失败:', response)
-      const message =
-        response?.message ||
-        response?.msg ||
-        (response?.code ? `错误码: ${response.code}` : '未知错误')
-      return { success: false, message }
+      const match = response.match(/id="message" value="([^"]+)"/)
+      const errorMessage = match ? match[1] : '启用商品失败，响应异常'
+      console.error('启用商品失败:', errorMessage)
+      return { success: false, message: errorMessage }
     }
   } catch (error) {
     console.error('调用启用商品API时发生网络错误:', error)

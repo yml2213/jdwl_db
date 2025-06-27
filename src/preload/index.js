@@ -33,6 +33,11 @@ const api = {
   // 保存Excel文件并获取路径
   saveExcelAndGetPath: (params) => {
     return ipcRenderer.invoke('save-excel-and-get-path', params)
+  },
+
+  // 直接保存文件到下载文件夹
+  saveFileToDownloads: (data, fileName) => {
+    return ipcRenderer.invoke('saveFileToDownloads', data, fileName)
   }
 }
 

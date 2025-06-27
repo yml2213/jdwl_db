@@ -123,4 +123,20 @@ export function setupFileHandlers() {
       return null
     }
   })
+
+  ipcMain.handle('saveFileToDownloads', async (event, data, fileName) => {
+    try {
+      const downloadsPath = app.getPath('downloads');
+      const filePath = path.join(downloadsPath, fileName);
+      const buffer = Buffer.from(new Uint8Array(data));
+
+      await fs.promises.writeFile(filePath, buffer);
+
+      console.log(`文件已成功保存到下载文件夹: ${filePath}`);
+      return { success: true, path: filePath };
+    } catch (error) {
+      console.error('直接保存文件到下载文件夹失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
 } 
