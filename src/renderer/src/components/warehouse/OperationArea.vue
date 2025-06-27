@@ -3,29 +3,32 @@
     <div class="form-group">
       <label class="form-label">快捷选择</label>
       <div class="select-wrapper">
-        <select v-model="props.form.quickSelect" class="form-select">
+        <select :value="quickSelect" @change="$emit('update:quickSelect', $event.target.value)" class="form-select">
           <option value="manual">手动选择</option>
           <option value="warehouseLabeling">任务流 -- 入仓打标</option>
         </select>
       </div>
     </div>
 
-    <sku-input v-model="props.form.sku" />
+    <sku-input :model-value="sku" @update:model-value="$emit('update:sku', $event)" />
 
-    <feature-options v-model="props.form.options" :is-manual-mode="props.isManualMode" />
+    <!-- Pass slot for manual options -->
+    <slot></slot>
 
     <store-selector
-      :shops="props.shopsList"
-      :loading="props.isLoadingShops"
-      :error="props.shopLoadError"
-      v-model="props.form.selectedStore"
+      :shops="shopsList"
+      :loading="isLoadingShops"
+      :error="shopLoadError"
+      :model-value="selectedStore"
+      @update:model-value="$emit('update:selectedStore', $event)"
     />
 
     <warehouse-selector
-      :warehouses="props.warehousesList"
-      :loading="props.isLoadingWarehouses"
-      :error="props.warehouseLoadError"
-      v-model="props.form.selectedWarehouse"
+      :warehouses="warehousesList"
+      :loading="isLoadingWarehouses"
+      :error="warehouseLoadError"
+      :model-value="selectedWarehouse"
+      @update:model-value="$emit('update:selectedWarehouse', $event)"
     />
 
     <div class="form-actions">
@@ -37,12 +40,14 @@
 
 <script setup>
 import SkuInput from './SkuInput.vue'
-import FeatureOptions from './feature/FeatureOptions.vue'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
 
-const props = defineProps({
-  form: Object,
+defineProps({
+  sku: String,
+  quickSelect: String,
+  selectedStore: String,
+  selectedWarehouse: String,
   isManualMode: Boolean,
   shopsList: Array,
   isLoadingShops: Boolean,
@@ -52,7 +57,13 @@ const props = defineProps({
   warehouseLoadError: String
 })
 
-const emit = defineEmits(['addTask'])
+const emit = defineEmits([
+  'addTask',
+  'update:sku',
+  'update:quickSelect',
+  'update:selectedStore',
+  'update:selectedWarehouse'
+])
 </script>
 
 <style scoped>
@@ -62,6 +73,7 @@ const emit = defineEmits(['addTask'])
   padding: 20px 20px 60px 20px;
   overflow-y: auto;
   border-right: 1px solid #e8e8e8;
+  color: #333;
 }
 
 .form-actions {

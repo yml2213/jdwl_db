@@ -466,7 +466,7 @@ export function setupRequestHandlers() {
   })
 
   // 使用 handle 模式处理从渲染器进程发送的物流属性导入请求
-  ipcMain.handle('import-logistics-properties', async (event, { skuList, departmentInfo, cookies }) => {
+  ipcMain.handle('import-logistics-properties', async (event, { skuList, departmentInfo, cookies, logisticsOptions }) => {
     try {
       // 日志回调现在不再需要，因为我们会在完成后一次性返回所有信息
       const logMessages = []
@@ -477,7 +477,13 @@ export function setupRequestHandlers() {
       }
 
       // 注意：processLogisticsProperties 可能会耗时很长
-      const result = await processLogisticsProperties(skuList, departmentInfo, cookies, logCallback)
+      const result = await processLogisticsProperties(
+        skuList,
+        departmentInfo,
+        cookies,
+        logCallback,
+        logisticsOptions
+      )
 
       // 在最终结果中附加完整的日志记录
       return { ...result, fullLog: logMessages }
@@ -829,7 +835,7 @@ async function processSingleBatch(skuList, storeInfo, department, cookies) {
 /**
  * 处理物流属性导入的核心逻辑
  */
-async function processLogisticsProperties(skuList, department, cookies, logCallback) {
+async function processLogisticsProperties(skuList, department, cookies, logCallback, logisticsOptions) {
   const BATCH_SIZE = 2000
   let processedCount = 0
   let failedCount = 0
@@ -849,7 +855,7 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
     logCallback(`正在处理第 ${batchIndex + 1}/${totalBatches} 批, 包含 ${batchSkus.length} 个SKU...`)
 
     try {
-      const result = await uploadLogisticsData(batchSkus, department, cookies)
+      const result = await uploadLogisticsData(batchSkus, department, cookies, logisticsOptions)
 
       if (result.success) {
         processedCount += batchSkus.length
@@ -893,8 +899,8 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
 /**
  * 上传单批物流属性数据
  */
-async function uploadLogisticsData(batchSkus, department, cookies) {
-  const excelBuffer = createLogisticsExcelBuffer(batchSkus, department)
+async function uploadLogisticsData(batchSkus, department, cookies, logisticsOptions) {
+  const excelBuffer = createLogisticsExcelBuffer(batchSkus, department, logisticsOptions)
   const FormData = require('form-data')
 
   // (调试功能) 保存一份到用户的下载目录
@@ -954,7 +960,14 @@ async function uploadLogisticsData(batchSkus, department, cookies) {
 /**
  * 创建物流属性Excel文件的Buffer
  */
-function createLogisticsExcelBuffer(skuList, department) {
+function createLogisticsExcelBuffer(skuList, department, logisticsOptions) {
+  const {
+    length = '120.00',
+    width = '60.00',
+    height = '6.00',
+    netWeight = ''
+  } = logisticsOptions || {}
+
   const headers = [
     '事业部商品编码',
     '事业部编码',
@@ -969,10 +982,10 @@ function createLogisticsExcelBuffer(skuList, department) {
     '', // 事业部商品编码 (为空)
     department.deptNo, // 事业部编码
     sku, // 商家商品编号
-    '120.00', // 长(mm)
-    '60.00', // 宽(mm)
-    '6.00', // 高(mm)
-    '', // 净重(kg)
+    length, // 长(mm)
+    width, // 宽(mm)
+    height, // 高(mm)
+    netWeight, // 净重(kg)
     '0.1' // 毛重(kg)
   ])
   const excelData = [headers, ...data]

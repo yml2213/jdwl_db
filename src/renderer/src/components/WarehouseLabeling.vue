@@ -81,6 +81,14 @@ const warehouseLoadError = ref('')
 const isExecuting = ref(false) // 全局执行状态
 const activeTab = ref('tasks') // 'tasks' or 'logs'
 
+// Logistics attributes state
+const logisticsOptions = ref({
+  length: '120.00',
+  width: '60.00',
+  height: '6.00',
+  netWeight: ''
+})
+
 // === COMPUTED PROPERTIES ===
 const isManualMode = computed(() => form.value.quickSelect === 'manual')
 
@@ -187,7 +195,10 @@ const handleAddTask = () => {
 
     // Raw data for execution
     skus: skus,
-    options: JSON.parse(JSON.stringify(form.value.options)),
+    options: {
+      ...JSON.parse(JSON.stringify(form.value.options)),
+      logistics: { ...logisticsOptions.value } // Add logistics options
+    },
     selectedStore: currentShopInfo.value,
     selectedWarehouse: currentWarehouseInfo.value
   }
@@ -359,19 +370,70 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   <div v-if="isLoggedIn" class="warehouse-labeling-container">
     <div class="main-content">
       <OperationArea
-        :form="form"
-        :is-manual-mode="isManualMode"
+        v-model:sku="form.sku"
+        v-model:quickSelect="form.quickSelect"
         :workflows="workflows"
+        :is-manual-mode="isManualMode"
         :shops-list="shopsList"
-        :warehouses-list="warehousesList"
+        v-model:selected-store="form.selectedStore"
         :is-loading-shops="isLoadingShops"
-        :is-loading-warehouses="isLoadingWarehouses"
         :shop-load-error="shopLoadError"
+        :warehouses-list="warehousesList"
+        v-model:selected-warehouse="form.selectedWarehouse"
+        :is-loading-warehouses="isLoadingWarehouses"
         :warehouse-load-error="warehouseLoadError"
-        :is-executing="isExecuting"
         @add-task="handleAddTask"
-        @update:form="Object.assign(form, $event)"
-      />
+      >
+        <div v-if="isManualMode" class="manual-options-grid">
+          <div class="option-item">
+            <input type="checkbox" id="importStore" v-model="form.options.importStore" />
+            <label for="importStore">导入店铺商品</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useStore" v-model="form.options.useStore" />
+            <label for="useStore">启用店铺商品</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="importProps" v-model="form.options.importProps" />
+            <label for="importProps">导入物流属性(参数)</label>
+          </div>
+          <!-- Logistics Attributes Inputs -->
+          <div v-if="form.options.importProps" class="logistics-options">
+            <div class="logistics-input-group">
+              <label for="length">长(mm):</label>
+              <input type="text" id="length" v-model="logisticsOptions.length" placeholder="例如: 120.00" />
+            </div>
+            <div class="logistics-input-group">
+              <label for="width">宽(mm):</label>
+              <input type="text" id="width" v-model="logisticsOptions.width" placeholder="例如: 60.00" />
+            </div>
+            <div class="logistics-input-group">
+              <label for="height">高(mm):</label>
+              <input type="text" id="height" v-model="logisticsOptions.height" placeholder="例如: 6.00" />
+            </div>
+            <div class="logistics-input-group">
+              <label for="netWeight">净重(kg):</label>
+              <input type="text" id="netWeight" v-model="logisticsOptions.netWeight" placeholder="例如: 0.05" />
+            </div>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useMainData" v-model="form.options.useMainData" />
+            <label for="useMainData">启用库存商品分配</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useJdEffect" v-model="form.options.useJdEffect" />
+            <label for="useJdEffect">启用京配打标生效</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="importProductNames" v-model="form.options.importProductNames" />
+            <label for="importProductNames">导入商品简称</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
+            <label for="useAddInventory">添加库存</label>
+          </div>
+        </div>
+      </OperationArea>
       <TaskArea
         :task-list="taskList"
         :logs="taskFlowState.logs.value"
@@ -409,5 +471,48 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   align-items: center;
   height: 100%;
   font-size: 1.5rem;
+}
+
+.manual-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+}
+
+.logistics-options {
+  grid-column: 1 / -1; /* Span across all columns */
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-top: 5px;
+  background-color: #f9f9f9;
+}
+
+.logistics-input-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.logistics-input-group label {
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: #555;
+}
+
+.logistics-input-group input {
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 13px;
 }
 </style>

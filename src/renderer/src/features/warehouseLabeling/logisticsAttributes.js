@@ -29,7 +29,8 @@ export default {
       const result = await window.electron.ipcRenderer.invoke('import-logistics-properties', {
         skuList: JSON.parse(JSON.stringify(skuList)),
         departmentInfo: store,
-        cookies: JSON.parse(JSON.stringify(cookies))
+        cookies: JSON.parse(JSON.stringify(cookies)),
+        logisticsOptions: context.options.logistics
       })
 
       if (result.success) {
