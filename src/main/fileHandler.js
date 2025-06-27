@@ -139,4 +139,23 @@ export function setupFileHandlers() {
       return { success: false, error: error.message };
     }
   });
+}
+
+/**
+ * 将Buffer直接保存到用户的下载文件夹
+ * @param {Buffer} buffer - 要保存的数据缓冲区
+ * @param {string} fileName - 默认保存的文件名
+ * @returns {Promise<string>} - 保存的文件路径
+ */
+export async function saveBufferToDownloads(buffer, fileName) {
+  try {
+    const downloadsPath = app.getPath('downloads');
+    const filePath = path.join(downloadsPath, fileName);
+    await fs.promises.writeFile(filePath, buffer);
+    console.log(`文件已成功保存到下载文件夹: ${filePath}`);
+    return filePath;
+  } catch (error) {
+    console.error('直接保存文件到下载文件夹失败:', error);
+    throw error; // 重新抛出错误，以便调用者可以捕获
+  }
 } 

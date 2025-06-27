@@ -5,6 +5,7 @@ import fs from 'fs'
 import XLSX from 'xlsx'
 import qs from 'qs'
 import { loadCookies } from './loginManager'
+import { saveBufferToDownloads } from './fileHandler'
 
 // 日志文件路径
 const logPath = path.join(app.getPath('userData'), 'request-logs.txt')
@@ -462,20 +463,29 @@ export function setupRequestHandlers() {
     }
   })
 
-  // 导入物流属性
-  ipcMain.on('import-logistics-properties', async (event, { skuList, departmentInfo, cookies }) => {
+  // 使用 handle 模式处理从渲染器进程发送的物流属性导入请求
+  ipcMain.handle('import-logistics-properties', async (event, { skuList, departmentInfo, cookies }) => {
     try {
+      // 日志回调现在不再需要，因为我们会在完成后一次性返回所有信息
+      const logMessages = []
       const logCallback = (message) => {
+        logMessages.push(message)
+        // 实时日志仍然可以通过一个独立的、非阻塞的事件发送
         event.sender.send('import-logistics-properties-log', message)
       }
+
+      // 注意：processLogisticsProperties 可能会耗时很长
       const result = await processLogisticsProperties(skuList, departmentInfo, cookies, logCallback)
-      event.sender.send('import-logistics-properties-reply', { success: true, ...result })
+
+      // 在最终结果中附加完整的日志记录
+      return { ...result, fullLog: logMessages }
     } catch (error) {
       console.error('[ipcMain] import-logistics-properties 处理器错误:', error)
-      event.sender.send('import-logistics-properties-reply', {
+      // 当使用 handle 时，应该通过抛出错误或返回一个包含错误信息的对象来传递失败状态
+      return {
         success: false,
-        message: error.message || '在主进程中导入物流属性时发生未知错误'
-      })
+        message: error.message || '在主进程中处理物流属性时发生未知错误'
+      }
     }
   })
 
@@ -723,6 +733,9 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
   const BATCH_SIZE = 2000
   let processedCount = 0
   let failedCount = 0
+  if (!skuList || !Array.isArray(skuList)) {
+    throw new Error('skuList 无效或不是一个数组')
+  }
   let totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
   const failedResults = []
 
@@ -780,71 +793,66 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
 /**
  * 上传单批物流属性数据
  */
-async function uploadLogisticsData(skuList, department, cookies) {
-  const excelBuffer = createLogisticsExcelBuffer(skuList, department)
+async function uploadLogisticsData(batchSkus, department, cookies) {
+  const excelBuffer = createLogisticsExcelBuffer(batchSkus, department)
+  const FormData = require('form-data')
+  const temp = require('temp').track() // 自动清理临时文件
+  const fs = require('fs')
 
-  // 将Buffer保存到临时文件以便上传
-  const tempDir = app.getPath('temp')
-  const fileName = `LogisticsImport-${Date.now()}.xls`
-  const filePath = path.join(tempDir, fileName)
-  await fs.promises.writeFile(filePath, excelBuffer)
+  // 1. 同步获取一个唯一的临时文件路径
+  const tempFilePath = temp.path({ suffix: '.xls' });
+
+  // 2. 使用 await 确保文件被完全写入
+  await fs.promises.writeFile(tempFilePath, excelBuffer);
+
+  // 3. (调试功能) 同样保存一份到用户的下载目录
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const debugFileName = `logistics-attributes-debug-${timestamp}.xls`
+    await saveBufferToDownloads(excelBuffer, debugFileName)
+  } catch (e) {
+    console.error('无法保存用于调试的Excel文件:', e)
+  }
 
   const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-  const csrfToken = await getCsrfTokenFromCookies(cookies)
 
-  const payload = {
-    filePath,
-    fileName,
-    formFields: {
-      csrfToken: csrfToken
-    },
-    fileUploadKey: 'importAttributeFile'
-  }
+  const form = new FormData()
+  form.append('importAttributeFile', fs.createReadStream(tempFilePath))
 
   const url = 'https://o.jdl.com/goods/doImportGoodsLogistics.do?_r=' + Math.random()
 
   try {
-    const responseText = await sendRequest(url, {
-      method: 'POST',
+    const response = await axiosInstance.post(url, form, {
       headers: {
-        'Cookie': cookieString,
+        ...form.getHeaders(), // form-data 会自动设置正确的 Content-Type 和 boundary
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Referer': 'https://o.jdl.com/goToMainIframe.do',
         'Origin': 'https://o.jdl.com',
+        'Cookie': cookieString,
       },
-      body: payload,
-      useFormData: true,
-      responseType: 'text' // 明确指定响应类型为文本
+      responseType: 'text'
     })
 
-    // HTML响应通常表示成功或需要进一步操作
-    if (typeof responseText === 'string') {
-      if (responseText.includes("导入成功")) {
-        const taskIdMatch = responseText.match(/任务编号:([^,]+)/)
-        const taskId = taskIdMatch ? taskIdMatch[1] : '未知'
-        return { success: true, message: `导入成功，任务ID: ${taskId}`, data: responseText }
-      }
-      if (responseText.includes("5分钟内只能导入一次")) {
-        return { success: false, message: "API限制：5分钟内只能导入一次。", data: responseText }
-      }
-      // 根据返回的HTML内容判断其他可能的失败情况
-      return { success: false, message: '导入失败，服务器返回未知HTML页面。', data: responseText }
+    const responseText = response.data
+
+    if (typeof responseText === 'string' && responseText.includes("导入成功")) {
+      const taskIdMatch = responseText.match(/任务编号:([^,]+)/)
+      const taskId = taskIdMatch ? taskIdMatch[1] : '未知'
+      return { success: true, message: `导入成功，任务ID: ${taskId}`, data: responseText }
+    }
+    if (typeof responseText === 'string' && responseText.includes("5分钟内只能导入一次")) {
+      return { success: false, message: "API限制：5分钟内只能导入一次。", data: responseText }
     }
 
-    // 假设非字符串是JSON或其他对象
-    // 如果是JSON对象并且有特定成功标识
-    if (typeof responseText === 'object' && responseText.result === true) {
-      return { success: true, message: responseText.msg || '导入成功' }
-    }
-
-    // 其他所有情况都视为失败
-    const errorMsg = responseText?.msg || responseText?.message || '未知错误'
-    return { success: false, message: errorMsg, data: responseText }
+    // 从HTML响应中提取更具体的错误信息
+    const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">\s*<p>(.*?)<\/p>\s*<\/div>/s);
+    const errorMessage = match ? match[1].trim().replace(/<br\s*\/?>/gi, ' ') : '导入失败，服务器返回未知HTML页面。';
+    return { success: false, message: errorMessage, data: responseText }
 
   } catch (error) {
     console.error('上传物流属性数据失败:', error)
     return { success: false, message: `请求发送失败: ${error.message}` }
-  } finally {
-    await fs.promises.unlink(filePath).catch(err => console.error('删除物流属性临时文件失败:', err));
   }
 }
 
@@ -853,20 +861,30 @@ async function uploadLogisticsData(skuList, department, cookies) {
  */
 function createLogisticsExcelBuffer(skuList, department) {
   const headers = [
-    '事业部商品编码', '是否保健品', '是否易碎品', '是否液体', '是否贵品', '是否温度控制', '温控类型', '最低温度', '最高温度',
-    '是否需要SN管理', '是否保质期管理', '保质期(天)', '是否批次管理', '默认收货库位', '商品类别', '存储类型', '是否可退货',
-    '是否可换货', '是否可维修', '产品尺寸(长*宽*高)mm', '包装尺寸(长*宽*高)mm', '重量(g)'
-  ];
-  const data = skuList.map(sku => [
-    sku, '否', '否', '否', '否', '否', '', '', '', '否', '是', '1095', '是',
-    '', department.deptNo.startsWith('RDC') ? '10' : '20',
-    '10', '是', '是', '是', '', '', ''
-  ]);
-  const excelData = [headers, ...data];
-  const worksheet = XLSX.utils.aoa_to_sheet(excelData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-  return XLSX.write(workbook, { bookType: 'xls', type: 'buffer' });
+    '事业部商品编码',
+    '事业部编码',
+    '商家商品编号',
+    '长(mm)',
+    '宽(mm)',
+    '高(mm)',
+    '净重(kg)',
+    '毛重(kg)'
+  ]
+  const data = skuList.map((sku) => [
+    '', // 事业部商品编码 (为空)
+    department.deptNo, // 事业部编码
+    sku, // 商家商品编号
+    '120.00', // 长(mm)
+    '60.00', // 宽(mm)
+    '60.00', // 高(mm)
+    '', // 净重(kg)
+    '100.00' // 毛重(kg)
+  ])
+  const excelData = [headers, ...data]
+  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
+  return XLSX.write(workbook, { bookType: 'xls', type: 'buffer' })
 }
 
 export { sendRequest }
