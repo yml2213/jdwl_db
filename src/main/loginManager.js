@@ -1,4 +1,4 @@
-import { BrowserWindow, session } from 'electron'
+import { BrowserWindow, session, ipcMain } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { app } from 'electron'
@@ -18,53 +18,44 @@ const mainDomain = '.jd.com'
 
 // 过滤出必要的Cookie，并且只保留主域名下的
 function filterRequiredCookies(cookies) {
-  // 首先筛选主域名下的cookie
-  const mainDomainCookies = cookies.filter((cookie) => cookie.domain === mainDomain)
+  const mainDomainCookies = cookies.filter((cookie) => cookie.domain && cookie.domain.endsWith('.jd.com'))
 
-  // 如果主域名下没有找到必要的cookie，则可能登录页面使用了其他域名
-  // 这种情况下从所有cookie中查找必要的cookie
-  if (!hasRequiredCookies(mainDomainCookies)) {
-    // 为每种必要cookie类型找到一个（首选主域名）
-    const result = []
+  const foundCookieNames = new Set()
+  const result = []
 
-    for (const requiredName of requiredCookies) {
-      // 首先查找主域名下的
-      const mainDomainCookie = mainDomainCookies.find((c) => c.name === requiredName)
-      if (mainDomainCookie) {
-        result.push(mainDomainCookie)
-        continue
-      }
-
-      // 如果主域名下没找到，则从所有cookie中找一个
-      const anyCookie = cookies.find((c) => c.name === requiredName)
-      if (anyCookie) {
-        // 修改为主域名以便统一管理
-        const modifiedCookie = { ...anyCookie, domain: mainDomain }
-        result.push(modifiedCookie)
-      }
+  // 优先从主域名cookie中查找
+  for (const cookie of mainDomainCookies) {
+    if (requiredCookies.includes(cookie.name) && !foundCookieNames.has(cookie.name)) {
+      result.push(cookie)
+      foundCookieNames.add(cookie.name)
     }
-
-    return result
   }
 
-  // 如果主域名下已经有必要的cookie，则直接过滤
-  return mainDomainCookies.filter((cookie) => requiredCookies.includes(cookie.name))
+  // 如果主域名中没找全，再从所有cookie中补充
+  if (foundCookieNames.size < requiredCookies.length) {
+    for (const cookie of cookies) {
+      if (requiredCookies.includes(cookie.name) && !foundCookieNames.has(cookie.name)) {
+        // 确保所有cookie都标记为 .jd.com 域，以便统一处理
+        const modifiedCookie = { ...cookie, domain: mainDomain }
+        result.push(modifiedCookie)
+        foundCookieNames.add(cookie.name)
+      }
+    }
+  }
+
+  return result
 }
 
-// 检查Cookie是否有效（例如检查是否过期）
+// 检查Cookie是否有效
 function isCookieValid(cookie) {
   if (!cookie) return false
-
-  // 检查是否有过期时间
   if (cookie.expirationDate) {
     const now = Math.floor(Date.now() / 1000)
-    // 如果Cookie已过期，返回false
     if (cookie.expirationDate < now) {
       console.log(`Cookie ${cookie.name} 已过期`)
       return false
     }
   }
-
   return true
 }
 
@@ -73,14 +64,9 @@ function hasRequiredCookies(cookies) {
   if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
     return false
   }
-
-  // 获取所有cookie名称
   const cookieNames = cookies.map((cookie) => cookie.name)
-
-  // 检查是否包含所有必要的cookie名称
   const hasAllNames = requiredCookies.every((name) => cookieNames.includes(name))
 
-  // 如果名称检查通过，还需要检查每个cookie是否有效
   if (hasAllNames) {
     for (const name of requiredCookies) {
       const cookie = cookies.find((c) => c.name === name)
@@ -91,31 +77,20 @@ function hasRequiredCookies(cookies) {
     }
     return true
   }
-
   return false
 }
 
-// 保存Cookies到文件 (只保存必要的Cookie)
+// 保存Cookies到文件
 async function saveCookies(cookies) {
   try {
-    // 过滤出必要的Cookie
     const requiredCookiesOnly = filterRequiredCookies(cookies)
-
     if (requiredCookiesOnly.length === 0) {
       console.warn('没有找到必要的Cookies，无法保存')
       return false
     }
-
-    // 检查是否包含所有必要的Cookie
     if (!hasRequiredCookies(requiredCookiesOnly)) {
       console.warn('缺少某些必要Cookie，可能会影响功能')
-      console.warn('已找到的Cookie:', requiredCookiesOnly.map((c) => c.name).join(', '))
-      console.warn('需要的Cookie:', requiredCookies.join(', '))
     }
-
-    console.log('保存文件路径', cookiesFilePath)
-    console.log('保存Cookie数量:', requiredCookiesOnly.length)
-
     await fs.writeFile(cookiesFilePath, JSON.stringify(requiredCookiesOnly, null, 2))
     console.log('Cookies已成功保存')
     return true
@@ -130,12 +105,9 @@ async function loadCookies() {
   try {
     const data = await fs.readFile(cookiesFilePath, 'utf8')
     const cookies = JSON.parse(data)
-    console.log('成功加载Cookie数量:', cookies.length)
     return cookies
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      console.log('Cookie文件不存在，用户未登录')
-    } else {
+    if (error.code !== 'ENOENT') {
       console.error('读取Cookies失败:', error)
     }
     return null
@@ -144,29 +116,21 @@ async function loadCookies() {
 
 // 处理登录成功
 async function handleLoginSuccess(cookies, mainWindow) {
-  console.log('登录成功，包含所有必要Cookie')
+  console.log('登录成功，可能包含所有必要Cookie，进行检查和保存...')
   await saveCookies(cookies)
-
-  // 关闭登录窗口
   if (loginWindow) {
     loginWindow.close()
     loginWindow = null
   }
-
-  // 通知渲染进程登录成功
   if (mainWindow) {
     mainWindow.webContents.send('login-successful')
   }
 }
 
-// 检查登录状态
+// 检查登录窗口的当前状态
 async function checkLoginStatus(mainWindow) {
-  if (!loginWindow) return
-
-  // 获取所有cookies
+  if (!loginWindow || loginWindow.isDestroyed()) return
   const cookies = await session.defaultSession.cookies.get({})
-
-  // 判断是否包含必要的Cookie
   if (hasRequiredCookies(cookies)) {
     await handleLoginSuccess(cookies, mainWindow)
   }
@@ -178,7 +142,6 @@ function createLoginWindow(mainWindow, icon) {
     loginWindow.focus()
     return
   }
-
   loginWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -191,30 +154,15 @@ function createLoginWindow(mainWindow, icon) {
     }
   })
 
-  // 清除所有cookies确保干净的登录状态
-  session.defaultSession.clearStorageData()
-
-  // 加载京东登录页
   loginWindow.loadURL('https://passport.jd.com/new/login.aspx?ReturnUrl=https%3A%2F%2Fo.jdl.com%2F')
+  loginWindow.on('ready-to-show', () => loginWindow.show())
 
-  loginWindow.on('ready-to-show', () => {
-    loginWindow.show()
-  })
-
-  // 监听页面加载完成事件
-  loginWindow.webContents.on('did-finish-load', () => checkLoginStatus(mainWindow))
-
-  // 监听URL变化
-  loginWindow.webContents.on('did-navigate', () => checkLoginStatus(mainWindow))
-
-  // 监听子页面跳转
-  loginWindow.webContents.on('did-frame-finish-load', () => checkLoginStatus(mainWindow))
-
-  // 监听页面重定向
-  loginWindow.webContents.on('did-redirect-navigation', () => checkLoginStatus(mainWindow))
-
-  // 每5秒检查一次登录状态（用于捕获异步加载的情况）
-  const intervalId = setInterval(() => checkLoginStatus(mainWindow), 5000)
+  const checkStatus = () => checkLoginStatus(mainWindow)
+  loginWindow.webContents.on('did-finish-load', checkStatus)
+  loginWindow.webContents.on('did-navigate', checkStatus)
+  loginWindow.webContents.on('did-frame-finish-load', checkStatus)
+  loginWindow.webContents.on('did-redirect-navigation', checkStatus)
+  const intervalId = setInterval(checkStatus, 3000)
 
   loginWindow.on('closed', () => {
     loginWindow = null
@@ -226,27 +174,23 @@ function createLoginWindow(mainWindow, icon) {
 async function clearCookies(mainWindow) {
   try {
     await fs.unlink(cookiesFilePath)
-    console.log('Cookies已清除')
-    // 通知渲染进程
-    if (mainWindow) {
-      mainWindow.webContents.send('cookies-cleared')
-    }
-    return true
+    console.log('Cookies文件已删除')
   } catch (error) {
-    console.error('清除Cookies失败:', error)
-    return false
+    if (error.code !== 'ENOENT') console.error('清除Cookies文件失败:', error)
+  }
+  await session.defaultSession.clearStorageData()
+  console.log('Session数据已清除')
+  if (mainWindow) {
+    mainWindow.webContents.send('cookies-cleared')
   }
 }
 
-// 检查是否已登录
+// 检查是否已登录 (基于本地文件)
 async function isLoggedIn() {
   try {
     const cookies = await loadCookies()
-    if (!cookies) return false
-
-    // 使用相同的必要Cookie检查逻辑
     const loginStatus = hasRequiredCookies(cookies)
-    console.log('登录状态检查结果:', loginStatus ? '已登录' : '未登录')
+    console.log('检查本地Cookie文件，登录状态:', loginStatus)
     return loginStatus
   } catch (error) {
     console.error('检查登录状态失败:', error)
@@ -254,26 +198,18 @@ async function isLoggedIn() {
   }
 }
 
-/**
- * 设置登录相关的IPC处理程序
- * 此函数被index.js调用，用于集中设置所有登录相关的IPC处理
- */
-function setupLoginHandlers() {
-  // 这里可以添加额外的登录相关IPC处理程序
-  console.log('设置登录处理程序')
-
-  // 示例：可以在这里添加其他登录相关的IPC处理程序
-  // ipcMain.on('custom-login-event', (event) => {
-  //   // 处理自定义登录事件
-  // })
+// 设置所有与登录相关的IPC事件处理程序
+function setupLoginHandlers(mainWindow) {
+  ipcMain.on('start-login', () => createLoginWindow(mainWindow))
+  ipcMain.on('logout', () => clearCookies(mainWindow))
+  ipcMain.handle('check-login-status', () => isLoggedIn())
+  ipcMain.handle('get-cookies', () => loadCookies())
 }
 
 export {
   createLoginWindow,
-  loadCookies,
   clearCookies,
   isLoggedIn,
-  saveCookies,
-  requiredCookies,
+  loadCookies,
   setupLoginHandlers
 }

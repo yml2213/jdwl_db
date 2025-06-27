@@ -141,6 +141,7 @@ const handleAddInventoryChange = (event) => {
 .inventory-label {
   font-weight: 500;
   margin-right: 8px;
+  color: #333;
 }
 
 .inventory-input {

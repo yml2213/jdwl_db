@@ -1,10 +1,10 @@
 import axios from 'axios'
-import { app, session } from 'electron'
+import { app, session, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { ipcMain } from 'electron'
 import XLSX from 'xlsx'
 import qs from 'qs'
+import { loadCookies } from './loginManager'
 
 // 日志文件路径
 const logPath = path.join(app.getPath('userData'), 'request-logs.txt')
@@ -81,108 +81,7 @@ async function sendRequest(url, options = {}) {
 
     // 处理请求体
     if (options.body) {
-      if (options.useFormData && options.body.filePath) {
-        console.log('处理文件上传请求，文件路径:', options.body.filePath)
-        const FormData = require('form-data')
-        const formData = new FormData()
-
-        // 添加其他表单字段
-        if (options.body.formFields) {
-          for (const [key, value] of Object.entries(options.body.formFields)) {
-            formData.append(key, value)
-          }
-        }
-
-        // 附加文件
-        formData.append(
-          options.body.fileUploadKey,
-          fs.createReadStream(options.body.filePath),
-          { filename: options.body.fileName }
-        )
-
-        axiosOptions.data = formData
-        axiosOptions.headers = {
-          ...axiosOptions.headers,
-          ...formData.getHeaders()
-        }
-      } else if (options.body instanceof Object && options.body._isFormData) {
-        // 对于FormData类型的请求，需要特殊处理
-        console.log('处理FormData请求')
-
-        // 创建Node.js的FormData对象
-        const FormData = require('form-data')
-        const formData = new FormData()
-
-        // 从传入的序列化FormData中获取entries数组
-        const { entries } = options.body
-        console.log('FormData entries类型:', typeof entries)
-
-        if (Array.isArray(entries)) {
-          // 处理数组格式的entries
-          console.log('处理数组格式的FormData entries, 长度:', entries.length)
-
-          for (const entry of entries) {
-            if (!Array.isArray(entry) || entry.length !== 2) {
-              console.error('无效的FormData entry格式:', entry)
-              continue
-            }
-
-            const [key, value] = entry
-
-            // 检查是否是文件对象
-            if (value && typeof value === 'object' && value._isFile) {
-              // 处理文件：从数组数据中创建buffer
-              const fileBuffer = Buffer.from(value.data)
-              formData.append(key, fileBuffer, {
-                filename: value.name,
-                contentType: value.type || 'application/octet-stream'
-              })
-              console.log(
-                `添加文件到FormData: ${key}, 文件名: ${value.name}, 大小: ${fileBuffer.length} bytes`
-              )
-            } else {
-              // 处理普通字段
-              formData.append(key, value)
-              console.log(`添加字段到FormData: ${key}, 值: ${value}`)
-            }
-          }
-        } else if (typeof entries === 'object') {
-          // 处理对象格式的entries
-          console.log('处理对象格式的FormData entries')
-
-          for (const [key, value] of Object.entries(entries)) {
-            // 检查是否是文件对象
-            if (value && typeof value === 'object' && value._isFile) {
-              // 处理文件：从数组数据中创建buffer
-              const fileBuffer = Buffer.from(value.data)
-              formData.append(key, fileBuffer, {
-                filename: value.name,
-                contentType: value.type || 'application/octet-stream'
-              })
-              console.log(
-                `添加文件到FormData: ${key}, 文件名: ${value.name}, 大小: ${fileBuffer.length} bytes`
-              )
-            } else {
-              // 处理普通字段
-              formData.append(key, value)
-              console.log(`添加字段到FormData: ${key}, 值: ${value}`)
-            }
-          }
-        } else {
-          throw new Error('不支持的FormData格式')
-        }
-
-        // 使用FormData的getHeaders方法获取正确的headers
-        const formHeaders = formData.getHeaders()
-        axiosOptions.headers = {
-          ...axiosOptions.headers,
-          ...formHeaders
-        }
-
-        // 设置数据为FormData
-        axiosOptions.data = formData
-        console.log('FormData已准备好发送，headers:', formHeaders)
-      } else if (typeof options.body === 'string') {
+      if (typeof options.body === 'string') {
         try {
           // 尝试解析JSON字符串
           axiosOptions.data = JSON.parse(options.body)
@@ -255,16 +154,71 @@ export function setupRequestHandlers() {
   console.log('设置主进程IPC事件处理器...')
 
   ipcMain.handle('sendRequest', async (event, url, options) => {
-    try {
-      const result = await sendRequest(url, options)
-      return result
-    } catch (error) {
-      console.error(`[ipcMain] sendRequest 处理器错误:`, error)
-      // 当使用 invoke/handle 时，应该重新抛出错误，
-      // Electron 会将其封装为 Promise rejection
-      throw error
-    }
+    return await sendRequest(url, options)
   })
+
+  ipcMain.handle(
+    'upload-store-products',
+    async (event, { fileBuffer, shopInfo, departmentInfo }) => {
+      const { spShopNo, deptId } = shopInfo
+      const url = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
+      const FormData = require('form-data')
+      const MAX_RETRIES = 3
+      let attempt = 0
+
+      while (attempt < MAX_RETRIES) {
+        attempt++
+        try {
+          await logRequest(`[IPC] 上传店铺商品文件... (尝试 ${attempt}/${MAX_RETRIES})`)
+
+          const cookies = await loadCookies()
+          if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
+
+          const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+          const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+          if (!csrfToken) throw new Error('在加载的Cookies中未找到csrfToken')
+
+          const formData = new FormData()
+          formData.append('csrfToken', csrfToken)
+          formData.append(
+            'shopGoodsPopGoodsListFile',
+            Buffer.from(fileBuffer),
+            'PopGoodsImportTemplate.xls'
+          )
+
+          const response = await axiosInstance.post(url, formData, {
+            headers: {
+              ...formData.getHeaders(),
+              Cookie: cookieString,
+              Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${spShopNo}&deptId=${deptId}`
+            }
+          })
+
+          const responseText = response.data
+          await logRequest(`[IPC] 店铺商品导入响应: ${responseText}`)
+
+          if (typeof responseText === 'string' && responseText.includes('频繁操作')) {
+            throw new Error('API_RATE_LIMIT')
+          }
+
+          return { success: true, message: `导入完成: ${responseText}` }
+
+        } catch (error) {
+          await logRequest(`[IPC] 上传失败 (尝试 ${attempt}): ${error.message}`)
+          if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {
+            await logRequest(`[IPC] 触发频率限制，将在65秒后重试...`)
+            await new Promise(resolve => setTimeout(resolve, 65000));
+            continue;
+          }
+          if (attempt >= MAX_RETRIES) {
+            return { success: false, message: `文件上传在达到最大重试次数后失败: ${error.message}` }
+          }
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      }
+      return { success: false, message: '文件上传未知错误' };
+    }
+  )
 
   // 使用 on/send 模式替换 handle/invoke，以绕过潜在的克隆错误
   ipcMain.on('import-store-products', async (event, payload) => {
@@ -509,16 +463,12 @@ export function setupRequestHandlers() {
   })
 
   // 导入物流属性
-  ipcMain.on('import-logistics-properties', async (event, payload) => {
-    const { skuList, departmentInfo, cookies } = payload
+  ipcMain.on('import-logistics-properties', async (event, { skuList, departmentInfo, cookies }) => {
     try {
-      console.log('接收到 import-logistics-properties 请求:', {
-        skuCount: skuList.length
-      })
-      const result = await processLogisticsProperties(skuList, departmentInfo, cookies, (log) => {
-        // 将子函数的日志发送回渲染器进程
-        event.sender.send('import-logistics-properties-log', log)
-      })
+      const logCallback = (message) => {
+        event.sender.send('import-logistics-properties-log', message)
+      }
+      const result = await processLogisticsProperties(skuList, departmentInfo, cookies, logCallback)
       event.sender.send('import-logistics-properties-reply', { success: true, ...result })
     } catch (error) {
       console.error('[ipcMain] import-logistics-properties 处理器错误:', error)
@@ -528,6 +478,106 @@ export function setupRequestHandlers() {
       })
     }
   })
+
+  ipcMain.handle(
+    'upload-jp-search-data',
+    async (event, { fileBuffer }) => {
+      const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsJpSearch.do?_r=${Math.random()}`
+      const FormData = require('form-data')
+
+      try {
+        await logRequest(`[IPC] 上传京配打标文件...`)
+
+        const cookies = await loadCookies()
+        if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
+
+        const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+        const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+        if (!csrfToken) throw new Error('在加载的Cookies中未找到csrfToken')
+
+        const formData = new FormData()
+        formData.append('csrfToken', csrfToken)
+        formData.append(
+          'updateShopGoodsJpSearchListFile',
+          Buffer.from(fileBuffer),
+          'jp-search-upload.xlsx'
+        )
+
+        const response = await axiosInstance.post(url, formData, {
+          headers: {
+            ...formData.getHeaders(),
+            Cookie: cookieString,
+            Referer: 'https://o.jdl.com/goToMainIframe.do'
+          }
+        })
+
+        const responseText = response.data
+        await logRequest(`[IPC] 京配打标导入响应: ${responseText}`)
+
+        if (typeof responseText === 'string' && responseText.includes('导入成功')) {
+          return { success: true, message: '京配打标文件上传成功' }
+        } else {
+          // 尝试从HTML响应中提取更具体的错误信息
+          const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">(.*?)<\/div>/)
+          const errorMessage = match ? match[1].trim() : '京配打标文件上传失败'
+          return { success: false, message: errorMessage }
+        }
+      } catch (error) {
+        await logRequest(`[IPC] 京配打标上传失败: ${error.message}`)
+        return { success: false, message: `上传失败: ${error.message}` }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'upload-goods-stock-config',
+    async (event, { fileBuffer }) => {
+      const url = `https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=${Math.random()}`
+      const FormData = require('form-data')
+
+      try {
+        await logRequest(`[IPC] 上传库存商品分配文件...`)
+
+        const cookies = await loadCookies()
+        if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
+
+        const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+        const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+        // 此接口似乎不需要csrfToken，但以防万一还是加上
+
+        const formData = new FormData()
+        if (csrfToken) formData.append('csrfToken', csrfToken)
+        formData.append(
+          'goodsStockConfigExcelFile',
+          Buffer.from(fileBuffer),
+          'goods-stock-config.xlsx'
+        )
+
+        const response = await axiosInstance.post(url, formData, {
+          headers: {
+            ...formData.getHeaders(),
+            Cookie: cookieString,
+            Referer: 'https://o.jdl.com/goodsStockConfig/showImport.do' // 添加合适的Referer
+          }
+        })
+
+        const responseText = response.data
+        await logRequest(`[IPC] 库存分配导入响应: ${responseText}`)
+
+        if (typeof responseText === 'string' && responseText.includes('导入成功')) {
+          return { success: true, message: responseText }
+        } else {
+          // 尝试从HTML响应中提取更具体的错误信息
+          const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">(.*?)<\/div>/)
+          const errorMessage = match ? match[1].trim() : '库存商品分配文件上传失败'
+          return { success: false, message: errorMessage }
+        }
+      } catch (error) {
+        await logRequest(`[IPC] 库存分配上传失败: ${error.message}`)
+        return { success: false, message: `上传失败: ${error.message}` }
+      }
+    }
+  )
 
   console.log('主进程IPC事件处理器设置完毕。')
 }

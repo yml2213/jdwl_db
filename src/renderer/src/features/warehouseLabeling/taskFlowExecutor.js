@@ -6,70 +6,54 @@ import {
     wait
 } from './utils/taskUtils'
 import importStoreProductsFeature from './importStoreProducts'
+import logisticsAttributesFeature from './logisticsAttributes'
 import addInventoryFeature from './addInventory'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
-import enableStoreProductsFeature from './enableStoreProducts'
 
 // 定义任务流的每个步骤
-const taskFlowSteps = [{
-    name: '导入店铺商品',
-    option: 'importStore',
-    executor: importStoreProductsFeature
-},
-{
-    name: '导入物流属性',
-    shouldExecute: (context) => context.formOptions.importProps,
-    execute: async (context, log, updateProgress) => {
-        const logisticsAttributesModule = await import('./logisticsAttributes.js')
-        const result = await logisticsAttributesModule.default.execute(context, { log, updateProgress })
-        log(`[导入物流属性] 步骤完成: ${result.message}`)
-        return result
+const taskFlowSteps = [
+    {
+        name: '导入店铺商品',
+        shouldExecute: (context) => context.options.importStore,
+        execute: (context, helpers) => importStoreProductsFeature.execute(context, helpers)
+    },
+    {
+        name: '等待后台任务处理',
+        shouldExecute: (context) => context.options.importStore,
+        execute: async (context, { log, isRunning }) => {
+            log('等待15秒，以便服务器处理后台任务...', 'info')
+            for (let i = 0; i < 15; i++) {
+                if (!isRunning.value) {
+                    log('任务被取消，停止等待。', 'warning')
+                    return { success: false, message: '任务已取消' }
+                }
+                await wait(1000)
+            }
+            return { success: true, message: '等待完成' }
+        }
+    },
+    {
+        name: '导入物流属性',
+        shouldExecute: (context) => context.options.importProps,
+        execute: (context, helpers) => logisticsAttributesFeature.execute(context, helpers)
+    },
+    {
+        name: '添加库存',
+        shouldExecute: (context) => context.options.useAddInventory,
+        execute: (context, helpers) => addInventoryFeature.execute(context, helpers)
+    },
+    {
+        name: '启用库存商品分配',
+        shouldExecute: (context) => context.options.useWarehouse,
+        execute: (context, helpers) => importGoodsStockConfigFeature.execute(context, helpers)
+    },
+    {
+        name: '启用京配打标生效',
+        shouldExecute: (context) => context.options.useJdEffect,
+        execute: (context, helpers) => enableJpSearchFeature.execute(context, helpers)
     }
-},
-{
-    name: '添加库存',
-    option: 'useAddInventory',
-    executor: addInventoryFeature
-},
-{
-    name: '启用库存商品分配',
-    option: 'useWarehouse',
-    executor: importGoodsStockConfigFeature
-},
-{
-    name: '启用京配打标生效',
-    option: 'useJdEffect',
-    executor: enableJpSearchFeature
-}
 ]
-
-async function executeStep(step, context, helpers, inventoryAmount) {
-    // 适配器模式：根据步骤决定调用新接口还是旧接口
-    if (step.executor.name === 'importStore') {
-        // importStore 已经重构，直接调用新接口
-        return await step.executor.execute(context, helpers)
-    }
-
-    // 对于尚未重构的模块，继续使用模拟的旧接口
-    const mockTask = {
-        店铺信息: context.shopInfo,
-        事业部信息: context.departmentInfo,
-        选项: context.options
-    }
-
-    let result
-    if (step.option === 'useAddInventory') {
-        result = await step.executor.execute(context.skuList, mockTask, null, inventoryAmount)
-    } else {
-        result = await step.executor.execute(context.skuList, mockTask)
-    }
-
-    if (!result.success) {
-        throw new Error(result.message)
-    }
-    return result
-}
 
 export default {
     name: 'warehouseLabelingFlow',
@@ -77,34 +61,24 @@ export default {
 
     async execute(context, helpers) {
         const { log, isRunning } = helpers;
-        const { options, skuList } = context;
-        const inventoryAmount = options.inventoryAmount || 1000;
 
-        log(`入仓打标流程开始...`, 'info');
+        log('入仓打标流程开始...', 'info');
 
         for (const step of taskFlowSteps) {
             if (!isRunning.value) {
-                log(`任务被取消，停止执行。`, 'warning');
-                return;
+                log('任务被取消，停止执行。', 'warning');
+                return { success: false, message: '任务已取消' };
             }
 
-            if (options && options[step.option]) {
+            if (step.shouldExecute(context)) {
                 log(`--- 开始执行步骤: ${step.name} ---`, 'info');
-
                 try {
-                    await executeStep(step, context, helpers, inventoryAmount);
-                    log(`步骤 [${step.name}] 执行成功。`, 'success');
-
-                    if (step.option === 'importStore') {
-                        log('等待15秒，以便服务器处理后台任务...', 'info');
-                        for (let i = 0; i < 15; i++) {
-                            if (!isRunning.value) {
-                                log(`任务被取消，停止等待。`, 'warning');
-                                return;
-                            }
-                            await wait(1000);
-                        }
+                    const result = await step.execute(context, helpers);
+                    if (result && result.success === false) {
+                        // 如果步骤执行返回明确的失败，则中断流程
+                        throw new Error(result.message || `步骤 [${step.name}] 执行失败，但未提供明确错误信息。`);
                     }
+                    log(`步骤 [${step.name}] 执行成功。`, 'success');
                 } catch (error) {
                     const errorMessage = `步骤 [${step.name}] 发生错误: ${error.message}`;
                     log(errorMessage, 'error');

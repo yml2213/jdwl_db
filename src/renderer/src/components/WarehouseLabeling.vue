@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   saveSelectedShop,
   getSelectedShop,
@@ -137,15 +137,21 @@ const handleAddTask = () => {
     id: `task-${Date.now()}`,
     sku: `任务 (${skuList.length}个SKU)`,
     skuList,
+    shopName: currentShopInfo.value.shopName,
+    warehouseName: currentWarehouseInfo.value?.warehouseName || '未指定',
+    creationTime: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    status: '等待中',
+    result: '',
+    featureName: '任务流 - 入仓打标',
     店铺: currentShopInfo.value.shopName,
     仓库: currentWarehouseInfo.value?.warehouseName || '未指定',
     创建时间: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     状态: '等待中',
     结果: '',
     功能: '任务流 - 入仓打标',
-    选项: JSON.parse(JSON.stringify(form.value.options)),
-    店铺信息: currentShopInfo.value,
-    仓库信息: currentWarehouseInfo.value,
+    options: JSON.parse(JSON.stringify(form.value.options)),
+    shopInfo: currentShopInfo.value,
+    warehouseInfo: currentWarehouseInfo.value,
     context: {
         skuList,
         shopInfo: currentShopInfo.value,

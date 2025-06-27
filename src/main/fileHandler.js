@@ -106,6 +106,10 @@ export async function saveFile(params) {
 }
 
 export function setupFileHandlers() {
+  ipcMain.handle('saveFile', async (event, params) => {
+    return await saveFile(params)
+  })
+
   ipcMain.handle('save-excel-and-get-path', async (event, { base64Data, fileName }) => {
     try {
       const tempDir = app.getPath('temp')
