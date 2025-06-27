@@ -41,9 +41,17 @@ const api = {
   },
 
   // 通过主进程上传状态更新文件
-  uploadStatusUpdateFile: (payload) => {
-    return ipcRenderer.invoke('upload-status-update-file', payload)
-  }
+  uploadStatusUpdateFile: (options) => ipcRenderer.invoke('upload-status-update-file', options),
+
+  // 获取商店商品列表
+  getShopGoodsList: (options) => ipcRenderer.invoke('get-shop-goods-list', options),
+
+  // 导入物流属性
+  importLogisticsProperties: (options) =>
+    ipcRenderer.invoke('import-logistics-properties', options),
+
+  // 添加库存
+  addInventory: (context) => ipcRenderer.invoke('add-inventory', context)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

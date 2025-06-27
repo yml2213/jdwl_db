@@ -649,6 +649,64 @@ export function setupRequestHandlers() {
     }
   });
 
+  ipcMain.handle('add-inventory', async (event, context) => {
+    const { goodsList, store, warehouse, vendor, cookies, csrfToken } = context
+
+    try {
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+      const goodsJson = JSON.stringify(goodsList)
+      let supplierIdValue = vendor.id
+      if (typeof supplierIdValue === 'string' && /^[A-Za-z]+/.test(supplierIdValue)) {
+        supplierIdValue = supplierIdValue.replace(/^[A-Za-z]+/, '')
+      }
+
+      const formData = new FormData()
+      formData.append('goodsJson', goodsJson)
+      formData.append('deptId', store.deptId)
+      formData.append('deptName', store.deptName)
+      formData.append('warehouseId', warehouse.id)
+      formData.append('warehouseName', warehouse.warehouseName)
+      formData.append('supplierId', supplierIdValue)
+      formData.append('supplierName', vendor.name)
+      formData.append('poType', '01')
+      formData.append('businessType', '1')
+
+      const response = await fetch('https://jdi.jd.com/stock/initialization/import.action', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Cookie: cookieString
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`网络响应错误: ${response.statusText}`)
+      }
+
+      const responseData = await response.json()
+
+      if (responseData.resultCode === 1 || responseData.resultCode === '1') {
+        return {
+          success: true,
+          message: `库存添加成功，采购单号: ${responseData.poNo}`,
+          poNumber: responseData.poNo,
+          processedCount: goodsList.length,
+          failedCount: 0
+        }
+      } else {
+        return {
+          success: false,
+          message: `库存添加失败: ${responseData.message || '未知错误'}`,
+          processedCount: 0,
+          failedCount: goodsList.length
+        }
+      }
+    } catch (error) {
+      console.error('主进程[add-inventory]处理失败:', error)
+      return { success: false, message: `主进程错误: ${error.message}` }
+    }
+  })
+
   console.log('主进程IPC事件处理器设置完毕。')
 }
 

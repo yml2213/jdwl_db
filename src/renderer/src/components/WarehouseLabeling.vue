@@ -207,11 +207,13 @@ const handleExecuteTask = async (taskToRun) => {
   task.status = '运行中'
   try {
     const departmentInfo = getSelectedDepartment()
+    const vendorInfo = getSelectedVendor()
     const context = {
       skus: task.skus,
       options: task.options,
       store: { ...task.selectedStore, ...departmentInfo },
       warehouse: task.selectedWarehouse,
+      vendor: vendorInfo,
       taskName: task.featureName
     }
     
@@ -245,11 +247,13 @@ const runAllTasks = async () => {
     task.status = '运行中'
     try {
       const departmentInfo = getSelectedDepartment()
+      const vendorInfo = getSelectedVendor()
       const context = {
         skus: task.skus,
         options: task.options,
         store: { ...task.selectedStore, ...departmentInfo },
         warehouse: task.selectedWarehouse,
+        vendor: vendorInfo,
         taskName: task.featureName
       }
       

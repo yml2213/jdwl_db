@@ -1,6 +1,5 @@
 import { getAllCookies } from '../../utils/cookieHelper'
 import { getCMGBySkuList } from '../../services/apiService'
-import { getSelectedDepartment, getSelectedWarehouse, getSelectedVendor } from '../../utils/storageHelper'
 import { wait } from './utils/taskUtils'
 
 /**
@@ -22,81 +21,29 @@ function _updateTask(task, status, messages = [], logs = null) {
 /**
  * 上传库存数据
  * @param {Array} goodsList - 商品列表数据
+ * @param {object} context - 上下文对象
  * @param {object} helpers - 辅助函数
  * @returns {Promise<Object>} 上传结果
  */
-async function _uploadInventoryData(goodsList, helpers) {
+async function _uploadInventoryData(goodsList, context, helpers) {
   const { log } = helpers
   try {
-    log(`处理批次商品数量: ${goodsList.length}`, 'debug')
+    log(`通过IPC调用主进程添加库存，商品数量: ${goodsList.length}`, 'debug')
 
-    const deptInfo = getSelectedDepartment()
-    if (!deptInfo) throw new Error('未选择事业部，无法添加库存')
-    log(`事业部信息: ${deptInfo.deptName}`, 'debug')
+    // 将 goodsList 添加到 context 中，以便传递给主进程
+    const newContext = { ...context, goodsList }
 
-    const warehouseInfo = getSelectedWarehouse()
-    if (!warehouseInfo) throw new Error('未选择仓库，无法添加库存')
-    log(`仓库信息: ${warehouseInfo.warehouseName}`, 'debug')
+    // 通过IPC调用主进程执行上传
+    const result = await window.api.addInventory(newContext)
 
-    const vendorInfo = getSelectedVendor()
-    if (!vendorInfo) throw new Error('未选择供应商，无法添加库存')
-    log(`供应商信息: ${vendorInfo.supplierName}`, 'debug')
+    log('主进程添加库存操作结果:', 'debug', result)
 
-    const cookies = await getAllCookies()
-    const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
-    log(`获取到cookies: ${cookieString ? '已获取' : '未获取'}`, 'debug')
-
-    const goodsJson = JSON.stringify(goodsList)
-    log(`商品JSON长度: ${goodsJson.length}`, 'debug')
-
-    let supplierIdValue = vendorInfo.id
-    if (typeof supplierIdValue === 'string' && supplierIdValue.match(/^[A-Za-z]+\d+$/)) {
-      supplierIdValue = supplierIdValue.replace(/^[A-Za-z]+/, '')
-    }
-    log(`处理后的供应商ID: ${supplierIdValue}`, 'debug')
-
-    const formData = new FormData()
-    formData.append('goodsJson', goodsJson)
-    formData.append('deptId', deptInfo.deptId)
-    formData.append('deptName', deptInfo.deptName)
-    formData.append('warehouseId', warehouseInfo.id)
-    formData.append('warehouseName', warehouseInfo.warehouseName)
-    formData.append('supplierId', supplierIdValue)
-    formData.append('supplierName', vendorInfo.name)
-    formData.append('poType', '01')
-    formData.append('businessType', '1')
-    log('FormData创建完成', 'debug')
-
-    const response = await fetch('https://jdi.jd.com/stock/initialization/import.action', {
-      method: 'POST',
-      body: formData,
-      headers: { Cookie: cookieString }
-    })
-
-    if (!response.ok) throw new Error(`网络响应错误: ${response.statusText}`)
-
-    const responseData = await response.json()
-    log(`库存导入接口响应: ${JSON.stringify(responseData)}`, 'debug')
-
-    if (responseData.resultCode === 1 || responseData.resultCode === '1') {
-      return {
-        success: true,
-        message: `库存添加成功，采购单号: ${responseData.poNo}`,
-        poNumber: responseData.poNo,
-        processedCount: goodsList.length,
-        failedCount: 0
-      }
-    } else {
-      return {
-        success: false,
-        message: `库存添加失败: ${responseData.message || '未知错误'}`,
-        processedCount: 0,
-        failedCount: goodsList.length
-      }
-    }
+    // 返回主进程的处理结果
+    return result
   } catch (error) {
-    log(`上传库存数据出错: ${error.message}`, 'error')
-    throw error
+    console.error('调用主进程添加库存失败:', error)
+    log(`调用主进程添加库存失败: ${error.message}`, 'error')
+    return { success: false, message: `客户端错误: ${error.message}` }
   }
 }
 
@@ -108,7 +55,7 @@ async function _uploadInventoryData(goodsList, helpers) {
  * @returns {Promise<object>} 处理结果
  */
 async function _processBatch(context, inventoryAmount, helpers) {
-  const { skuList, task } = context
+  const { skus: skuList, task, store, warehouse } = context
   const { log } = helpers
   const result = {
     success: false,
@@ -126,11 +73,11 @@ async function _processBatch(context, inventoryAmount, helpers) {
     result.importLogs.push({ type: 'batch-start', message: startMessage, time: startTime.toLocaleString() })
     _updateTask(task, '处理中', [startMessage])
 
-    const goodsList = await getCMGBySkuList(skuList, inventoryAmount)
+    const goodsList = await getCMGBySkuList(skuList, inventoryAmount, store, warehouse)
     if (!goodsList || goodsList.length === 0) throw new Error('获取商品列表失败')
     log(`获取到的商品列表数量: ${goodsList.length}`, 'debug')
 
-    const uploadResult = await _uploadInventoryData(goodsList, helpers)
+    const uploadResult = await _uploadInventoryData(goodsList, context, helpers)
     const endTime = new Date()
 
     result.success = uploadResult.success
@@ -165,13 +112,18 @@ async function _processBatch(context, inventoryAmount, helpers) {
 
 /**
  * 执行添加库存功能
- * @param {object} context - { skuList, task, options }
+ * @param {object} context - { skus: skuList, task, options }
  * @param {object} helpers - { log, updateProgress, createBatchTask }
  * @returns {Promise<object>} 执行结果
  */
 async function addInventoryExecute(context, helpers) {
-  const { skuList, options } = context
+  const { skus: skuList, options } = context
   const { log } = helpers || {}
+
+  if (!skuList || !Array.isArray(skuList)) {
+    throw new Error('SKU列表无效或缺失。')
+  }
+
   const inventoryAmount = options?.inventoryAmount || 1000
   const BATCH_SIZE = 500
   const totalBatches = Math.ceil(skuList.length / BATCH_SIZE)

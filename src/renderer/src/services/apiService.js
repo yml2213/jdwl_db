@@ -1088,9 +1088,11 @@ export async function getCSGList_cancelJpSearch(skuList) {
 /**
  * 根据SKU列表获取CMG编号列表
  * @param {Array<string>} skuList - SKU列表
+ * @param {number} [applyInstoreQty=1000] - 申请入库数量
+ * @param {object} store - 店铺及事业部信息
  * @returns {Promise<Array>} 包含CMG和商品信息的数组
  */
-export async function getCMGBySkuList(skuList, applyInstoreQty = 1000) {
+export async function getCMGBySkuList(skuList, applyInstoreQty = 1000, store) {
   if (!skuList || skuList.length === 0) {
     return []
   }
@@ -1154,10 +1156,9 @@ export async function getCMGBySkuList(skuList, applyInstoreQty = 1000) {
         { name: 'iSortingCols', value: 1 }
       ]
 
-      // 从事业部信息中获取sellerId和sellerNo
-      const deptInfo = getSelectedDepartment()
-      if (!deptInfo) {
-        throw new Error('未选择事业部，无法获取CMG编号')
+      // 从传入的store对象获取信息
+      if (!store) {
+        throw new Error('未提供店铺或事业部信息，无法获取CMG编号')
       }
 
       // 构建查询参数
@@ -1165,11 +1166,11 @@ export async function getCMGBySkuList(skuList, applyInstoreQty = 1000) {
         csrfToken: csrfToken,
         ids: '',
         shopId: '',
-        sellerId: deptInfo.sellerId || '',
-        deptId: deptInfo.id || '',
-        sellerNo: deptInfo.sellerNo || '',
-        deptNo: deptInfo.deptNo || '',
-        shopNo: '',
+        sellerId: store.sellerId || '',
+        deptId: store.id || '',
+        sellerNo: store.sellerNo || '',
+        deptNo: store.deptNo || '',
+        shopNo: store.shopNo || '',
         spSource: '',
         shopGoodsName: '',
         isCombination: '',
