@@ -12,6 +12,9 @@ export default {
    */
   async execute(context, helpers) {
     const { skus, store } = context
+    console.log(`===== 前端执行启用店铺商品功能 =====`)
+    console.log('store', store)
+    console.log('skus', skus)
 
     helpers.log(`开始执行 [${this.label}] 功能...`)
 
@@ -31,9 +34,10 @@ export default {
     // 构建后端任务所需的payload
     const payload = {
       skus,
-      store: { id: store.id, name: store.shopName },
-      department: { id: store.deptId, name: store.deptName },
-      vendor: { id: store.sellerId, name: store.sellerName || store.sellerNo }
+      store: {
+        name: store.shopName,
+        shopNo: store.shopNo
+      }
     }
 
     try {

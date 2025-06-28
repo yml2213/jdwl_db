@@ -190,21 +190,17 @@ export async function fetchCSGList(skus, sessionId) {
  */
 async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
-  const { store, department, departmentInfo } = sessionData
-
-  console.log('sessionData', sessionData)
-  console.log('store', store)
-  console.log('department', department)
-  console.log('departmentInfo', departmentInfo)
+  const { departmentInfo, store } = sessionData
 
   const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
 
-  const aoDataObj = [
-    { name: 'sEcho', value: 2 },
+  // 构建aoData对象，更加清晰和可维护
+  const aoDataArray = [
+    { name: 'sEcho', value: 22 },
     { name: 'iColumns', value: 14 },
     { name: 'sColumns', value: ',,,,,,,,,,,,,' },
-    { name: 'iDisplayStart', value: start },
-    { name: 'iDisplayLength', value: length },
+    { name: 'iDisplayStart', value: 0 },
+    { name: 'iDisplayLength', value: 100 },
     { name: 'mDataProp_0', value: 0 },
     { name: 'bSortable_0', value: false },
     { name: 'mDataProp_1', value: 1 },
@@ -241,12 +237,12 @@ async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
   const data_obj = {
     csrfToken: csrfToken,
     ids: '',
-    shopId: store?.id || '',
-    sellerId: departmentInfo?.sellerId || '', // 20000021459
-    deptId: departmentInfo?.id || '', // 22010232593780
-    sellerNo: department?.sellerNo || '', // CCP0020000021459
-    deptNo: departmentInfo?.deptNo || '', // CBU22010232593780
-    shopNo: 'CSP' + store?.id || '', // CSP0020000352400
+    shopId: store?.shopNo?.replace(/^CSP00/, '') || '', // 从CSP0020000352400格式中提取店铺ID
+    sellerId: departmentInfo?.sellerId || '',
+    deptId: departmentInfo?.id || '',
+    sellerNo: departmentInfo?.sellerNo || '',
+    deptNo: departmentInfo?.deptNo || '',
+    shopNo: store?.shopNo || '',
     spSource: '',
     shopGoodsName: '',
     isCombination: '',
@@ -259,16 +255,14 @@ async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
     isvGoodsNos: '',
     status: '2', // 2代表"停用"状态
     originSend: '',
-    aoData: JSON.stringify(aoDataObj)
+    aoData: JSON.stringify(aoDataArray)
   }
-  console.log('data_obj', JSON.stringify(data_obj, null, 2))
 
   const data = qs.stringify(data_obj)
 
   console.log(
     `[jdApiService] 查询停用商品, SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
   )
-  console.log('data', JSON.stringify(data, null, 2))
 
   return await requestJdApi({
     method: 'POST',
@@ -308,7 +302,6 @@ export async function getDisabledProducts(skus, sessionData) {
 
     while (hasMore) {
       const response = await fetchProductStatusPage(skuBatch, sessionData, start, PAGE_SIZE)
-      console.log('response', response)
 
       if (response && response.aaData) {
         if (totalRecords === null) {

@@ -10,14 +10,14 @@ import { getDisabledProducts, enableProductsByCSG } from '../services/jdApiServi
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, sessionData) {
-  const { skus, store, department, vendor } = context
+  const { skus, store } = context
 
   // 1. 参数校验
   if (!skus || skus.length === 0) {
     return { success: true, message: 'SKU列表为空，无需操作。' }
   }
-  if (!store || !department || !vendor) {
-    throw new Error('缺少有效的店铺、部门或供应商信息。')
+  if (!store) {
+    throw new Error('缺少有效的店铺信息。')
   }
   if (!sessionData || !sessionData.sessionId) {
     throw new Error('缺少会话ID')
@@ -27,7 +27,7 @@ async function execute(context, sessionData) {
 
   try {
     // 准备调用API所需的数据，合并上下文和会话信息
-    const dataForApi = { ...sessionData, store, department, vendor }
+    const dataForApi = { ...sessionData, store }
 
     // 2. 查询停用的商品
     console.log(`[Task: enableStoreProducts] 正在查询 ${skus.length} 个SKU的状态...`)
@@ -38,7 +38,7 @@ async function execute(context, sessionData) {
       return { success: true, message: '所有商品状态均正常，无需启用。' }
     }
 
-    // 3. 提取CSG编号并启用商品
+    // 3. 提取CSG编号并启用商品 "shopGoodsNo": "CSG4422715048753",
     const csgNumbers = disabledProducts.map((p) => p.shopGoodsNo)
     console.log(`[Task: enableStoreProducts] 发现 ${csgNumbers.length} 个停用商品，准备启用...`)
 
