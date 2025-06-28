@@ -250,3 +250,17 @@ export function clearSelections() {
   localStorage.removeItem(STORAGE_KEYS.MANUAL_OPTIONS)
   localStorage.removeItem(STORAGE_KEYS.LAST_SKU_INPUT)
 }
+
+// 通用函数
+export const getLocalStorage = (key) => {
+  const item = localStorage.getItem(key)
+  return item ? JSON.parse(item) : null
+}
+
+export const setLocalStorage = (key, value) => {
+  if (value === null || value === undefined) {
+    localStorage.removeItem(key)
+  } else {
+    localStorage.setItem(key, JSON.stringify(value))
+  }
+}

@@ -117,13 +117,15 @@ async function loadCookies() {
 // 处理登录成功
 async function handleLoginSuccess(cookies, mainWindow) {
   console.log('登录成功，可能包含所有必要Cookie，进行检查和保存...')
-  await saveCookies(cookies)
+  const saved = await saveCookies(cookies)
   if (loginWindow) {
     loginWindow.close()
     loginWindow = null
   }
-  if (mainWindow) {
-    mainWindow.webContents.send('login-successful')
+  if (mainWindow && saved) {
+    // 关键改动：将保存好的cookies直接发送给前端
+    const savedCookies = await loadCookies()
+    mainWindow.webContents.send('login-successful', savedCookies)
   }
 }
 

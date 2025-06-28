@@ -4,13 +4,14 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { isLoggedIn } from './utils/cookieHelper'
 import {
   clearSelections,
   getSelectedDepartment,
   getSelectedVendor,
   getSelectedShop,
-  getSelectedWarehouse
+  getSelectedWarehouse,
+  getLocalStorage,
+  setLocalStorage
 } from './utils/storageHelper'
 
 // 开发模式标志
@@ -20,15 +21,17 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 const isUserLoggedIn = ref(false)
 
 // 检查登录状态
-const checkLoginStatus = async () => {
-  const loggedIn = await isLoggedIn()
-  isUserLoggedIn.value = loggedIn
+const checkLoginStatus = () => {
+  const sessionId = getLocalStorage('sessionId')
+  isUserLoggedIn.value = !!sessionId
 }
 
 // 处理退出登录
 const handleLogout = () => {
+  setLocalStorage('sessionId', null)
   isUserLoggedIn.value = false
   clearSelections()
+  // TODO: 调用后端接口来使会话失效
 }
 
 // 当前活动标签
@@ -90,7 +93,8 @@ onMounted(() => {
 
   // 监听登录成功事件
   window.electron.ipcRenderer.on('login-successful', () => {
-    alert('登录成功！')
+    alert('登录成功！请选择供应商和事业部。')
+    // 只更新UI状态，不再创建会话
     checkLoginStatus()
   })
 
@@ -125,7 +129,7 @@ const selectJsonContent = (event) => {
       </div>
 
       <div class="header-right">
-        <AccountManager />
+        <AccountManager @session-created="checkLoginStatus" />
         <!-- 开发模式下的调试按钮 -->
         <button v-if="isDev" @click="toggleDebugPanel" class="debug-toggle">
           {{ showDebugPanel ? '隐藏调试' : '显示调试' }}

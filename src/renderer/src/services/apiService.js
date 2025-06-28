@@ -2,9 +2,19 @@ import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
 import * as XLSX from 'xlsx'
 import { getSelectedDepartment, getSelectedShop } from '../utils/storageHelper'
+import axios from 'axios'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
+
+const API_BASE_URL = 'http://localhost:3000' // 后端服务器地址
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
 
 // 从主进程发送请求的辅助函数
 async function sendRequest(url, options) {
@@ -1470,4 +1480,19 @@ export async function getShopInfoByName(shopName) {
     }
   }
 }
+
+/**
+ * @description 创建一个新的会话，将认证和上下文信息发送到后端
+ * @param {object} sessionData 包含 cookies, supplierInfo, departmentInfo 的对象
+ * @returns {Promise<object>} 后端返回的响应数据，包含 sessionId
+ */
+export const createSession = async (sessionData) => {
+  try {
+    const response = await apiClient.post('/api/session', sessionData)
+    return response.data
+  } catch (error) {
+    console.error('Error creating session:', error)
+    throw error
+  }
+};
 

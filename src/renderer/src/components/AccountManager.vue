@@ -65,16 +65,20 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { isLoggedIn as checkLogin, getAllCookies } from '../utils/cookieHelper'
+import { createSession } from '../services/apiService'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
   getSelectedVendor,
   getSelectedDepartment,
   hasUserSelected,
-  markAsSelected
+  markAsSelected,
+  setLocalStorage
 } from '../utils/storageHelper'
 import VendorSelector from './VendorSelector.vue'
 import DepartmentSelector from './DepartmentSelector.vue'
+
+const emit = defineEmits(['session-created'])
 
 // 登录状态
 const isLoggedIn = ref(false)
@@ -182,24 +186,48 @@ const handleVendorSelected = (vendor) => {
 }
 
 // 处理事业部选择
-const handleDepartmentSelected = (department) => {
+const handleDepartmentSelected = async (department) => {
   console.log('选择的事业部:', department)
-  console.log('事业部 sellerId:', department.sellerId)
   saveSelectedDepartment(department)
 
   // 更新界面显示
-  selectedVendor.value = getSelectedVendor()
-  selectedDepartment.value = getSelectedDepartment()
+  const vendorInfo = getSelectedVendor()
+  const departmentInfo = getSelectedDepartment()
+  selectedVendor.value = vendorInfo
+  selectedDepartment.value = departmentInfo
 
   // 标记用户已经完成选择
   hasSelected.value = true
   markAsSelected()
 
+  // 关键改动：创建后端会话
+  try {
+    const cookies = await getAllCookies()
+    if (!cookies || !vendorInfo || !departmentInfo) {
+      alert('创建会话失败：缺少Cookies、供应商或事业部信息。')
+      return
+    }
+
+    const sessionData = { cookies, supplierInfo: vendorInfo, departmentInfo }
+    const response = await createSession(sessionData)
+
+    if (response && response.sessionId) {
+      setLocalStorage('sessionId', response.sessionId)
+      alert('供应商和事业部选择成功，后端会话已创建！')
+      emit('session-created')
+    } else {
+      throw new Error('后端未能返回sessionId')
+    }
+  } catch (error) {
+    console.error('创建后端会话失败:', error)
+    alert(`创建后端会话失败: ${error.message}`)
+  }
+
   // 关闭选择弹窗
   closeSelectionModal()
 
-  // 刷新整个页面，确保数据正确加载
-  window.location.reload()
+  // 移除页面重载，让 App.vue 的 checkLoginStatus 生效
+  // window.location.reload()
 }
 
 // 事件监听器
