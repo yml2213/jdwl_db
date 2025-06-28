@@ -496,7 +496,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         @execute-tasks="runAllTasks"
         @clear-tasks="handleClearTasks"
         @delete-task="handleDeleteTask"
-        @execute-task="handleExecuteTask"
+        @execute-one="handleExecuteTask"
         @update:active-tab="activeTab = $event"
       />
     </div>
