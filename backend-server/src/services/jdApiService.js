@@ -360,3 +360,36 @@ export async function uploadStatusUpdateFile(fileBuffer, sessionData) {
   console.log('[jdApiService] 文件上传成功，响应:', responseText)
   return { success: true, message: `导入完成: ${responseText}` }
 }
+
+/**
+ * 上传物流属性文件
+ * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
+ * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function uploadLogisticsAttributesFile(fileBuffer, sessionData) {
+  const { cookieString } = getAuthInfo(sessionData)
+
+  const url = `/goods/doImportGoodsLogistics.do?_r=${Math.random()}`
+  const formData = new FormData()
+  formData.append('importAttributeFile', fileBuffer, 'logistics-attributes.xls')
+
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: 'https://o.jdl.com/goToMainIframe.do',
+    Origin: 'https://o.jdl.com',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
+  }
+
+  console.log('[jdApiService] 尝试上传物流属性文件...')
+  const responseData = await requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
+  console.log('[jdApiService] 物流属性文件上传成功，响应:', responseData)
+  return responseData
+}
