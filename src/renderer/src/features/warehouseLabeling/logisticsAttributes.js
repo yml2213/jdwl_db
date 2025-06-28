@@ -26,11 +26,21 @@ export default {
     // 2. 使用 invoke/handle 模式发送请求到主进程
     try {
       log('向主进程发送导入请求...')
+
+      // 提取需要的物流参数，并确保它们是普通值
+      const logisticsOpts = context.options?.logistics || {}
+      const payloadOptions = {
+        length: logisticsOpts.length,
+        width: logisticsOpts.width,
+        height: logisticsOpts.height,
+        grossWeight: logisticsOpts.grossWeight // 使用 grossWeight
+      }
+
       const result = await window.electron.ipcRenderer.invoke('import-logistics-properties', {
         skuList: JSON.parse(JSON.stringify(skuList)),
-        departmentInfo: store,
+        departmentInfo: JSON.parse(JSON.stringify(store)), // 确保store是纯JS对象
         cookies: JSON.parse(JSON.stringify(cookies)),
-        logisticsOptions: context.options.logistics
+        logisticsOptions: payloadOptions
       })
 
       if (result.success) {

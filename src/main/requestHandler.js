@@ -162,7 +162,7 @@ export function setupRequestHandlers() {
 
   ipcMain.handle(
     'upload-store-products',
-    async (event, { fileBuffer, shopInfo, departmentInfo }) => {
+    async (event, { fileBuffer, shopInfo }) => {
       const { spShopNo, deptId } = shopInfo
       const url = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
       const FormData = require('form-data')
@@ -210,16 +210,16 @@ export function setupRequestHandlers() {
           await logRequest(`[IPC] 上传失败 (尝试 ${attempt}): ${error.message}`)
           if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {
             await logRequest(`[IPC] 触发频率限制，将在65秒后重试...`)
-            await new Promise(resolve => setTimeout(resolve, 65000));
-            continue;
+            await new Promise(resolve => setTimeout(resolve, 65000))
+            continue
           }
           if (attempt >= MAX_RETRIES) {
             return { success: false, message: `文件上传在达到最大重试次数后失败: ${error.message}` }
           }
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise(resolve => setTimeout(resolve, 5000))
         }
       }
-      return { success: false, message: '文件上传未知错误' };
+      return { success: false, message: '文件上传未知错误' }
     }
   )
 
@@ -250,7 +250,7 @@ export function setupRequestHandlers() {
    * IPC处理程序：上传取消京配打标的数据。
    * 接收CSG列表，在主进程中创建Excel文件并上传。
    */
-  ipcMain.handle('upload-cancel-jp-search-data', async (event, { cookies, csgList, shopInfo }) => {
+  ipcMain.handle('upload-cancel-jp-search-data', async (event, { cookies, csgList }) => {
     try {
       console.log(`主进程接收到 upload-cancel-jp-search-data 请求, CSG数量: ${csgList.length}`)
 
@@ -391,7 +391,7 @@ export function setupRequestHandlers() {
           { name: 'sEcho', value: 5 }, { name: 'iColumns', value: 14 },
           { name: 'iDisplayStart', value: currentStart }, { name: 'iDisplayLength', value: pageSize },
           // (rest of aoData can be left as is)
-        ];
+        ]
 
         const requestParams = {
           csrfToken: csrfToken,
@@ -435,7 +435,7 @@ export function setupRequestHandlers() {
             responseData.aaData.forEach(item => {
               if (item.sellerGoodsSign) allItems.skus.push(item.sellerGoodsSign)
               if (item.shopGoodsNo) allItems.csgs.push(item.shopGoodsNo)
-            });
+            })
 
             currentStart += responseData.aaData.length
             hasMoreData = currentStart < totalRecords && responseData.aaData.length > 0
@@ -443,7 +443,7 @@ export function setupRequestHandlers() {
             console.log(`主进程 get-shop-goods-list: 已获取 ${currentStart}/${totalRecords}`)
 
             if (hasMoreData) {
-              await new Promise(resolve => setTimeout(resolve, 300)); // 短暂延时
+              await new Promise(resolve => setTimeout(resolve, 300)) // 短暂延时
             }
 
           } else {
@@ -549,7 +549,7 @@ export function setupRequestHandlers() {
 
   ipcMain.handle(
     'upload-goods-stock-config',
-    async (event, { fileBuffer, cookies, csrfToken }) => {
+    async (event, { fileBuffer, cookies }) => {
       const url = `https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=${Math.random()}`
       const FormData = require('form-data')
 
@@ -606,26 +606,26 @@ export function setupRequestHandlers() {
   )
 
   ipcMain.handle('upload-status-update-file', async (event, { fileBuffer, csrfToken, cookies }) => {
-    const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsStatus.do?_r=${Math.random()}`;
-    const FormData = require('form-data');
-    const temp = require('temp').track(); // For automatic cleanup of temp files
+    const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsStatus.do?_r=${Math.random()}`
+    const FormData = require('form-data')
+    const temp = require('temp').track() // For automatic cleanup of temp files
 
-    let tempFilePath;
+    let tempFilePath
     try {
       // 1. Write buffer to a temporary file
-      const tempStream = temp.createWriteStream({ suffix: '.xls' });
-      tempFilePath = tempStream.path;
-      tempStream.end(Buffer.from(fileBuffer));
+      const tempStream = temp.createWriteStream({ suffix: '.xls' })
+      tempFilePath = tempStream.path
+      tempStream.end(Buffer.from(fileBuffer))
 
-      await logRequest(`[IPC] Status Update: Temporary file created at ${tempFilePath}`);
+      await logRequest(`[IPC] Status Update: Temporary file created at ${tempFilePath}`)
 
       // 2. Prepare FormData
-      const formData = new FormData();
-      formData.append('csrfToken', csrfToken);
-      formData.append('updateShopGoodsStatusListFile', fs.createReadStream(tempFilePath));
+      const formData = new FormData()
+      formData.append('csrfToken', csrfToken)
+      formData.append('updateShopGoodsStatusListFile', fs.createReadStream(tempFilePath))
 
       // 3. Prepare headers
-      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
       const headers = {
         ...formData.getHeaders(),
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
@@ -635,35 +635,35 @@ export function setupRequestHandlers() {
         'referer': 'https://o.jdl.com/goToMainIframe.do',
         'upgrade-insecure-requests': '1',
         'Cookie': cookieString
-      };
+      }
 
       // 4. Send request with axios
-      await logRequest(`[IPC] Status Update: Uploading ${tempFilePath} to ${url}`);
+      await logRequest(`[IPC] Status Update: Uploading ${tempFilePath} to ${url}`)
       const response = await axiosInstance.post(url, formData, {
         headers,
         responseType: 'text' // Ensure we always get a string back
-      });
+      })
 
-      const responseText = response.data;
-      await logRequest(`[IPC] Status Update Response: ${responseText}`);
+      const responseText = response.data
+      await logRequest(`[IPC] Status Update Response: ${responseText}`)
 
       // 5. Check response
       if (typeof responseText === 'string' && responseText.includes('成功')) {
-        return { success: true, message: responseText };
+        return { success: true, message: responseText }
       } else {
-        const match = typeof responseText === 'string' ? responseText.match(/id="message" value="([^"]+)"/) : null;
-        const errorMessage = match ? match[1] : `启用商品失败，服务器响应: ${responseText.trim()}`;
-        return { success: false, message: errorMessage };
+        const match = typeof responseText === 'string' ? responseText.match(/id="message" value="([^"]+)"/) : null
+        const errorMessage = match ? match[1] : `启用商品失败，服务器响应: ${responseText.trim()}`
+        return { success: false, message: errorMessage }
       }
 
     } catch (error) {
-      const errorMessage = error.response?.data || error.message;
-      await logRequest(`[IPC] Status Update Upload Failed: ${errorMessage}`);
-      return { success: false, message: `文件上传失败: ${errorMessage}` };
+      const errorMessage = error.response?.data || error.message
+      await logRequest(`[IPC] Status Update Upload Failed: ${errorMessage}`)
+      return { success: false, message: `文件上传失败: ${errorMessage}` }
     } finally {
       // Cleanup is handled automatically by temp.track()
     }
-  });
+  })
 
   ipcMain.handle('add-inventory', async (event, context) => {
     const { goodsList, store, warehouse, vendor, cookies } = context
@@ -826,7 +826,7 @@ async function processSingleBatch(skuList, storeInfo, department, cookies) {
     return { success: false, message: `请求失败: ${error.message}` }
   } finally {
     // 清理临时文件
-    await fs.promises.unlink(filePath).catch(err => console.error('删除临时文件失败:', err));
+    await fs.promises.unlink(filePath).catch(err => console.error('删除临时文件失败:', err))
   }
 }
 
@@ -947,8 +947,8 @@ async function uploadLogisticsData(batchSkus, department, cookies, logisticsOpti
     }
 
     // 从HTML响应中提取更具体的错误信息
-    const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">\s*<p>(.*?)<\/p>\s*<\/div>/s);
-    const errorMessage = match ? match[1].trim().replace(/<br\s*\/?>/gi, ' ') : '导入失败，服务器返回未知HTML页面。';
+    const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">\s*<p>(.*?)<\/p>\s*<\/div>/s)
+    const errorMessage = match ? match[1].trim().replace(/<br\s*\/?>/gi, ' ') : '导入失败，服务器返回未知HTML页面。'
     return { success: false, message: errorMessage, data: responseText }
 
   } catch (error) {
@@ -965,7 +965,7 @@ function createLogisticsExcelBuffer(skuList, department, logisticsOptions) {
     length = '120.00',
     width = '60.00',
     height = '6.00',
-    netWeight = ''
+    grossWeight = '0.1'
   } = logisticsOptions || {}
 
   const headers = [
@@ -985,8 +985,8 @@ function createLogisticsExcelBuffer(skuList, department, logisticsOptions) {
     length, // 长(mm)
     width, // 宽(mm)
     height, // 高(mm)
-    netWeight, // 净重(kg)
-    '0.1' // 毛重(kg)
+    '', // 净重(kg)
+    grossWeight // 毛重(kg)
   ])
   const excelData = [headers, ...data]
   const worksheet = XLSX.utils.aoa_to_sheet(excelData)
