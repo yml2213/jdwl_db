@@ -352,26 +352,30 @@ export async function enableProductsByCSG(csgNumbers, sessionData) {
 /**
  * 上传状态更新文件
  * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
- * @param {object} sessionData - 完整的会话对象
+ * @param {object} sessionData - 包含认证信息的完整会话对象
  * @returns {Promise<object>} - 操作结果
  */
 export async function uploadStatusUpdateFile(fileBuffer, sessionData) {
-  const { cookieString, csrfToken, sessionData: authData } = getAuthInfo(sessionData)
-  const { store, department } = authData
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
 
-  const url = `/shopGoods/importPopSG.do?spShopNo=${store.spShopNo}&_r=${Math.random()}`
+  const url = `/shopGoods/importUpdateShopGoodsStatus.do?_r=${Math.random()}`
   const formData = new FormData()
   formData.append('csrfToken', csrfToken)
-  formData.append('shopGoodsPopGoodsListFile', fileBuffer, 'StatusUpdate.xls')
+  formData.append(
+    'updateShopGoodsStatusListFile',
+    fileBuffer,
+    'updateShopGoodsStatusImportTemplate.xls'
+  )
 
   const headers = {
     ...formData.getHeaders(),
     Cookie: cookieString,
-    // 使用一个更通用的Referer
-    Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${store.spShopNo}&deptId=${department.deptId}`
+    Referer: 'https://o.jdl.com/goToMainIframe.do',
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
   }
 
-  console.log('[jdApiService] 尝试上传商品状态更新文件...')
+  console.log('[jdApiService] 尝试上传商品状态更新文件 (importUpdateShopGoodsStatus.do)...')
   const responseText = await requestJdApi({
     method: 'POST',
     url,

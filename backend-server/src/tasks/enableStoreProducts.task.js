@@ -59,7 +59,7 @@ async function execute(context, sessionData) {
 
     console.log('[Task: enableStoreProducts] "启用店铺商品" 任务成功完成。')
     // 从返回的HTML中提取有用的信息
-    const match = result.message.match(/成功导入(\d+)条/)
+    const match = result.message.match(/成功(?:导入|更新)\s*(\d+)\s*条/)
     const successCount = match ? match[1] : csgNumbers.length
 
     return { success: true, message: `成功启用 ${successCount} 个商品。` }
