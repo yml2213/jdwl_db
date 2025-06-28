@@ -1,4 +1,8 @@
 import * as XLSX from 'xlsx'
+import { executeInBatches } from './utils/taskUtils'
+
+const BATCH_SIZE = 2000
+const BATCH_DELAY = 30 * 1000 // 30 seconds
 
 /**
  * 创建Excel数据Buffer
@@ -18,40 +22,42 @@ function _createExcelFileAsBuffer(csgList) {
 /**
  * 主执行函数
  */
-async function enableJpSearchExecute(context, helpers) {
+async function mainExecute(context, helpers) {
   const { csgList } = context
-  const { log } = helpers
+  const { log, isRunning } = helpers
 
   if (!csgList || csgList.length === 0) {
     throw new Error('上下文中未提供有效的CSG列表，无法执行京配打标。')
   }
 
-  log(`获取到 ${csgList.length} 个CSG，开始生成Excel文件...`, 'info')
-  const fileBuffer = _createExcelFileAsBuffer(csgList)
-  log(`Excel文件创建成功, 大小: ${fileBuffer.length} bytes`, 'info')
+  const batchFn = async (batchCsg) => {
+    log(`为 ${batchCsg.length} 个CSG生成京配打标Excel文件...`, 'info')
+    const fileBuffer = _createExcelFileAsBuffer(batchCsg)
+    log(`Excel文件创建成功, 大小: ${fileBuffer.length} bytes`, 'info')
 
-  log('通过IPC请求主进程上传京配打标文件...', 'info')
-  const result = await window.electron.ipcRenderer.invoke('upload-jp-search-data', {
-    fileBuffer
+    log('通过IPC请求主进程上传京配打标文件...', 'info')
+    return await window.electron.ipcRenderer.invoke('upload-jp-search-data', {
+      fileBuffer
+    })
+  }
+
+  const result = await executeInBatches({
+    items: csgList,
+    batchSize: BATCH_SIZE,
+    delay: BATCH_DELAY,
+    batchFn,
+    log,
+    isRunning
   })
 
-  if (result && result.success) {
-    log('主进程返回成功信息', 'success')
-    return { success: true, message: result.message }
+  if (result.success) {
+    log('所有批次的京配打标任务均已成功提交。', 'success')
   } else {
-    log(`主进程返回错误: ${result.message}`, 'error')
-    throw new Error(result.message || '主进程文件上传失败')
+    log(`京配打标任务部分或全部失败: ${result.message}`, 'error')
+    throw new Error(result.message || '京配打标任务执行失败')
   }
-}
 
-// ... 批处理逻辑 ...
-// 由于这个功能API本身不支持按批次返回结果，我们一次性处理所有SKU
-// 如果未来需要分批，这里的外部循环逻辑需要保留和调整
-// 但目前，我们直接调用上面的 execute 函数
-async function mainExecute(context, helpers) {
-  // 不再在这里检查，将逻辑移到核心执行函数中
-  helpers.log('提示: 京配打标功能会将所有CSG在一次操作中提交。', 'info')
-  return await enableJpSearchExecute(context, helpers)
+  return { success: result.success, message: result.message }
 }
 
 export default {

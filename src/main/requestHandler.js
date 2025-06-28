@@ -181,68 +181,64 @@ export function setupRequestHandlers() {
     return await sendRequest(url, options)
   })
 
-  ipcMain.handle(
-    'upload-store-products',
-    async (event, { fileBuffer, shopInfo }) => {
-      const { spShopNo, deptId } = shopInfo
-      const url = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
-      const FormData = require('form-data')
-      const MAX_RETRIES = 3
-      let attempt = 0
+  ipcMain.handle('upload-store-products', async (event, { fileBuffer, shopInfo }) => {
+    const { spShopNo, deptId } = shopInfo
+    const url = `https://o.jdl.com/shopGoods/importPopSG.do?spShopNo=${spShopNo}&_r=${Math.random()}`
+    const FormData = require('form-data')
+    const MAX_RETRIES = 3
+    let attempt = 0
 
-      while (attempt < MAX_RETRIES) {
-        attempt++
-        try {
-          await logRequest(`[IPC] 上传店铺商品文件... (尝试 ${attempt}/${MAX_RETRIES})`)
+    while (attempt < MAX_RETRIES) {
+      attempt++
+      try {
+        await logRequest(`[IPC] 上传店铺商品文件... (尝试 ${attempt}/${MAX_RETRIES})`)
 
-          const cookies = await loadCookies()
-          if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
+        const cookies = await loadCookies()
+        if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
 
-          const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-          const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
-          if (!csrfToken) throw new Error('在加载的Cookies中未找到csrfToken')
+        const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+        const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+        if (!csrfToken) throw new Error('在加载的Cookies中未找到csrfToken')
 
-          const formData = new FormData()
-          formData.append('csrfToken', csrfToken)
-          formData.append(
-            'shopGoodsPopGoodsListFile',
-            Buffer.from(fileBuffer),
-            'PopGoodsImportTemplate.xls'
-          )
+        const formData = new FormData()
+        formData.append('csrfToken', csrfToken)
+        formData.append(
+          'shopGoodsPopGoodsListFile',
+          Buffer.from(fileBuffer),
+          'PopGoodsImportTemplate.xls'
+        )
 
-          const response = await axiosInstance.post(url, formData, {
-            headers: {
-              ...formData.getHeaders(),
-              Cookie: cookieString,
-              Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${spShopNo}&deptId=${deptId}`
-            }
-          })
-
-          const responseText = response.data
-          await logRequest(`[IPC] 店铺商品导入响应: ${responseText}`)
-
-          if (typeof responseText === 'string' && responseText.includes('频繁操作')) {
-            throw new Error('API_RATE_LIMIT')
+        const response = await axiosInstance.post(url, formData, {
+          headers: {
+            ...formData.getHeaders(),
+            Cookie: cookieString,
+            Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${spShopNo}&deptId=${deptId}`
           }
+        })
 
-          return { success: true, message: `导入完成: ${responseText}` }
+        const responseText = response.data
+        await logRequest(`[IPC] 店铺商品导入响应: ${responseText}`)
 
-        } catch (error) {
-          await logRequest(`[IPC] 上传失败 (尝试 ${attempt}): ${error.message}`)
-          if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {
-            await logRequest(`[IPC] 触发频率限制，将在65秒后重试...`)
-            await new Promise(resolve => setTimeout(resolve, 65000))
-            continue
-          }
-          if (attempt >= MAX_RETRIES) {
-            return { success: false, message: `文件上传在达到最大重试次数后失败: ${error.message}` }
-          }
-          await new Promise(resolve => setTimeout(resolve, 5000))
+        if (typeof responseText === 'string' && responseText.includes('频繁操作')) {
+          throw new Error('API_RATE_LIMIT')
         }
+
+        return { success: true, message: `导入完成: ${responseText}` }
+      } catch (error) {
+        await logRequest(`[IPC] 上传失败 (尝试 ${attempt}): ${error.message}`)
+        if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {
+          await logRequest(`[IPC] 触发频率限制，将在65秒后重试...`)
+          await new Promise((resolve) => setTimeout(resolve, 65000))
+          continue
+        }
+        if (attempt >= MAX_RETRIES) {
+          return { success: false, message: `文件上传在达到最大重试次数后失败: ${error.message}` }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5000))
       }
-      return { success: false, message: '文件上传未知错误' }
     }
-  )
+    return { success: false, message: '文件上传未知错误' }
+  })
 
   // 使用 on/send 模式替换 handle/invoke，以绕过潜在的克隆错误
   ipcMain.on('import-store-products', async (event, payload) => {
@@ -283,7 +279,10 @@ export function setupRequestHandlers() {
       }
 
       // 2. 创建 Excel 数据 (表头 + 数据行)
-      const excelData = [['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）'], ...csgList.map(csg => [csg, '0'])]
+      const excelData = [
+        ['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）'],
+        ...csgList.map((csg) => [csg, '0'])
+      ]
 
       // 3. 将数据转换为 Buffer
       const ws = XLSX.utils.aoa_to_sheet(excelData)
@@ -295,19 +294,23 @@ export function setupRequestHandlers() {
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
       const form = new FormData()
       form.append('csrfToken', csrfToken)
-      form.append('updateShopGoodsJpSearchListFile', new Blob([excelBuffer]), 'updateShopGoodsJpSearchImportTemplate.xls')
+      form.append(
+        'updateShopGoodsJpSearchListFile',
+        new Blob([excelBuffer]),
+        'updateShopGoodsJpSearchImportTemplate.xls'
+      )
 
       const url = 'https://o.jdl.com/shopGoods/importUpdateShopGoodsJpSearch.do?_r=' + Math.random()
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Cookie': cookieString,
+          Cookie: cookieString,
           'User-Agent':
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/javascript, */*; q=0.01',
-          'Origin': 'https://o.jdl.com',
-          'Referer': 'https://o.jdl.com/goToMainIframe.do',
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          Origin: 'https://o.jdl.com',
+          Referer: 'https://o.jdl.com/goToMainIframe.do'
         },
         body: form
       })
@@ -319,9 +322,11 @@ export function setupRequestHandlers() {
       if (responseData && responseData.resultCode === 1) {
         return { success: true, message: responseData.resultMessage || '取消京配打标成功' }
       } else {
-        return { success: false, message: responseData.resultMessage || responseData.msg || '取消京配打标失败' }
+        return {
+          success: false,
+          message: responseData.resultMessage || responseData.msg || '取消京配打标失败'
+        }
       }
-
     } catch (error) {
       console.error('主进程处理 upload-cancel-jp-search-data 出错:', error)
       return { success: false, message: `主进程出错: ${error.message}` }
@@ -332,57 +337,69 @@ export function setupRequestHandlers() {
    * IPC处理程序：重置商品库存分配比例（整店清零）
    * @description 根据 old.js 文件中的正确逻辑重写
    */
-  ipcMain.handle('reset-goods-stock-ratio', async (event, { cookies, shopInfo, departmentInfo }) => {
-    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-    const csrfToken = await getCsrfTokenFromCookies(cookies)
+  ipcMain.handle(
+    'reset-goods-stock-ratio',
+    async (event, { cookies, shopInfo, departmentInfo }) => {
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+      const csrfToken = await getCsrfTokenFromCookies(cookies)
 
-    if (!csrfToken) {
-      return { success: false, message: '主进程错误: 未能获取csrfToken' }
-    }
+      if (!csrfToken) {
+        return { success: false, message: '主进程错误: 未能获取csrfToken' }
+      }
 
-    // 从 old.js 确认，参数是 shopId 和 deptId
-    const shopId = shopInfo.id
-    const deptId = departmentInfo.id
+      // 从 old.js 确认，参数是 shopId 和 deptId
+      const shopId = shopInfo.id
+      const deptId = departmentInfo.id
 
-    if (!shopId || !deptId) {
-      return { success: false, message: `主进程错误: 店铺ID或部门ID无效 (shopId: ${shopId}, deptId: ${deptId})` }
-    }
-
-    // 根据 old.js 确认，正确的URL、GET方法和查询字符串参数
-    const url = `https://o.jdl.com/goodsStockConfig/resetGoodsStockRatio.do?csrfToken=${csrfToken}&shopId=${shopId}&deptId=${deptId}&_r=${Math.random()}`
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET', // 使用GET方法
-        headers: {
-          'Accept': 'application/json, text/javascript, */*; q=0.01',
-          'Cookie': cookieString,
-          'Referer': 'https://o.jdl.com/goToMainIframe.do',
-          'X-Requested-With': 'XMLHttpRequest',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+      if (!shopId || !deptId) {
+        return {
+          success: false,
+          message: `主进程错误: 店铺ID或部门ID无效 (shopId: ${shopId}, deptId: ${deptId})`
         }
-        // GET请求没有body
-      })
-
-      if (!response.ok) {
-        return { success: false, message: `服务器请求失败，状态码: ${response.status}.` }
       }
 
-      const result = await response.json()
-      console.log('整店清零API响应:', result)
+      // 根据 old.js 确认，正确的URL、GET方法和查询字符串参数
+      const url = `https://o.jdl.com/goodsStockConfig/resetGoodsStockRatio.do?csrfToken=${csrfToken}&shopId=${shopId}&deptId=${deptId}&_r=${Math.random()}`
 
-      // 根据 old.js 确认，成功的判断条件
-      if (result && (result.resultCode === 1 || result.resultCode === '1' || result.resultMessage === '操作成功！')) {
-        return { success: true, message: `成功清空店铺 ${shopInfo.shopName} 的所有SKU库存分配` }
-      } else {
-        const errorMsg = result?.resultMessage || '未知错误'
-        return { success: false, message: errorMsg }
+      try {
+        const response = await fetch(url, {
+          method: 'GET', // 使用GET方法
+          headers: {
+            Accept: 'application/json, text/javascript, */*; q=0.01',
+            Cookie: cookieString,
+            Referer: 'https://o.jdl.com/goToMainIframe.do',
+            'X-Requested-With': 'XMLHttpRequest',
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+          }
+          // GET请求没有body
+        })
+
+        if (!response.ok) {
+          return { success: false, message: `服务器请求失败，状态码: ${response.status}.` }
+        }
+
+        const result = await response.json()
+        console.log('整店清零API响应:', result)
+
+        // 根据 old.js 确认，成功的判断条件
+        if (
+          result &&
+          (result.resultCode === 1 ||
+            result.resultCode === '1' ||
+            result.resultMessage === '操作成功！')
+        ) {
+          return { success: true, message: `成功清空店铺 ${shopInfo.shopName} 的所有SKU库存分配` }
+        } else {
+          const errorMsg = result?.resultMessage || '未知错误'
+          return { success: false, message: errorMsg }
+        }
+      } catch (error) {
+        console.error('主进程处理 reset-goods-stock-ratio 出错:', error)
+        return { success: false, message: `主进程请求失败: ${error.message}` }
       }
-    } catch (error) {
-      console.error('主进程处理 reset-goods-stock-ratio 出错:', error)
-      return { success: false, message: `主进程请求失败: ${error.message}` }
     }
-  })
+  )
 
   /**
    * IPC处理程序：获取店铺的所有商品信息（CSG和SKU）
@@ -409,8 +426,10 @@ export function setupRequestHandlers() {
       while (hasMoreData) {
         console.log(`主进程 get-shop-goods-list: 正在获取分页数据, 起始: ${currentStart}`)
         const aoData = [
-          { name: 'sEcho', value: 5 }, { name: 'iColumns', value: 14 },
-          { name: 'iDisplayStart', value: currentStart }, { name: 'iDisplayLength', value: pageSize },
+          { name: 'sEcho', value: 5 },
+          { name: 'iColumns', value: 14 },
+          { name: 'iDisplayStart', value: currentStart },
+          { name: 'iDisplayLength', value: pageSize }
           // (rest of aoData can be left as is)
         ]
 
@@ -430,12 +449,13 @@ export function setupRequestHandlers() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Origin': 'https://o.jdl.com',
-            'Referer': 'https://o.jdl.com/goToMainIframe.do',
+            Accept: 'application/json, text/javascript, */*; q=0.01',
+            Origin: 'https://o.jdl.com',
+            Referer: 'https://o.jdl.com/goToMainIframe.do',
             'X-Requested-With': 'XMLHttpRequest',
-            'Cookie': cookieString,
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+            Cookie: cookieString,
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
           },
           body: data
         })
@@ -453,7 +473,7 @@ export function setupRequestHandlers() {
               console.log(`主进程 get-shop-goods-list: 商品总数: ${totalRecords}`)
             }
 
-            responseData.aaData.forEach(item => {
+            responseData.aaData.forEach((item) => {
               if (item.sellerGoodsSign) allItems.skus.push(item.sellerGoodsSign)
               if (item.shopGoodsNo) allItems.csgs.push(item.shopGoodsNo)
             })
@@ -464,9 +484,8 @@ export function setupRequestHandlers() {
             console.log(`主进程 get-shop-goods-list: 已获取 ${currentStart}/${totalRecords}`)
 
             if (hasMoreData) {
-              await new Promise(resolve => setTimeout(resolve, 300)) // 短暂延时
+              await new Promise((resolve) => setTimeout(resolve, 300)) // 短暂延时
             }
-
           } else {
             hasMoreData = false
           }
@@ -479,7 +498,6 @@ export function setupRequestHandlers() {
 
       console.log(`主进程获取完成，SKUs: ${allItems.skus.length}, CSGs: ${allItems.csgs.length}`)
       return { success: true, skuList: allItems.skus, csgList: allItems.csgs }
-
     } catch (error) {
       console.error('主进程处理 get-shop-goods-list 出错:', error)
       return { success: false, message: `主进程出错: ${error.message}` }
@@ -487,172 +505,171 @@ export function setupRequestHandlers() {
   })
 
   // 使用 handle 模式处理从渲染器进程发送的物流属性导入请求
-  ipcMain.handle('import-logistics-properties', async (event, { skuList, departmentInfo, cookies, logisticsOptions }) => {
+  ipcMain.handle(
+    'import-logistics-properties',
+    async (event, { skuList, departmentInfo, cookies, logisticsOptions }) => {
+      try {
+        // 日志回调现在不再需要，因为我们会在完成后一次性返回所有信息
+        const logMessages = []
+        const logCallback = (message) => {
+          logMessages.push(message)
+          // 实时日志仍然可以通过一个独立的、非阻塞的事件发送
+          event.sender.send('import-logistics-properties-log', message)
+        }
+
+        // 注意：processLogisticsProperties 可能会耗时很长
+        const result = await processLogisticsProperties(
+          skuList,
+          departmentInfo,
+          cookies,
+          logCallback,
+          logisticsOptions
+        )
+
+        // 在最终结果中附加完整的日志记录
+        return { ...result, fullLog: logMessages }
+      } catch (error) {
+        console.error('[ipcMain] import-logistics-properties 处理器错误:', error)
+        // 当使用 handle 时，应该通过抛出错误或返回一个包含错误信息的对象来传递失败状态
+        return {
+          success: false,
+          message: error.message || '在主进程中处理物流属性时发生未知错误'
+        }
+      }
+    }
+  )
+
+  ipcMain.handle('upload-jp-search-data', async (event, { fileBuffer }) => {
+    const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsJpSearch.do?_r=${Math.random()}`
+    const FormData = require('form-data')
+
     try {
-      // 日志回调现在不再需要，因为我们会在完成后一次性返回所有信息
-      const logMessages = []
-      const logCallback = (message) => {
-        logMessages.push(message)
-        // 实时日志仍然可以通过一个独立的、非阻塞的事件发送
-        event.sender.send('import-logistics-properties-log', message)
+      await logRequest(`[IPC] 上传京配打标文件...`)
+
+      // (调试功能) 保存一份到用户的下载目录
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const debugFileName = `jp-search-debug-${timestamp}.xlsx`
+        await saveBufferToDownloads(fileBuffer, debugFileName)
+        logRequest(`[IPC] 京配打标调试文件已保存: ${debugFileName}`)
+      } catch (e) {
+        console.error('无法保存用于调试的京配打标文件:', e)
       }
 
-      // 注意：processLogisticsProperties 可能会耗时很长
-      const result = await processLogisticsProperties(
-        skuList,
-        departmentInfo,
-        cookies,
-        logCallback,
-        logisticsOptions
+      const cookies = await loadCookies()
+      if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
+
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+      const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+      if (!csrfToken) throw new Error('在加载的Cookies中未找到csrfToken')
+
+      const formData = new FormData()
+      formData.append('csrfToken', csrfToken)
+      formData.append(
+        'updateShopGoodsJpSearchListFile',
+        Buffer.from(fileBuffer),
+        'updateShopGoodsJpSearchImportTemplate.xls'
       )
 
-      // 在最终结果中附加完整的日志记录
-      return { ...result, fullLog: logMessages }
-    } catch (error) {
-      console.error('[ipcMain] import-logistics-properties 处理器错误:', error)
-      // 当使用 handle 时，应该通过抛出错误或返回一个包含错误信息的对象来传递失败状态
-      return {
-        success: false,
-        message: error.message || '在主进程中处理物流属性时发生未知错误'
+      const response = await axiosInstance.post(url, formData, {
+        headers: {
+          ...formData.getHeaders(),
+          Cookie: cookieString,
+          Referer: 'https://o.jdl.com/goToMainIframe.do',
+          Accept: 'application/json, text/javascript, */*; q=0.01'
+        }
+      })
+
+      const responseData = response.data
+      console.log('京配打标导入响应:', responseData)
+      await logRequest(`[IPC] 京配打标导入响应: ${JSON.stringify(responseData)}`)
+
+      // 优先处理JSON响应
+      if (typeof responseData === 'object' && responseData !== null) {
+        if (responseData.resultCode === 1 || responseData.resultCode === '1') {
+          return { success: true, message: responseData.resultMessage || '京配打标文件上传成功' }
+        } else {
+          return {
+            success: false,
+            message: responseData.resultMessage || responseData.msg || '京配打标文件上传失败'
+          }
+        }
       }
+
+      // 兼容HTML响应
+      if (typeof responseData === 'string' && responseData.includes('导入成功')) {
+        return { success: true, message: '京配打标文件上传成功' }
+      } else if (typeof responseData === 'string') {
+        const match = responseData.match(/<div class="error-msg">(.*?)<\/div>/)
+        const errorMessage = match ? match[1].trim() : '京配打标文件上传失败'
+        return { success: false, message: errorMessage }
+      }
+
+      return { success: false, message: '服务器返回了未知格式的响应。' }
+    } catch (error) {
+      await logRequest(`[IPC] 京配打标上传失败: ${error.message}`)
+      return { success: false, message: `上传失败: ${error.message}` }
     }
   })
 
-  ipcMain.handle(
-    'upload-jp-search-data',
-    async (event, { fileBuffer }) => {
-      const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsJpSearch.do?_r=${Math.random()}`
-      const FormData = require('form-data')
+  ipcMain.handle('upload-goods-stock-config', async (event, { fileBuffer, cookies }) => {
+    const url = `https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=${Math.random()}`
+    const FormData = require('form-data')
 
-      try {
-        await logRequest(`[IPC] 上传京配打标文件...`)
-
-        // (调试功能) 保存一份到用户的下载目录
-        try {
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-          const debugFileName = `jp-search-debug-${timestamp}.xlsx`
-          await saveBufferToDownloads(fileBuffer, debugFileName)
-          logRequest(`[IPC] 京配打标调试文件已保存: ${debugFileName}`)
-        } catch (e) {
-          console.error('无法保存用于调试的京配打标文件:', e)
-        }
-
-        const cookies = await loadCookies()
-        if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
-
-        const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-        const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
-        if (!csrfToken) throw new Error('在加载的Cookies中未找到csrfToken')
-
-        const formData = new FormData()
-        formData.append('csrfToken', csrfToken)
-        formData.append(
-          'updateShopGoodsJpSearchListFile',
-          Buffer.from(fileBuffer),
-          'updateShopGoodsJpSearchImportTemplate.xls'
-        )
-
-        const response = await axiosInstance.post(url, formData, {
-          headers: {
-            ...formData.getHeaders(),
-            Cookie: cookieString,
-            Referer: 'https://o.jdl.com/goToMainIframe.do',
-            'Accept': 'application/json, text/javascript, */*; q=0.01'
-          }
-        })
-
-        const responseData = response.data
-        console.log('京配打标导入响应:', responseData)
-        await logRequest(`[IPC] 京配打标导入响应: ${JSON.stringify(responseData)}`)
-
-        // 优先处理JSON响应
-        if (typeof responseData === 'object' && responseData !== null) {
-          if (responseData.resultCode === 1 || responseData.resultCode === '1') {
-            return { success: true, message: responseData.resultMessage || '京配打标文件上传成功' }
-          } else {
-            return { success: false, message: responseData.resultMessage || responseData.msg || '京配打标文件上传失败' }
-          }
-        }
-
-        // 兼容HTML响应
-        if (typeof responseData === 'string' && responseData.includes('导入成功')) {
-          return { success: true, message: '京配打标文件上传成功' }
-        } else if (typeof responseData === 'string') {
-          const match = responseData.match(/<div class="error-msg">(.*?)<\/div>/)
-          const errorMessage = match ? match[1].trim() : '京配打标文件上传失败'
-          return { success: false, message: errorMessage }
-        }
-
-        return { success: false, message: '服务器返回了未知格式的响应。' }
-
-      } catch (error) {
-        await logRequest(`[IPC] 京配打标上传失败: ${error.message}`)
-        return { success: false, message: `上传失败: ${error.message}` }
-      }
+    const sendLog = (message, type = 'info') => {
+      event.sender.send('ipc-log', { message: `[IPC] ${message}`, type })
     }
-  )
 
-  ipcMain.handle(
-    'upload-goods-stock-config',
-    async (event, { fileBuffer, cookies }) => {
-      const url = `https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=${Math.random()}`
-      const FormData = require('form-data')
+    try {
+      sendLog(`上传库存商品分配文件...`)
 
-      const sendLog = (message, type = 'info') => {
-        event.sender.send('ipc-log', { message: `[IPC] ${message}`, type })
+      if (!cookies || cookies.length === 0) throw new Error('从渲染器进程接收到的Cookies为空')
+      const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+
+      const formData = new FormData()
+      formData.append(
+        'goodsStockConfigExcelFile',
+        Buffer.from(fileBuffer),
+        'goodsStockConfigTemplate.xlsx'
+      )
+
+      const response = await axiosInstance.post(url, formData, {
+        headers: {
+          ...formData.getHeaders(),
+          Cookie: cookieString,
+          Referer: 'https://o.jdl.com/goToMainIframe.do'
+        }
+      })
+
+      const responseData = response.data
+      console.log('======库存分配导入响应 开始======: ')
+      console.log(responseData)
+      console.log('======库存分配导入响应 结束======: ')
+      sendLog(`库存分配导入响应: ${JSON.stringify(responseData)}`)
+      console.log('[IPC] 库存分配导入响应:', responseData)
+      // { resultCode: '0', resultMessage: '5分钟内不要频繁操作!' }
+      // {resultData: 'report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751105299155.csv',resultCode: '1'}
+
+
+      // resultCode '1' 代表同步成功
+      if (responseData && responseData.resultCode === '1') {
+        console.log('======结果码1 成功======: ')
+        const logFileName = responseData.resultData
+          ? responseData.resultData.split('/').pop()
+          : '未知日志文件'
+        return { success: true, message: `导入任务已提交，请在报表中心查看日志: ${logFileName}` }
+      } else if (responseData && responseData.resultCode === '0') {
+        console.log('======结果码0 失败======: ')
+        return { success: false, message: responseData.resultMessage || '库存分配导入失败' }
+      } else {
+        console.log('======结果码其他 失败======: ')
+        return { success: false, message: responseData.resultMessage }
       }
-
-      try {
-        sendLog(`上传库存商品分配文件...`)
-
-        if (!cookies || cookies.length === 0) throw new Error('从渲染器进程接收到的Cookies为空')
-        const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-
-        const formData = new FormData()
-        formData.append(
-          'goodsStockConfigExcelFile',
-          Buffer.from(fileBuffer),
-          'goodsStockConfigTemplate.xlsx'
-        )
-
-        const response = await axiosInstance.post(url, formData, {
-          headers: {
-            ...formData.getHeaders(),
-            Cookie: cookieString,
-            Referer: 'https://o.jdl.com/goToMainIframe.do'
-          }
-        })
-
-        const responseData = response.data
-        sendLog(`库存分配导入响应: ${JSON.stringify(responseData)}`)
-        console.log('[IPC] 库存分配导入响应:', responseData)
-
-        if (responseData && responseData.resultCode === '1') {
-          const logFileName = responseData.resultData ? responseData.resultData.split('/').pop() : '未知日志文件'
-          return { success: true, message: `导入任务已提交，请在报表中心查看日志: ${logFileName}` }
-        }
-
-        // 增加对业务错误JSON的精细化处理
-        if (responseData && typeof responseData.resultCode !== 'undefined' && responseData.resultMessage) {
-          return { success: false, message: responseData.resultMessage }
-        }
-
-        if (typeof responseData === 'string') {
-          // 尝试从HTML响应中提取更具体的错误信息
-          const match = responseData.match(/<div class="error-msg">(.*?)<\/div>/)
-          const errorMessage = match ? match[1].trim() : '库存商品分配文件上传失败'
-          return { success: false, message: errorMessage }
-        }
-
-        const finalErrorMessage = responseData.message || JSON.stringify(responseData)
-        return { success: false, message: `上传失败: ${finalErrorMessage}` }
-
-      } catch (error) {
-        sendLog(`库存分配上传失败: ${error.message}`, 'error')
-        return { success: false, message: `上传失败: ${error.message}` }
-      }
+    } catch (error) {
+      sendLog(`库存分配上传失败: ${error.message}`, 'error')
+      return { success: false, message: `上传失败: ${error.message}` }
     }
-  )
+  })
 
   ipcMain.handle('upload-status-update-file', async (event, { fileBuffer, csrfToken, cookies }) => {
     const url = `https://o.jdl.com/shopGoods/importUpdateShopGoodsStatus.do?_r=${Math.random()}`
@@ -677,13 +694,15 @@ export function setupRequestHandlers() {
       const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
       const headers = {
         ...formData.getHeaders(),
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
-        'origin': 'https://o.jdl.com',
-        'referer': 'https://o.jdl.com/goToMainIframe.do',
+        origin: 'https://o.jdl.com',
+        referer: 'https://o.jdl.com/goToMainIframe.do',
         'upgrade-insecure-requests': '1',
-        'Cookie': cookieString
+        Cookie: cookieString
       }
 
       // 4. Send request with axios
@@ -700,11 +719,13 @@ export function setupRequestHandlers() {
       if (typeof responseText === 'string' && responseText.includes('成功')) {
         return { success: true, message: responseText }
       } else {
-        const match = typeof responseText === 'string' ? responseText.match(/id="message" value="([^"]+)"/) : null
+        const match =
+          typeof responseText === 'string'
+            ? responseText.match(/id="message" value="([^"]+)"/)
+            : null
         const errorMessage = match ? match[1] : `启用商品失败，服务器响应: ${responseText.trim()}`
         return { success: false, message: errorMessage }
       }
-
     } catch (error) {
       const errorMessage = error.response?.data || error.message
       await logRequest(`[IPC] Status Update Upload Failed: ${errorMessage}`)
@@ -857,7 +878,7 @@ async function processSingleBatch(skuList, storeInfo, department, cookies) {
       method: 'POST',
       headers: {
         Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${spShopNo}&deptId=${storeInfo.deptId}`,
-        'Cookie': cookieString
+        Cookie: cookieString
       },
       body: payload,
       useFormData: true
@@ -875,7 +896,7 @@ async function processSingleBatch(skuList, storeInfo, department, cookies) {
     return { success: false, message: `请求失败: ${error.message}` }
   } finally {
     // 清理临时文件
-    await fs.promises.unlink(filePath).catch(err => console.error('删除临时文件失败:', err))
+    await fs.promises.unlink(filePath).catch((err) => console.error('删除临时文件失败:', err))
   }
 }
 
@@ -884,7 +905,13 @@ async function processSingleBatch(skuList, storeInfo, department, cookies) {
 /**
  * 处理物流属性导入的核心逻辑
  */
-async function processLogisticsProperties(skuList, department, cookies, logCallback, logisticsOptions) {
+async function processLogisticsProperties(
+  skuList,
+  department,
+  cookies,
+  logCallback,
+  logisticsOptions
+) {
   const BATCH_SIZE = 2000
   let processedCount = 0
   let failedCount = 0
@@ -901,7 +928,9 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
     const endIdx = Math.min(startIdx + BATCH_SIZE, skuList.length)
     const batchSkus = skuList.slice(startIdx, endIdx)
 
-    logCallback(`正在处理第 ${batchIndex + 1}/${totalBatches} 批, 包含 ${batchSkus.length} 个SKU...`)
+    logCallback(
+      `正在处理第 ${batchIndex + 1}/${totalBatches} 批, 包含 ${batchSkus.length} 个SKU...`
+    )
 
     try {
       const result = await uploadLogisticsData(batchSkus, department, cookies, logisticsOptions)
@@ -977,11 +1006,12 @@ async function uploadLogisticsData(batchSkus, department, cookies, logisticsOpti
     const response = await axiosInstance.post(url, form, {
       headers: {
         ...form.getHeaders(), // form-data 会自动设置正确的 Content-Type 和 boundary
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'Referer': 'https://o.jdl.com/goToMainIframe.do',
-        'Origin': 'https://o.jdl.com',
-        'Cookie': cookieString,
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        Referer: 'https://o.jdl.com/goToMainIframe.do',
+        Origin: 'https://o.jdl.com',
+        Cookie: cookieString
       }
       // responseType 留空，让 axios 自动判断
     })
@@ -1001,7 +1031,10 @@ async function uploadLogisticsData(batchSkus, department, cookies, logisticsOpti
       } else {
         const errorMessage = responseData.data || responseData.tipMsg || '操作失败'
         // 检查是否是5分钟限制错误
-        if (typeof responseData.data === 'string' && responseData.data.includes('5分钟内只能导入一次')) {
+        if (
+          typeof responseData.data === 'string' &&
+          responseData.data.includes('5分钟内只能导入一次')
+        ) {
           return {
             success: false,
             message: 'API限制：5分钟内只能导入一次，请稍后再试',
@@ -1018,7 +1051,6 @@ async function uploadLogisticsData(batchSkus, department, cookies, logisticsOpti
 
     // 默认返回失败
     return { success: false, message: '服务器返回了未知格式的响应', data: responseData }
-
   } catch (error) {
     console.error('上传物流属性数据失败:', error)
     return { success: false, message: `请求发送失败: ${error.message}` }

@@ -2,6 +2,7 @@
  * 任务处理工具函数
  * 用于处理仓库标签系统中的通用任务处理逻辑
  */
+import { ElMessage } from 'element-plus'
 
 /**
  * 提取任务中的SKU列表
@@ -171,5 +172,76 @@ export function getStatusClass(status) {
  * @returns {Promise<void>}
  */
 export function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 通用分批执行器
+ * @param {Object} options - 配置选项
+ * @param {Array} options.items - 要处理的完整项目列表
+ * @param {number} options.batchSize - 每批处理的项目数量
+ * @param {number} options.delay - 每批之间的延迟（毫秒）
+ * @param {Function} options.batchFn - 处理单个批次的函数，接收一个项目数组作为参数
+ * @param {Function} options.log - 日志记录函数
+ * @param {import('vue').Ref<boolean>} options.isRunning - 用于检查任务是否仍在运行的响应式引用
+ * @returns {Promise<Object>} - 包含所有批次结果的对象
+ */
+export async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunning }) {
+  const totalBatches = Math.ceil(items.length / batchSize)
+  log(`数据总量: ${items.length}，将分为 ${totalBatches} 批处理，每批 ${batchSize} 个。`, 'info')
+
+  const allResults = []
+  let allSuccess = true
+
+  for (let i = 0; i < totalBatches; i++) {
+    if (!isRunning.value) {
+      log('任务被用户取消。', 'warning')
+      return { success: false, message: '任务已取消', results: allResults }
+    }
+
+    const batchNumber = i + 1
+    const startIndex = i * batchSize
+    const endIndex = startIndex + batchSize
+    const batchItems = items.slice(startIndex, endIndex)
+
+    log(`--- 开始处理第 ${batchNumber} / ${totalBatches} 批...`, 'info')
+
+    try {
+      const result = await batchFn(batchItems)
+      allResults.push(result)
+      if (!result.success) {
+        allSuccess = false
+        log(`第 ${batchNumber} 批处理失败: ${result.message}`, 'error')
+        // 策略是继续处理下一批
+      } else {
+        log(`第 ${batchNumber} 批处理成功。`, 'success')
+      }
+    } catch (error) {
+      allSuccess = false
+      const errorMessage = error.message || '未知错误'
+      log(`第 ${batchNumber} 批发生未知错误: ${errorMessage}`, 'error')
+      allResults.push({ success: false, message: errorMessage })
+    }
+
+    if (i < totalBatches - 1 && delay > 0) {
+      const waitTimeSeconds = delay / 1000
+      log(`等待 ${waitTimeSeconds} 秒后继续...`, 'info')
+
+      const msg = ElMessage({
+        message: `批次处理间歇，等待 ${waitTimeSeconds} 秒...`,
+        type: 'info',
+        duration: delay,
+        showClose: true,
+      })
+
+      await wait(delay)
+      msg.close()
+    }
+  }
+
+  return {
+    success: allSuccess,
+    message: allSuccess ? '所有批次处理完成。' : '部分批次处理失败。',
+    results: allResults
+  }
 }
