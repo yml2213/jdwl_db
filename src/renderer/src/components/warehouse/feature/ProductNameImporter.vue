@@ -20,14 +20,18 @@
         <h5>导入日志</h5>
         <button @click="clearLogs" class="clear-log-button">清空日志</button>
       </div>
-      <pre class="log-content"><code v-html="formattedLogs"></code></pre>
+      <div class="log-content">
+        <p v-for="(log, index) in logs" :key="index" :class="['log-line', `log-${log.type}`]">
+          {{ log.text }}
+        </p>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import FileUploader from '../FileUploader.vue' // <--- 路径已修正
+import { ref } from 'vue'
+import FileUploader from '../FileUploader.vue'
 import importProductNamesFeature from '../../../features/warehouseLabeling/importProductNames'
 import { ElNotification } from 'element-plus'
 
@@ -35,13 +39,16 @@ const selectedFile = ref(null)
 const isProcessing = ref(false)
 const logs = ref([])
 
-const handleFileSelect = (file) => {
-  selectedFile.value = file
-  logs.value.push(`已选择文件: ${file.name}`)
+const addLog = (message, type = 'info') => {
+  logs.value.push({
+    text: `[${new Date().toLocaleTimeString()}] ${message}`,
+    type
+  })
 }
 
-const addLog = (message) => {
-  logs.value.push(`[${new Date().toLocaleTimeString()}] ${message}`)
+const handleFileSelect = (file) => {
+  selectedFile.value = file
+  addLog(`已选择文件: ${file.name}`)
 }
 
 const startImport = async () => {
@@ -55,11 +62,11 @@ const startImport = async () => {
   }
 
   isProcessing.value = true
-  addLog('开始执行导入商品简称功能...')
+  addLog('开始执行导入商品简称功能...', 'info')
 
   try {
     const result = await importProductNamesFeature.execute(selectedFile.value)
-    addLog(`导入完成: ${result.message}`)
+    addLog(`导入完成: ${result.message}`, result.success ? 'success' : 'error')
 
     if (result.success) {
       ElNotification({
@@ -77,13 +84,13 @@ const startImport = async () => {
     }
 
     if (result.data?.resultMsg) {
-      addLog('-----服务器返回详细信息-----')
-      addLog(result.data.resultMsg)
-      addLog('--------------------------')
+      addLog('-----服务器返回详细信息-----', 'info')
+      addLog(result.data.resultMsg, result.success ? 'info' : 'error')
+      addLog('--------------------------', 'info')
     }
   } catch (error) {
     const errorMessage = `出现未预料的错误: ${error.message}`
-    addLog(errorMessage)
+    addLog(errorMessage, 'error')
     ElNotification({
       title: '执行出错',
       message: errorMessage,
@@ -98,10 +105,6 @@ const startImport = async () => {
 const clearLogs = () => {
   logs.value = []
 }
-
-const formattedLogs = computed(() => {
-  return logs.value.join('\n')
-})
 </script>
 
 <style scoped>
@@ -210,9 +213,25 @@ const formattedLogs = computed(() => {
   overflow-y: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+.log-line {
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: #333;
+  margin: 0;
+  padding: 1px 0;
+}
+
+.log-info {
+  color: #909399;
+}
+
+.log-success {
+  color: #67c23a;
+}
+
+.log-error {
+  color: #f56c6c;
 }
 </style>

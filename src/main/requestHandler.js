@@ -1,13 +1,11 @@
 import axios from 'axios'
-import { app, session, ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import * as XLSX from 'xlsx'
 import qs from 'qs'
 import { loadCookies } from './loginManager'
 import { saveBufferToDownloads } from './fileHandler'
-
-const BASE_URL = 'https://o.jdl.com'
 
 // 日志文件路径
 const logPath = path.join(app.getPath('userData'), 'request-logs.txt')
@@ -84,7 +82,30 @@ async function sendRequest(url, options = {}) {
 
     // 处理请求体
     if (options.body) {
-      if (typeof options.body === 'string') {
+      // 检查是否是自定义序列化的FormData
+      if (options.body._isFormData) {
+        const FormData = require('form-data')
+        const formData = new FormData()
+
+        for (const [key, value] of options.body.entries) {
+          if (value._isFile) {
+            // 是文件，从buffer重建
+            formData.append(key, Buffer.from(value.data), {
+              filename: value.name,
+              contentType: value.type
+            })
+          } else {
+            // 普通字段
+            formData.append(key, value)
+          }
+        }
+        axiosOptions.data = formData
+        // 更新headers，让axios/form-data库处理Content-Type和boundary
+        axiosOptions.headers = {
+          ...axiosOptions.headers,
+          ...formData.getHeaders()
+        }
+      } else if (typeof options.body === 'string') {
         try {
           // 尝试解析JSON字符串
           axiosOptions.data = JSON.parse(options.body)

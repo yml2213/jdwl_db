@@ -5,7 +5,7 @@
         type="file"
         ref="fileInputRef"
         @change="handleFileChange"
-        accept=".txt"
+        accept=".xls,.xlsx"
         style="display: none"
       />
       <span class="btn btn-primary" @click="triggerFileInput">选择文件</span>
@@ -22,7 +22,7 @@
 <script setup>
 import { ref } from 'vue'
 
-const emit = defineEmits(['file-change', 'clear-file'])
+const emit = defineEmits(['file-selected', 'clear-file'])
 
 const fileInputRef = ref(null)
 const selectedFile = ref(null)
@@ -35,7 +35,7 @@ const handleFileChange = (event) => {
   const files = event.target.files
   if (files && files.length > 0) {
     selectedFile.value = files[0]
-    emit('file-change', files[0])
+    emit('file-selected', files[0])
   }
 }
 
