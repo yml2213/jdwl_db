@@ -14,22 +14,33 @@ const props = defineProps({
 })
 
 const statusClass = computed(() => {
-  switch (props.status) {
+  const status = props.status ? props.status.toLowerCase() : 'waiting'
+
+  if (status.includes('成功') || status.includes('success')) {
+    return 'success'
+  }
+  if (status.includes('失败') || status.includes('fail') || status.includes('error')) {
+    return 'failure'
+  }
+
+  switch (status) {
     case '等待中':
+    case 'waiting':
       return 'waiting'
     case '执行中':
+    case 'processing':
       return 'processing'
     case '分批处理中':
+    case 'batch-processing':
       return 'batch-processing'
-    case '成功':
-      return 'success'
-    case '失败':
-      return 'failure'
     case '频率限制':
+    case 'rate-limited':
       return 'rate-limited'
     case '部分成功':
+    case 'partial-success':
       return 'partial-success'
     case '暂存':
+    case 'temp-saved':
       return 'temp-saved'
     default:
       return 'waiting'
