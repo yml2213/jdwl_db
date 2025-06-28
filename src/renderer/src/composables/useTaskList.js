@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import { useTask } from '@/composables/useTask.js'
-import taskFlowExecutor from '@/features/warehouseLabeling/taskFlowExecutor'
 import { getSelectedDepartment, getSelectedVendor } from '@/utils/storageHelper'
 
 /**
@@ -10,10 +9,8 @@ import { getSelectedDepartment, getSelectedVendor } from '@/utils/storageHelper'
  * @returns {object} 返回一个包含任务列表、日志、状态和操作方法的对象。
  */
 export function useTaskList(initialTasks = []) {
-  // --- 响应式状态 ---
-  const taskList = ref(initialTasks) // 任务队列
-  // 引入底层的任务流执行器
-  const { execute: executeTaskFlow, ...taskFlowState } = useTask(taskFlowExecutor)
+  const taskList = ref(initialTasks)
+  // 注意：不再在这里创建useTask实例，而是在执行具体任务时动态创建
 
   /**
    * @description 向队列中添加一个新任务。
@@ -37,36 +34,40 @@ export function useTaskList(initialTasks = []) {
   const executeTask = async (taskToRun) => {
     const task = taskList.value.find((t) => t.id === taskToRun.id)
     if (!task) return
+    if (!task.executionFeature || typeof task.executionFeature.execute !== 'function') {
+      task.status = '失败'
+      task.result = '任务执行器 (executionFeature) 未在任务对象上定义'
+      return
+    }
+
+    // 动态地为当前任务创建 useTask 实例
+    const { execute: executeTaskFlow, logs: taskFlowLogs } = useTask(task.executionFeature)
 
     task.status = '运行中'
     try {
       const departmentInfo = getSelectedDepartment()
       const vendorInfo = getSelectedVendor()
-      // 构建后端任务所需的完整上下文
       const context = {
-        skus: task.skus,
-        options: task.options,
-        store: { ...task.selectedStore, ...departmentInfo },
-        warehouse: task.selectedWarehouse,
-        vendor: vendorInfo,
-        taskName: task.featureName,
-        quickSelect: task.quickSelect
+        ...task.executionData, // 将任务自带的数据作为基础上下文
+        // 覆盖或补充必要的信息
+        store: { ...task.executionData.store, ...departmentInfo },
+        vendor: vendorInfo
       }
 
-      await executeTaskFlow(context)
+      const finalResult = await executeTaskFlow(context)
 
       // 根据执行结果更新任务状态
-      if (taskFlowState.status.value === 'success') {
+      if (finalResult && finalResult.success) {
         task.status = '成功'
-        task.result = '任务执行成功'
+        task.result = finalResult.message || '任务执行成功'
       } else {
         task.status = '失败'
         // 从日志中找到最后一条错误信息作为结果
-        const errorLog = taskFlowState.logs.value
+        const errorLog = taskFlowLogs.value
           .slice()
           .reverse()
           .find((l) => l.type === 'error')
-        task.result = errorLog ? errorLog.message : '执行失败，未知错误'
+        task.result = errorLog ? errorLog.message : finalResult?.message || '执行失败，未知错误'
       }
     } catch (error) {
       console.error(`执行任务 ${task.id} 失败:`, error)
@@ -103,8 +104,9 @@ export function useTaskList(initialTasks = []) {
   // 返回状态和方法
   return {
     taskList,
-    taskFlowLogs: taskFlowState.logs, // 任务流的详细日志
-    taskFlowStatus: taskFlowState.status, // 任务流的总体状态
+    // 日志和状态现在是每个任务执行时动态生成的，不再是全局唯一的
+    // taskFlowLogs: taskFlowState.logs,
+    // taskFlowStatus: taskFlowState.status,
     addTask,
     executeTask,
     runAllTasks,

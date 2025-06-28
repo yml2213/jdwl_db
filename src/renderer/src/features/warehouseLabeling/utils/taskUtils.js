@@ -115,12 +115,12 @@ export function updateTaskResult(task, functionResults, hasFailures) {
     return '失败'
   } else {
     // 检查是否有任何结果包含"失败"字样
-    const hasFailureMessage = functionResults.some(result =>
-      result.includes('失败') || result.includes('错误')
+    const hasFailureMessage = functionResults.some(
+      (result) => result.includes('失败') || result.includes('错误')
     )
 
     // 检查是否是后台任务（包含"请稍后在任务日志中查看结果"的消息）
-    const isBackgroundTask = functionResults.some(result =>
+    const isBackgroundTask = functionResults.some((result) =>
       result.includes('请稍后在任务日志中查看结果')
     )
 
@@ -172,7 +172,7 @@ export function getStatusClass(status) {
  * @returns {Promise<void>}
  */
 export function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -231,7 +231,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
         message: `批次处理间歇，等待 ${waitTimeSeconds} 秒...`,
         type: 'info',
         duration: delay,
-        showClose: true,
+        showClose: true
       })
 
       await wait(delay)
@@ -243,5 +243,86 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
     success: allSuccess,
     message: allSuccess ? '所有批次处理完成。' : '部分批次处理失败。',
     results: allResults
+  }
+}
+
+/**
+ * 通用任务流执行器生成器
+ * @param {string} flowName - 流程名称
+ * @param {string} flowLabel - 流程标签
+ * @param {Array} steps - 构成此流程的步骤定义数组
+ * @returns {object} - 一个标准的任务流执行器对象
+ */
+export function createTaskFlowExecutor(flowName, flowLabel, steps) {
+  return {
+    name: flowName,
+    label: flowLabel,
+
+    /**
+     * @description 标准化的执行函数
+     * @param {object} context - 包含所有任务所需信息的上下文对象
+     * @param {object} helpers - 包含 log, isRunning 等辅助功能的对象
+     * @returns {Promise<object>} 任务的最终结果
+     */
+    async execute(context, { log: originalLog, isRunning }) {
+      const isManual = context.quickSelect === 'manual'
+
+      const log = (message, type) => {
+        // 在手动模式下，不记录通用的步骤日志，因为每个功能模块会自己打点
+        if (isManual && type === 'step') {
+          return
+        }
+        originalLog(message, type)
+      }
+
+      log(`任务 "${context.taskName || flowLabel}" 开始...`, 'info')
+
+      for (const step of steps) {
+        // 检查此步骤是否应该被执行
+        if (step.shouldExecute(context)) {
+          // 检查任务是否已被用户手动中止
+          if (!isRunning.value) {
+            log('任务被手动取消。', 'warning')
+            return { success: false, message: '任务已取消' }
+          }
+
+          if (!isManual) {
+            log(`--- 开始执行步骤: ${step.name} ---`, 'step')
+          }
+          try {
+            // 执行具体步骤的逻辑
+            const result = await step.execute(context, { log, isRunning, isManual })
+
+            // 在手动模式下，第一个成功执行的步骤的结果就是最终结果
+            if (isManual && result && result.success) {
+              log(`手动任务 [${step.name}] 执行成功。`, 'success')
+              return result // 直接返回该步骤的结果
+            }
+
+            // 将上一步的结果合并到上下文中，为下一步做准备
+            if (result && typeof result === 'object') {
+              Object.assign(context, result)
+            }
+
+            if (result && result.success === false) {
+              const errorMessage = `步骤 [${step.name}] 执行失败: ${result.message}`
+              log(errorMessage, 'error')
+              throw new Error(errorMessage)
+            }
+
+            if (!isManual) {
+              log(`步骤 [${step.name}] 执行成功。`, 'success')
+            }
+          } catch (e) {
+            const errorMessage = e.message || '未知错误'
+            log(`步骤 [${step.name}] 发生意外错误: ${errorMessage}`, 'error')
+            throw new Error(`步骤 [${step.name}] 失败: ${errorMessage}`)
+          }
+        }
+      }
+
+      log(`任务 "${context.taskName || flowLabel}" 所有步骤执行完毕。`, 'success')
+      return { success: true, message: '流程执行成功' }
+    }
   }
 }

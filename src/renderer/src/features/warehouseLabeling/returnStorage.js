@@ -19,7 +19,7 @@ export async function queryOrderByNumber(orderNumber, year) {
   }
 
   console.log(`开始查询订单: ${orderNumber}, 年份: ${year}`)
-  
+
   const url = `${BASE_URL}/so/querySoMainList.do?rand=${Math.random()}`
 
   // 构建请求参数
@@ -27,52 +27,52 @@ export async function queryOrderByNumber(orderNumber, year) {
     spSoNo: orderNumber, // 外部平台单号
     soYear: year || new Date().getFullYear().toString(), // 年份
     aoData: JSON.stringify([
-      {"name":"sEcho","value":5},
-      {"name":"iColumns","value":19},
-      {"name":"sColumns","value":",,,,,,,,,,,,,,,,,,"},
-      {"name":"iDisplayStart","value":0},
-      {"name":"iDisplayLength","value":10},
-      {"name":"mDataProp_0","value":0},
-      {"name":"bSortable_0","value":false},
-      {"name":"mDataProp_1","value":1},
-      {"name":"bSortable_1","value":false},
-      {"name":"mDataProp_2","value":"soNo"},
-      {"name":"bSortable_2","value":true},
-      {"name":"mDataProp_3","value":"spSoNo"},
-      {"name":"bSortable_3","value":true},
-      {"name":"mDataProp_4","value":"parentId"},
-      {"name":"bSortable_4","value":true},
-      {"name":"mDataProp_5","value":"soType"},
-      {"name":"bSortable_5","value":true},
-      {"name":"mDataProp_6","value":"soStatus"},
-      {"name":"bSortable_6","value":true},
-      {"name":"mDataProp_7","value":"consignee"},
-      {"name":"bSortable_7","value":true},
-      {"name":"mDataProp_8","value":"consigneeAddr"},
-      {"name":"bSortable_8","value":true},
-      {"name":"mDataProp_9","value":"shopName"},
-      {"name":"bSortable_9","value":true},
-      {"name":"mDataProp_10","value":"shipperName"},
-      {"name":"bSortable_10","value":true},
-      {"name":"mDataProp_11","value":"wayBill"},
-      {"name":"bSortable_11","value":true},
-      {"name":"mDataProp_12","value":"spCreateTime"},
-      {"name":"bSortable_12","value":true},
-      {"name":"mDataProp_13","value":"createTime"},
-      {"name":"bSortable_13","value":true},
-      {"name":"mDataProp_14","value":"stationName"},
-      {"name":"bSortable_14","value":true},
-      {"name":"mDataProp_15","value":"chronergyStr"},
-      {"name":"bSortable_15","value":true},
-      {"name":"mDataProp_16","value":"expectDeliveryDate"},
-      {"name":"bSortable_16","value":true},
-      {"name":"mDataProp_17","value":"orderAmount"},
-      {"name":"bSortable_17","value":true},
-      {"name":"mDataProp_18","value":"soMark"},
-      {"name":"bSortable_18","value":true},
-      {"name":"iSortCol_0","value":11},
-      {"name":"sSortDir_0","value":"desc"},
-      {"name":"iSortingCols","value":1}
+      { name: 'sEcho', value: 5 },
+      { name: 'iColumns', value: 19 },
+      { name: 'sColumns', value: ',,,,,,,,,,,,,,,,,,' },
+      { name: 'iDisplayStart', value: 0 },
+      { name: 'iDisplayLength', value: 10 },
+      { name: 'mDataProp_0', value: 0 },
+      { name: 'bSortable_0', value: false },
+      { name: 'mDataProp_1', value: 1 },
+      { name: 'bSortable_1', value: false },
+      { name: 'mDataProp_2', value: 'soNo' },
+      { name: 'bSortable_2', value: true },
+      { name: 'mDataProp_3', value: 'spSoNo' },
+      { name: 'bSortable_3', value: true },
+      { name: 'mDataProp_4', value: 'parentId' },
+      { name: 'bSortable_4', value: true },
+      { name: 'mDataProp_5', value: 'soType' },
+      { name: 'bSortable_5', value: true },
+      { name: 'mDataProp_6', value: 'soStatus' },
+      { name: 'bSortable_6', value: true },
+      { name: 'mDataProp_7', value: 'consignee' },
+      { name: 'bSortable_7', value: true },
+      { name: 'mDataProp_8', value: 'consigneeAddr' },
+      { name: 'bSortable_8', value: true },
+      { name: 'mDataProp_9', value: 'shopName' },
+      { name: 'bSortable_9', value: true },
+      { name: 'mDataProp_10', value: 'shipperName' },
+      { name: 'bSortable_10', value: true },
+      { name: 'mDataProp_11', value: 'wayBill' },
+      { name: 'bSortable_11', value: true },
+      { name: 'mDataProp_12', value: 'spCreateTime' },
+      { name: 'bSortable_12', value: true },
+      { name: 'mDataProp_13', value: 'createTime' },
+      { name: 'bSortable_13', value: true },
+      { name: 'mDataProp_14', value: 'stationName' },
+      { name: 'bSortable_14', value: true },
+      { name: 'mDataProp_15', value: 'chronergyStr' },
+      { name: 'bSortable_15', value: true },
+      { name: 'mDataProp_16', value: 'expectDeliveryDate' },
+      { name: 'bSortable_16', value: true },
+      { name: 'mDataProp_17', value: 'orderAmount' },
+      { name: 'bSortable_17', value: true },
+      { name: 'mDataProp_18', value: 'soMark' },
+      { name: 'bSortable_18', value: true },
+      { name: 'iSortCol_0', value: 11 },
+      { name: 'sSortDir_0', value: 'desc' },
+      { name: 'iSortingCols', value: 1 }
     ])
   }
 
@@ -125,7 +125,7 @@ export async function getOrderDetails(soNo) {
   }
 
   console.log(`开始获取订单详情: ${soNo}`)
-  
+
   const url = `${BASE_URL}/rtw/getOrder.do?rand=${Math.random()}`
 
   try {
@@ -147,7 +147,7 @@ export async function getOrderDetails(soNo) {
     if (response && (response.aaData || response.rtwMain)) {
       const goodsList = response.aaData || []
       const rtwMain = response.rtwMain || {}
-      
+
       return {
         success: true,
         data: response,
@@ -187,7 +187,7 @@ export async function submitReturnStorage(soNo, deptNo, reason, goodsItems) {
   }
 
   console.log(`开始提交退货入库申请: ${soNo}`)
-  
+
   const url = `${BASE_URL}/rtw/addRtwOrder.do`
 
   // 构建请求数据
@@ -196,9 +196,9 @@ export async function submitReturnStorage(soNo, deptNo, reason, goodsItems) {
     deptNo: deptNo,
     reason: reason || '',
     waybill: '',
-    rtwItems: goodsItems.map(item => ({
+    rtwItems: goodsItems.map((item) => ({
       goodsNo: item.goodsNo,
-      applyInstoreQty: item.applyInstoreQty || "1",
+      applyInstoreQty: item.applyInstoreQty || '1',
       remark: item.remark || ''
     }))
   }
@@ -250,92 +250,57 @@ export async function submitReturnStorage(soNo, deptNo, reason, goodsItems) {
 }
 
 /**
- * 完整的退货入库执行器函数
- * @param {Object} task - 任务信息
- * @param {Object} shopInfo - 店铺信息
- * @returns {Promise<Object>} 执行结果
+ * @description 主执行函数，符合标准执行器接口。
+ * @param {object} context - 包含任务所需信息的上下文对象。
+ *        - `orderNumber`: 订单号
+ *        - `year`: 年份
+ *        - `returnReason`: 退货原因
+ *        - `store`: 店铺信息
+ * @param {object} helpers - 包含 log 等辅助功能的对象。
+ * @returns {Promise<object>} 包含 success 和 message 的结果对象。
  */
-export async function executeReturnStorage(task, shopInfo) {
-  try {
-    // 更新任务状态为处理中
-    task.状态 = '处理中'
-    task.结果 = '查询订单中...'
-    
-    // 1. 根据单号查询订单
-    const orderSearchResult = await queryOrderByNumber(task.orderNumber, task.year)
-    if (!orderSearchResult.success) {
-      task.状态 = '失败'
-      task.结果 = orderSearchResult.message
-      return { success: false, message: orderSearchResult.message }
-    }
-    
-    task.结果 = '获取订单详情中...'
-    
-    // 2. 获取订单详情
-    const orderDetails = await getOrderDetails(orderSearchResult.soNo)
-    if (!orderDetails.success) {
-      task.状态 = '失败'
-      task.结果 = orderDetails.message
-      return { success: false, message: orderDetails.message }
-    }
-    
-    task.结果 = '准备提交退货申请...'
-    
-    // 准备商品列表
-    const goodsItems = orderDetails.goodsList.map(item => ({
-      goodsNo: item.goodsNo,
-      applyInstoreQty: "1", // 默认为1件
-      remark: ''
-    }))
-    
-      // 3. 提交退货入库申请
-     const submitResult = await submitReturnStorage(
-       orderSearchResult.soNo,
-       orderDetails.deptNo,
-       task.returnReason || "", // 退货原因可以为空
-       goodsItems
-     )
-    
-    if (submitResult.success) {
-      task.状态 = '成功'
-      task.结果 = submitResult.message
-      return { success: true, message: submitResult.message }
-    } else {
-      // 失败情况 - 记录更多错误详情以便显示
-      task.状态 = '失败'
-      task.结果 = submitResult.message
-      
-      // 添加额外的错误信息
-      if (submitResult.errorCode) {
-        task.errorCode = submitResult.errorCode
-      }
-      
-      // 保存额外数据以便在详情中显示
-      if (submitResult.data && typeof submitResult.data === 'object') {
-        task.errorData = submitResult.data
-      }
-      
-      return { 
-        success: false, 
-        message: submitResult.message,
-        errorCode: submitResult.errorCode,
-        errorData: submitResult.data
-      }
-    }
-  } catch (error) {
-    console.error('执行退货入库任务失败:', error)
-    task.状态 = '失败'
-    task.结果 = `执行失败: ${error.message || '未知错误'}`
-    
-    // 添加详细的错误信息
-    if (error.stack) {
-      task.errorData = error.stack
-    }
-    
-    return { 
-      success: false, 
-      message: task.结果,
-      errorData: error.stack
-    }
+async function execute(context, { log }) {
+  const { orderNumber, year, returnReason, store } = context
+
+  if (!orderNumber || !store || !store.deptNo) {
+    throw new Error('缺少订单号或店铺/部门信息。')
   }
-} 
+
+  try {
+    // 步骤 1: 根据订单号查询 CLS 订单
+    log(`[退货入库] 步骤1: 查询订单 ${orderNumber}...`, 'info')
+    const orderQueryResult = await queryOrderByNumber(orderNumber, year)
+    if (!orderQueryResult.success) {
+      log(`[退货入库] 查询失败: ${orderQueryResult.message}`, 'error')
+      return orderQueryResult // 直接返回失败结果
+    }
+    const soNo = orderQueryResult.soNo
+    log(`[退货入库] 查询成功，获取到CLS单号: ${soNo}`, 'success')
+
+    // 步骤 2: 获取订单详情
+    log(`[退货入库] 步骤2: 获取CLS单号 ${soNo} 的详情...`, 'info')
+    const detailsResult = await getOrderDetails(soNo)
+    if (!detailsResult.success) {
+      log(`[退货入库] 获取详情失败: ${detailsResult.message}`, 'error')
+      return detailsResult
+    }
+    const goodsList = detailsResult.goodsList
+    log(`[退货入库] 获取详情成功，包含 ${goodsList.length} 个商品。`, 'success')
+
+    // 步骤 3: 提交退货入库申请
+    log(`[退货入库] 步骤3: 提交退货入库申请...`, 'info')
+    const submitResult = await submitReturnStorage(soNo, store.deptNo, returnReason, goodsList)
+
+    // 返回最终结果
+    return submitResult
+  } catch (error) {
+    log(`[退货入库] 执行过程中发生严重错误: ${error.message}`, 'error')
+    throw error
+  }
+}
+
+export default {
+  name: 'returnStorage',
+  label: '退货入库',
+  execute: execute
+}
