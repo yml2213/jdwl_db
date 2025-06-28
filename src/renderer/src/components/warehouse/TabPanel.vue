@@ -1,15 +1,21 @@
 <template>
   <div class="tab-container">
     <div class="tab-header">
-      <div :class="['tab', { active: activeTab === 'tasks' }]" @click="activeTab = 'tasks'">
+      <div
+        :class="['tab', { active: activeTab === 'tasks' }]"
+        @click="$emit('update:active-tab', 'tasks')"
+      >
         任务列表
       </div>
-      <div :class="['tab', { active: activeTab === 'logs' }]" @click="activeTab = 'logs'">
+      <div
+        :class="['tab', { active: activeTab === 'logs' }]"
+        @click="$emit('update:active-tab', 'logs')"
+      >
         提交日志
       </div>
       <div
         :class="['tab', { active: activeTab === 'products' }]"
-        @click="activeTab = 'products'"
+        @click="$emit('update:active-tab', 'products')"
         v-if="disabledProducts.items.length > 0 || disabledProducts.checking"
       >
         停用商品
@@ -38,7 +44,7 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, watch } from 'vue'
+import { defineProps, defineEmits } from 'vue'
 import TaskListTable from './TaskListTable.vue'
 import LogsTable from './LogsTable.vue'
 import DisabledProducts from './feature/DisabledProducts.vue'
@@ -65,29 +71,13 @@ const props = defineProps({
       progress: '初始化...'
     })
   },
-  isRunning: {
-    type: Boolean,
-    default: false
+  activeTab: {
+    type: String,
+    default: 'tasks'
   }
 })
 
 const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-one', 'enable-products'])
-
-const activeTab = ref('tasks')
-
-watch(
-  () => props.isRunning,
-  (running, wasRunning) => {
-    if (running) {
-      activeTab.value = 'logs'
-    } else if (wasRunning && !running) {
-      // 任务完成，延迟1秒后切回任务列表
-      setTimeout(() => {
-        activeTab.value = 'tasks'
-      }, 1000)
-    }
-  }
-)
 
 const onEnableProducts = (products) => {
   emit('enable-products', products)

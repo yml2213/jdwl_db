@@ -79,7 +79,6 @@ const isLoadingShops = ref(false)
 const isLoadingWarehouses = ref(false)
 const shopLoadError = ref('')
 const warehouseLoadError = ref('')
-const isExecuting = ref(false) // 全局执行状态
 const activeTab = ref('tasks') // 'tasks' or 'logs'
 
 // Logistics attributes state
@@ -207,12 +206,10 @@ const handleAddTask = () => {
 }
 
 const handleExecuteTask = async (taskToRun) => {
-  isExecuting.value = true
   activeTab.value = 'logs'
 
   const task = taskList.value.find((t) => t.id === taskToRun.id)
   if (!task) {
-    isExecuting.value = false
     return
   }
 
@@ -231,12 +228,12 @@ const handleExecuteTask = async (taskToRun) => {
 
     await executeTaskFlow(context)
 
-    if (taskFlowState.status === 'success') {
+    if (taskFlowState.status.value === 'success') {
       task.status = '成功'
       task.result = '任务执行成功'
     } else {
       task.status = '失败'
-      const errorLog = taskFlowState.logs
+      const errorLog = taskFlowState.logs.value
         .slice()
         .reverse()
         .find((l) => l.type === 'error')
@@ -247,13 +244,9 @@ const handleExecuteTask = async (taskToRun) => {
     task.status = '失败'
     task.result = error.message || '客户端执行异常'
   }
-
-  isExecuting.value = false
-  activeTab.value = 'tasks'
 }
 
 const runAllTasks = async () => {
-  isExecuting.value = true
   activeTab.value = 'logs'
 
   const tasksToRun = taskList.value.filter((task) => ['等待中', '失败'].includes(task.status))
@@ -274,12 +267,12 @@ const runAllTasks = async () => {
 
       await executeTaskFlow(context)
 
-      if (taskFlowState.status === 'success') {
+      if (taskFlowState.status.value === 'success') {
         task.status = '成功'
         task.result = '任务执行成功'
       } else {
         task.status = '失败'
-        const errorLog = taskFlowState.logs
+        const errorLog = taskFlowState.logs.value
           .slice()
           .reverse()
           .find((l) => l.type === 'error')
@@ -291,8 +284,6 @@ const runAllTasks = async () => {
       task.result = `执行失败: ${error.message}`
     }
   }
-  isExecuting.value = false
-  activeTab.value = 'tasks'
 }
 
 const handleClearTasks = () => {
@@ -394,7 +385,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         :shops-list="shopsList"
         :warehouses-list="warehousesList"
         :is-manual-mode="isManualMode"
-        :is-executing="isExecuting"
+        :is-executing="taskFlowState.isRunning.value"
         @add-task="handleAddTask"
       >
         <div v-if="isManualMode" class="manual-options-grid">
@@ -490,8 +481,8 @@ watch(currentWarehouseInfo, (newWarehouse) => {
       </OperationArea>
       <TaskArea
         :task-list="taskList"
-        :logs="taskFlowState.logs"
-        :is-running="isExecuting"
+        :logs="taskFlowState.logs.value"
+        :is-running="taskFlowState.isRunning.value"
         :active-tab="activeTab"
         @execute-tasks="runAllTasks"
         @clear-tasks="handleClearTasks"
