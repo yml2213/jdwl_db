@@ -24,29 +24,44 @@ app.get('/', (req, res) => {
  * 前端登录成功后，将调用此接口
  */
 app.post('/api/session', async (req, res) => {
-    const { cookies, supplierInfo, departmentInfo } = req.body
+    const { uniqueKey, cookies, supplierInfo, departmentInfo } = req.body
 
-    if (!cookies || !supplierInfo || !departmentInfo) {
+    if (!uniqueKey || !cookies || !supplierInfo || !departmentInfo) {
         return res.status(400).json({ message: 'Missing session data.' })
     }
 
-    const sessionId = uuidv4()
-    const newSession = {
-        sessionId,
-        cookies,
-        supplierInfo,
-        departmentInfo,
-        createdAt: new Date().toISOString(),
+    // 查找是否已存在该用户的会话
+    const existingSessionIndex = db.data.sessions.findIndex(s => s.uniqueKey === uniqueKey)
+
+    if (existingSessionIndex > -1) {
+        // 如果存在，更新会话信息
+        console.log(`Updating session for uniqueKey: ${uniqueKey}`)
+        const existingSession = db.data.sessions[existingSessionIndex]
+        existingSession.cookies = cookies
+        existingSession.supplierInfo = supplierInfo
+        existingSession.departmentInfo = departmentInfo
+        existingSession.updatedAt = new Date().toISOString()
+
+        await db.write()
+        res.status(200).json({ sessionId: existingSession.sessionId })
+
+    } else {
+        // 如果不存在，创建新会话
+        console.log(`Creating new session for uniqueKey: ${uniqueKey}`)
+        const sessionId = uuidv4()
+        const newSession = {
+            sessionId,
+            uniqueKey,
+            cookies,
+            supplierInfo,
+            departmentInfo,
+            createdAt: new Date().toISOString(),
+        }
+
+        db.data.sessions.push(newSession)
+        await db.write()
+        res.status(200).json({ sessionId })
     }
-
-    // 将新会话存入数据库
-    db.data.sessions.push(newSession)
-    await db.write()
-
-    console.log(`Session created with ID: ${sessionId}`)
-
-    // 将 sessionId 返回给前端
-    res.status(200).json({ sessionId })
 })
 
 

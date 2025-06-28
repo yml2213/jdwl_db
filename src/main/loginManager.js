@@ -202,7 +202,7 @@ async function isLoggedIn() {
 
 // 设置所有与登录相关的IPC事件处理程序
 function setupLoginHandlers(mainWindow) {
-  ipcMain.on('start-login', () => createLoginWindow(mainWindow))
+  ipcMain.on('open-login-window', () => createLoginWindow(mainWindow))
   ipcMain.on('logout', () => clearCookies(mainWindow))
   ipcMain.handle('check-login-status', () => isLoggedIn())
   ipcMain.handle('get-cookies', () => loadCookies())

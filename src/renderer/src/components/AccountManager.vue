@@ -203,12 +203,24 @@ const handleDepartmentSelected = async (department) => {
   // 关键改动：创建后端会话
   try {
     const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+
+    if (!pinCookie) {
+      alert('创建会话失败：无法找到关键的用户凭据(pin)，请尝试重新登录。')
+      return
+    }
+
     if (!cookies || !vendorInfo || !departmentInfo) {
       alert('创建会话失败：缺少Cookies、供应商或事业部信息。')
       return
     }
 
-    const sessionData = { cookies, supplierInfo: vendorInfo, departmentInfo }
+    const sessionData = {
+      uniqueKey: `${pinCookie.value}-${departmentInfo.id}`, // 使用 pin + 事业部ID 作为唯一标识
+      cookies,
+      supplierInfo: vendorInfo,
+      departmentInfo
+    }
     const response = await createSession(sessionData)
 
     if (response && response.sessionId) {
