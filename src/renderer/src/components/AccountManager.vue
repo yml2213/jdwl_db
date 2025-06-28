@@ -64,11 +64,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import {
-  isLoggedIn as checkLogin,
-  logout as clearLogin,
-  getAllCookies
-} from '../utils/cookieHelper'
+import { isLoggedIn as checkLogin, getAllCookies } from '../utils/cookieHelper'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
@@ -126,12 +122,16 @@ const openLoginWindow = () => {
 
 // 退出登录
 const logout = () => {
-  clearLogin()
-  isLoggedIn.value = false
-  username.value = ''
-  selectedVendor.value = null
-  selectedDepartment.value = null
-  hasSelected.value = false
+  if (window.electron && window.electron.ipcRenderer) {
+    window.electron.ipcRenderer.send('logout')
+  } else {
+    // 兼容旧版或无预加载脚本的环境
+    isLoggedIn.value = false
+    username.value = ''
+    selectedVendor.value = null
+    selectedDepartment.value = null
+    hasSelected.value = false
+  }
 }
 
 // 更新登录状态
@@ -140,7 +140,7 @@ const updateLoginStatus = async () => {
   if (isLoggedIn.value) {
     updateUsername()
     loadSavedSelections()
-    
+
     // 如果登录成功但尚未选择供应商和事业部，自动显示选择弹窗
     if (!hasSelected.value) {
       showSelectionModal.value = true
@@ -176,7 +176,7 @@ const handleVendorSelected = (vendor) => {
   const vendorData = {
     id: vendor.id,
     name: vendor.name,
-    supplierNo: vendor.id  // 保持supplierNo兼容性
+    supplierNo: vendor.id // 保持supplierNo兼容性
   }
   saveSelectedVendor(vendorData)
 }
@@ -197,7 +197,7 @@ const handleDepartmentSelected = (department) => {
 
   // 关闭选择弹窗
   closeSelectionModal()
-  
+
   // 刷新整个页面，确保数据正确加载
   window.location.reload()
 }

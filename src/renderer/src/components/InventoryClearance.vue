@@ -232,6 +232,15 @@ const handleAddTask = () => {
 
     const task = {
       id: `whole-store-${Date.now()}`,
+      displaySku: '整店操作',
+      featureName,
+      storeName: shopInfo.shopName,
+      warehouseName: 'N/A',
+      createdAt: timestamp,
+      status: '等待中',
+      result: '',
+
+      // Raw data for execution
       sku: '整店操作',
       skuList: ['WHOLE_STORE'],
       店铺: shopInfo.shopName,
@@ -248,42 +257,44 @@ const handleAddTask = () => {
 
     // 整店模式下直接返回，不需要处理SKU列表
     if (form.value.autoStart) {
-      handleExecuteTasks()
+      handleExecuteTask(task)
     }
     return
   }
 
-  // 以下是SKU模式的处理
-  const skuList = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
-  if (skuList.length === 0) {
-    alert('请输入有效的SKU')
+  const skus = form.value.sku.split(/[\n,，\s]+/).filter((s) => s.trim() !== '')
+
+  if (skus.length === 0) {
+    alert('请输入至少一个SKU')
     return
   }
 
-  console.log('处理SKU列表, 数量:', skuList.length, '前5个SKU:', skuList.slice(0, 5))
+  const task = {
+    id: `task-${Date.now()}`,
+    displaySku: skus.length > 1 ? `批量任务 (${skus.length}个SKU)` : skus[0],
+    featureName,
+    storeName: shopInfo.shopName,
+    warehouseName: 'N/A', // 清库操作不涉及仓库
+    createdAt: timestamp,
+    status: '等待中',
+    result: '',
 
-  const BATCH_SIZE = 2000
-  for (let i = 0; i < skuList.length; i += BATCH_SIZE) {
-    const batch = skuList.slice(i, i + BATCH_SIZE)
-    const task = {
-      id: `batch-${Date.now()}-${i / BATCH_SIZE}`,
-      sku: `批次 ${i / BATCH_SIZE + 1} (${batch.length}个SKU)`,
-      skuList: batch,
-      店铺: shopInfo.shopName,
-      创建时间: timestamp,
-      状态: '等待中',
-      结果: '',
-      功能: featureName,
-      选项: JSON.parse(JSON.stringify(form.value.options)),
-      店铺信息: shopInfo,
-      事业部信息: deptInfo
-    }
-    addTaskToList(task)
-    console.log(`添加批次${i / BATCH_SIZE + 1}任务成功, 包含${batch.length}个SKU`)
+    // Raw data for execution
+    sku: skus.join(', '),
+    skuList: skus,
+    店铺: shopInfo.shopName,
+    创建时间: timestamp,
+    状态: '等待中',
+    结果: '',
+    功能: featureName,
+    选项: form.value.options,
+    店铺信息: shopInfo,
+    事业部信息: deptInfo
   }
+  addTaskToList(task)
 
   if (form.value.autoStart) {
-    handleExecuteTasks()
+    handleExecuteTask(task)
   }
 }
 
@@ -412,6 +423,11 @@ const handleRunClearanceImmediately = async () => {
 
   // 直接执行，无需创建和管理任务对象
   await executeClearance(context)
+}
+
+const handleExecuteTask = async (task) => {
+  if (!task) return
+  // ... existing code ...
 }
 </script>
 

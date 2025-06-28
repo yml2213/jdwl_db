@@ -55,10 +55,3 @@ export const getRequestHeaders = async () => {
 
   return headers
 }
-
-/**
- * 退出登录
- */
-export const logout = () => {
-  window.api.clearCookies()
-}
