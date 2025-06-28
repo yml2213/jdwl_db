@@ -1,0 +1,180 @@
+import axios from 'axios'
+import FormData from 'form-data'
+
+// 创建一个专门用于京东API请求的axios实例
+const jdApiAxios = axios.create({
+  baseURL: 'https://o.jdl.com',
+  timeout: 120000, // 120秒超时
+  headers: {
+    Accept: 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+    'X-Requested-With': 'XMLHttpRequest'
+  },
+  withCredentials: true // 确保跨域请求发送cookie
+})
+
+/**
+ * 从会话数据中提取必要的认证信息
+ * @param {string} sessionId - 会话ID
+ * @returns {object} 包含 cookieString 和 csrfToken
+ */
+function getAuthInfo(session) {
+  if (!session || !session.cookies) {
+    throw new Error('无效的会话数据或缺少cookies')
+  }
+
+  const { cookies } = session
+  if (!cookies || cookies.length === 0) {
+    throw new Error('会话中没有Cookies')
+  }
+
+  const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+  const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+  if (!csrfToken) {
+    throw new Error('在加载的Cookies中未找到csrfToken')
+  }
+
+  return { cookieString, csrfToken, sessionData: session }
+}
+
+/**
+ * 封装的京东API请求函数
+ * @param {object} config - Axios请求配置
+ * @returns
+ */
+async function requestJdApi(config) {
+  try {
+    const response = await jdApiAxios(config)
+    // 检查京东返回的特定错误格式
+    if (response.data && response.data.code && response.data.code !== 200) {
+      throw new Error(response.data.msg || '京东API返回错误')
+    }
+    // 特殊处理字符串响应，例如"频繁操作"
+    if (typeof response.data === 'string' && response.data.includes('频繁操作')) {
+      throw new Error('API_RATE_LIMIT')
+    }
+    return response.data
+  } catch (error) {
+    console.error('京东API请求失败:', error.message)
+    // 重新抛出错误，以便上层可以捕获
+    throw error
+  }
+}
+
+/**
+ * 上传店铺商品文件到京东
+ * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function uploadStoreProducts(fileBuffer, sessionData) {
+  const { cookieString, csrfToken, sessionData: authData } = getAuthInfo(sessionData)
+  const { store, department } = authData
+
+  const url = `/shopGoods/importPopSG.do?spShopNo=${store.spShopNo}&_r=${Math.random()}`
+  const formData = new FormData()
+  formData.append('csrfToken', csrfToken)
+  formData.append('shopGoodsPopGoodsListFile', fileBuffer, 'PopGoodsImportTemplate.xls')
+
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${store.spShopNo}&deptId=${department.deptId}`
+  }
+
+  const MAX_RETRIES = 3
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[jdApiService] 尝试上传店铺商品文件... (第 ${attempt} 次)`)
+      const responseText = await requestJdApi({
+        method: 'POST',
+        url,
+        data: formData,
+        headers
+      })
+      console.log('[jdApiService] 文件上传成功，响应:', responseText)
+      return { success: true, message: `导入完成: ${responseText}` }
+    } catch (error) {
+      console.error(`[jdApiService] 上传失败 (尝试 ${attempt}):`, error.message)
+      if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {
+        console.log('[jdApiService] 触发频率限制，将在65秒后重试...')
+        await new Promise((resolve) => setTimeout(resolve, 65000))
+      } else {
+        throw new Error(`文件上传在达到最大重试次数后失败: ${error.message}`)
+      }
+    }
+  }
+}
+
+/**
+ * 从京东分页查询CSG编号
+ * @param {string[]} skuBatch - 一批SKU编号
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<string[]>} - CSG编号列表
+ */
+async function fetchCSGPage(skuBatch, sessionData, start, length) {
+  const { cookieString, sessionData: authData } = getAuthInfo(sessionData)
+  const { vendor, department, store } = authData
+
+  const params = {
+    sEcho: 3, // 这个值似乎是固定的，或者可以递增
+    iColumns: 13,
+    sColumns: '',
+    iDisplayStart: start,
+    iDisplayLength: length,
+    _: Date.now(),
+    venderId: vendor.venderId,
+    deptId: department.deptId,
+    shopId: store.shopId,
+    goodsNo: skuBatch.join(',') // 京东API接受逗号分隔的SKU列表
+  }
+
+  const url = '/shopGoods/queryPopSgForJp.do'
+  console.log(
+    `[jdApiService] 查询CSG，SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
+  )
+  const response = await requestJdApi({
+    method: 'GET',
+    url,
+    params,
+    headers: { Cookie: cookieString }
+  })
+
+  if (response && response.aaData) {
+    return response.aaData.map((item) => item.shopGoodsNo).filter(Boolean)
+  }
+  return []
+}
+
+/**
+ * 根据SKU列表获取CSG列表 (处理分页)
+ * @param {string[]} skus - 全部SKU列表
+ * @param {object} sessionData - 完整的会话对象
+ * @param {string} sessionId - 当前会话ID
+ * @returns {Promise<{success: boolean, csgList: string[], message?: string}>}
+ */
+export async function fetchCSGList(skus, sessionId) {
+  const BATCH_SIZE = 50 // 根据旧代码经验，每次查询50个SKU
+  const allCsgs = []
+
+  for (let i = 0; i < skus.length; i += BATCH_SIZE) {
+    const skuBatch = skus.slice(i, i + BATCH_SIZE)
+    try {
+      console.log(`[jdApiService] 正在处理批次 ${Math.floor(i / BATCH_SIZE) + 1}`)
+      // 京东这个接口自身也支持分页返回，但我们按SKU批次调用，每次都从头获取
+      const csgBatch = await fetchCSGPage(skuBatch, sessionId, 0, 200) // 假设单批SKU的结果不会超过200条
+      allCsgs.push(...csgBatch)
+    } catch (error) {
+      console.error(`[jdApiService] 处理批次查询时出错: ${error.message}`)
+      // 选择性地决定是否因为一个批次的失败而终止整个流程
+      // 这里我们选择继续，以尽可能多地获取数据
+    }
+  }
+
+  if (allCsgs.length > 0) {
+    console.log(`[jdApiService] 总共获取了 ${allCsgs.length} 个CSG。`)
+    return { success: true, csgList: allCsgs }
+  } else {
+    return { success: false, message: '未能从任何批次中获取到CSG编号。' }
+  }
+}
