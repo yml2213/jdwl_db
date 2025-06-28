@@ -26,7 +26,7 @@ const { shopsList, isLoadingShops, shopLoadError, selectedStore, loadShops, pers
   useShopAndWarehouse()
 
 // 任务列表管理 (全局共享)
-const { taskList, addTask, executeTask, runAllTasks, clearAllTasks } = useTaskList()
+const { taskList, addTask, executeTask, runAllTasks, clearAllTasks, deleteTask } = useTaskList()
 
 // --- 计算属性 ---
 const currentShopInfo = computed(() =>
@@ -95,7 +95,7 @@ onMounted(() => {
 <template>
   <div v-if="isLoggedIn" class="inventory-clearance-container">
     <ClearStorageOperationArea
-      :form="form"
+      v-model:form="form"
       :shops-list="shopsList"
       :is-loading-shops="isLoadingShops"
       :shop-load-error="shopLoadError"
@@ -108,7 +108,7 @@ onMounted(() => {
       active-tab="tasks"
       @execute-tasks="runAllTasks"
       @clear-tasks="clearAllTasks"
-      @delete-task="handleDeleteTask"
+      @delete-task="deleteTask"
       @execute-one="executeTask"
     />
   </div>

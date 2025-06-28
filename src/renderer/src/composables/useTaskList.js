@@ -101,6 +101,10 @@ export function useTaskList(initialTasks = []) {
     taskList.value = []
   }
 
+  const deleteTask = (taskId) => {
+    taskList.value = taskList.value.filter((t) => t.id !== taskId)
+  }
+
   // 返回状态和方法
   return {
     taskList,
@@ -109,6 +113,7 @@ export function useTaskList(initialTasks = []) {
     // taskFlowStatus: taskFlowState.status,
     addTask,
     executeTask,
+    deleteTask,
     runAllTasks,
     clearFinishedTasks,
     clearAllTasks
