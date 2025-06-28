@@ -325,32 +325,7 @@ export async function getDisabledProducts(skus, sessionData) {
 }
 
 /**
- * 批量启用商品
- * @param {string[]} csgNumbers - 要启用的CSG编号列表
- * @param {object} sessionData - 包含认证信息的完整会话对象
- * @returns {Promise<object>} - 操作结果
- */
-export async function enableProductsByCSG(csgNumbers, sessionData) {
-  const { cookieString, csrfToken } = getAuthInfo(sessionData)
-
-  const url = '/shopGoods/batchUpdateStatus.do'
-  const data = `shopGoodsNos=${csgNumbers.join(',')}&status=1&csrfToken=${csrfToken}`
-
-  console.log(`[jdApiService] 准备启用 ${csgNumbers.length} 个商品...`)
-
-  return await requestJdApi({
-    method: 'POST',
-    url,
-    data,
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      Cookie: cookieString
-    }
-  })
-}
-
-/**
- * 上传状态更新文件
+ * 上传状态更新文件  启用店铺商品
  * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
  * @param {object} sessionData - 包含认证信息的完整会话对象
  * @returns {Promise<object>} - 操作结果
