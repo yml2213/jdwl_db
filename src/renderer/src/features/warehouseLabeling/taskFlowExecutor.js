@@ -81,6 +81,12 @@ export default {
                 }
                 try {
                     const result = await step.execute(context, { log, isRunning, isManual })
+
+                    // 将上一步的结果合并到上下文中，为下一步做准备
+                    if (result && typeof result === 'object') {
+                        Object.assign(context, result)
+                    }
+
                     if (result && result.success === false) {
                         const errorMessage = `步骤 [${step.name}] 执行失败: ${result.message}`
                         log(errorMessage, 'error')

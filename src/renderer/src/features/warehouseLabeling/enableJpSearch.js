@@ -1,30 +1,18 @@
-import { getAllCookies } from '../../utils/cookieHelper'
 import * as XLSX from 'xlsx'
-
-/**
- * 更新任务对象的状态和日志
- */
-function _updateTask(task, status, messages = [], logs = null) {
-  if (!task) return
-  task.状态 = status
-  task.结果 = messages
-  if (logs) {
-    task.importLogs = logs
-  }
-}
 
 /**
  * 创建Excel数据Buffer
  */
 function _createExcelFileAsBuffer(csgList) {
-  const data = csgList.map((csg) => ({
-    'CSG Code': csg,
-    '是否开启京配查询': '是'
-  }))
-  const worksheet = XLSX.utils.json_to_sheet(data)
+  const excelData = [
+    ['店铺商品编号（CSG编码）必填', '京配搜索（0否，1是）'],
+    ...csgList.map((csg) => [csg, '1'])
+  ]
+
+  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
-  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' })
+  return XLSX.write(workbook, { bookType: 'xls', type: 'buffer' })
 }
 
 /**
@@ -49,16 +37,22 @@ async function _getCSGList(skuList, helpers) {
  * 主执行函数
  */
 async function enableJpSearchExecute(context, helpers) {
-  const { skuList } = context
+  const { csgList, skus } = context // csgList可能由前置任务提供, skus来自原始输入
   const { log } = helpers
+  let finalCsgList = csgList
 
-  if (!skuList || skuList.length === 0) throw new Error('SKU列表为空')
+  // 如果没有直接提供csgList，但有skus，则尝试通过API获取
+  if (!finalCsgList || finalCsgList.length === 0) {
+    if (!skus || skus.length === 0) {
+      throw new Error('执行京配打标需要 CSG 列表或 SKU 列表，但两者均未提供。')
+    }
+    log('未直接提供CSG列表，开始通过SKU获取...', 'info')
+    // 注意：这里传递的是 skus，即用户在UI上输入的原始SKU列表
+    finalCsgList = await _getCSGList(skus, helpers)
+  }
 
-  log('开始获取CSG列表...', 'info')
-  const csgList = await _getCSGList(skuList, helpers)
-
-  log(`获取到 ${csgList.length} 个CSG，开始生成Excel文件...`, 'info')
-  const fileBuffer = _createExcelFileAsBuffer(csgList)
+  log(`获取到 ${finalCsgList.length} 个CSG，开始生成Excel文件...`, 'info')
+  const fileBuffer = _createExcelFileAsBuffer(finalCsgList)
   log(`Excel文件创建成功, 大小: ${fileBuffer.length} bytes`, 'info')
 
   log('通过IPC请求主进程上传京配打标文件...', 'info')
@@ -80,12 +74,9 @@ async function enableJpSearchExecute(context, helpers) {
 // 如果未来需要分批，这里的外部循环逻辑需要保留和调整
 // 但目前，我们直接调用上面的 execute 函数
 async function mainExecute(context, helpers) {
-  const { skuList } = context;
-  const BATCH_SIZE = 500;
-  if (skuList.length > BATCH_SIZE) {
-    helpers.log('提示: 京配打标功能会将所有SKU在一次操作中提交。', 'info');
-  }
-  return await enableJpSearchExecute(context, helpers);
+  // 不再在这里检查，将逻辑移到核心执行函数中
+  helpers.log('提示: 京配打标功能会将所有CSG在一次操作中提交。', 'info')
+  return await enableJpSearchExecute(context, helpers)
 }
 
 export default {

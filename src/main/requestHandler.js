@@ -506,6 +506,16 @@ export function setupRequestHandlers() {
       try {
         await logRequest(`[IPC] 上传京配打标文件...`)
 
+        // (调试功能) 保存一份到用户的下载目录
+        try {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+          const debugFileName = `jp-search-debug-${timestamp}.xlsx`
+          await saveBufferToDownloads(fileBuffer, debugFileName)
+          logRequest(`[IPC] 京配打标调试文件已保存: ${debugFileName}`)
+        } catch (e) {
+          console.error('无法保存用于调试的京配打标文件:', e)
+        }
+
         const cookies = await loadCookies()
         if (!cookies) throw new Error('无法从主进程加载Cookies，用户可能未登录')
 
@@ -518,28 +528,42 @@ export function setupRequestHandlers() {
         formData.append(
           'updateShopGoodsJpSearchListFile',
           Buffer.from(fileBuffer),
-          'jp-search-upload.xlsx'
+          'updateShopGoodsJpSearchImportTemplate.xls'
         )
 
         const response = await axiosInstance.post(url, formData, {
           headers: {
             ...formData.getHeaders(),
             Cookie: cookieString,
-            Referer: 'https://o.jdl.com/goToMainIframe.do'
+            Referer: 'https://o.jdl.com/goToMainIframe.do',
+            'Accept': 'application/json, text/javascript, */*; q=0.01'
           }
         })
 
-        const responseText = response.data
-        await logRequest(`[IPC] 京配打标导入响应: ${responseText}`)
+        const responseData = response.data
+        console.log('京配打标导入响应:', responseData)
+        await logRequest(`[IPC] 京配打标导入响应: ${JSON.stringify(responseData)}`)
 
-        if (typeof responseText === 'string' && responseText.includes('导入成功')) {
+        // 优先处理JSON响应
+        if (typeof responseData === 'object' && responseData !== null) {
+          if (responseData.resultCode === 1 || responseData.resultCode === '1') {
+            return { success: true, message: responseData.resultMessage || '京配打标文件上传成功' }
+          } else {
+            return { success: false, message: responseData.resultMessage || responseData.msg || '京配打标文件上传失败' }
+          }
+        }
+
+        // 兼容HTML响应
+        if (typeof responseData === 'string' && responseData.includes('导入成功')) {
           return { success: true, message: '京配打标文件上传成功' }
-        } else {
-          // 尝试从HTML响应中提取更具体的错误信息
-          const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">(.*?)<\/div>/)
+        } else if (typeof responseData === 'string') {
+          const match = responseData.match(/<div class="error-msg">(.*?)<\/div>/)
           const errorMessage = match ? match[1].trim() : '京配打标文件上传失败'
           return { success: false, message: errorMessage }
         }
+
+        return { success: false, message: '服务器返回了未知格式的响应。' }
+
       } catch (error) {
         await logRequest(`[IPC] 京配打标上传失败: ${error.message}`)
         return { success: false, message: `上传失败: ${error.message}` }
