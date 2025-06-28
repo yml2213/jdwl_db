@@ -1,5 +1,5 @@
 import { reactive, toRefs, onMounted, onUnmounted, readonly, ref, toRef } from 'vue'
-import checkProductStatusFeature from '../features/warehouseLabeling/checkProductStatus.js'
+// import checkProductStatusFeature from '../features/warehouseLabeling/checkProductStatus.js'
 import enableStoreProductsFeature from '../features/warehouseLabeling/enableStoreProducts.js'
 
 /**
@@ -51,26 +51,6 @@ export function useTask(featureDefinition) {
     })
   })
 
-  // 检查商品状态 (内部函数)
-  const checkStatus = async (context) => {
-    state.disabledProducts.checking = true
-    state.disabledProducts.checkError = ''
-    state.disabledProducts.items = []
-    log('开始检查商品状态...', 'info')
-    try {
-      const result = await checkProductStatusFeature.execute(context.skus, log)
-      if (result.disabledProducts.length > 0) {
-        log(`发现 ${result.disabledProducts.length} 个停用商品。`, 'warning')
-      }
-      state.disabledProducts.items = result.disabledProducts
-    } catch (e) {
-      state.disabledProducts.checkError = e.message
-      log(`检查商品状态失败: ${e.message}`, 'error')
-    } finally {
-      state.disabledProducts.checking = false
-    }
-  }
-
   // 启用商品 (暴露给外部使用)
   const enableProducts = async (context) => {
     state.disabledProducts.enabling = true
@@ -112,11 +92,7 @@ export function useTask(featureDefinition) {
 
     // 如果是入仓打标流程，先检查状态
     if (featureDefinition.name === 'warehouseLabelingFlow') {
-      await checkStatus(context)
-      if (state.disabledProducts.items.length > 0) {
-        log('检测到停用商品，请先启用它们或在流程选项中勾选"启用店铺商品"。', 'warning')
-        // 可以选择在这里暂停，或者让流程继续
-      }
+      log('检测到停用商品，请先启用它们或在流程选项中勾选"启用店铺商品"。', 'warning')
     }
 
     try {

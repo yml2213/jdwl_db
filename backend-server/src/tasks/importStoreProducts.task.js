@@ -62,13 +62,17 @@ async function execute(context, sessionData) {
     const uploadResult = await uploadStoreProducts(fileBuffer, dataForUpload)
     console.log(`[Task: importStoreProducts] 上传服务调用完成。`)
 
-    // 3. 返回上传结果
-    if (!uploadResult.success) {
-      throw new Error(uploadResult.message || '上传店铺商品文件失败。')
-    }
+    console.log(`[Task: importStoreProducts] 结果======>`, uploadResult)
 
-    console.log(`[Task: importStoreProducts] "导入店铺商品" 任务成功完成。`)
-    return { success: true, message: uploadResult.message }
+    // 3. 返回上传结果
+    //  {result: true, msg: '导入成功，成功1条，失败0条，将进入后台任务处理阶段，请在任务日志界面查询结果，任务号：AsynTask20250629051920062'}
+    if (uploadResult.result) {
+      return { success: true, message: uploadResult.msg }
+    } else if (uploadResult.result === false) {
+      return { success: false, message: uploadResult.msg }
+    } else {
+      throw new Error(uploadResult.message || '上传店铺商品文件失败,未知错误。')
+    }
   } catch (error) {
     console.error('[Task: importStoreProducts] 任务执行失败:', error)
     // 确保抛出错误，以便 executeTask 接口可以捕获并返回给前端
@@ -78,5 +82,6 @@ async function execute(context, sessionData) {
 
 export default {
   name: 'importStoreProducts',
+  description: '导入店铺商品',
   execute: execute
 }

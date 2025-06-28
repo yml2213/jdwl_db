@@ -94,7 +94,7 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
         headers
       })
       console.log('[jdApiService] 文件上传成功，响应:', responseText)
-      return { success: true, message: `导入完成: ${responseText}` }
+      return responseText
     } catch (error) {
       console.error(`[jdApiService] 上传失败 (尝试 ${attempt}):`, error.message)
       if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {

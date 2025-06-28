@@ -1,4 +1,4 @@
-import { batchProcessSKUs } from '../../services/apiService'
+import { queryProductStatus } from '../../services/apiService'
 import { getSelectedDepartment, getSelectedShop } from '../../utils/storageHelper'
 
 const BATCH_SIZE = 1000 // 每个请求的最大SKU数量
@@ -27,12 +27,10 @@ async function mainExecute(skusToCheck, log = console.log) {
     log(`正在处理批次: ${Math.floor(i / BATCH_SIZE) + 1}，包含 ${batch.length} 个SKU...`)
 
     try {
-      // 直接调用apiService中的batchProcessSKUs
-      const { disabledProducts, enabledProducts } = await batchProcessSKUs(
+      // 直接调用apiService中的queryProductStatus
+      const { disabledProducts, enabledProducts } = await queryProductStatus(
         batch,
         getSelectedShop(),
-        false, // importStore
-        false, // useStore
         getSelectedDepartment()
       )
       allDisabledProducts = allDisabledProducts.concat(disabledProducts)
@@ -45,7 +43,10 @@ async function mainExecute(skusToCheck, log = console.log) {
     }
   }
 
-  log(`状态检查完成。停用: ${allDisabledProducts.length}个, 启用: ${allEnabledProducts.length}个。`, 'success')
+  log(
+    `状态检查完成。停用: ${allDisabledProducts.length}个, 启用: ${allEnabledProducts.length}个。`,
+    'success'
+  )
 
   return {
     disabledProducts: allDisabledProducts,
