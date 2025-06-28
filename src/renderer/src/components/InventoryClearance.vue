@@ -344,15 +344,6 @@ watch(
   }
 )
 
-// 处理店铺选择变更事件
-const handleShopChange = (selectedShop) => {
-  if (selectedShop && selectedShop.shopNo) {
-    form.value.selectedStore = selectedShop.shopNo
-    saveSelectedShop(selectedShop)
-    emit('shop-change', selectedShop)
-  }
-}
-
 const handleFileChange = (file) => {
   if (file && file.name.endsWith('.txt')) {
     const reader = new FileReader()
@@ -461,15 +452,23 @@ const handleRunClearanceImmediately = async () => {
 
         <div v-if="clearanceLogs.length > 0" class="new-logs-area">
           <h4 class="logs-header">
-            执行日志 (状态: <span :class="`status-${clearanceStatus}`">{{ clearanceStatus }}</span>)
+            执行日志 (状态: <span :class="`status-${clearanceStatus}`">{{ clearanceStatus }}</span
+            >)
           </h4>
           <div class="logs-content">
-            <div v-for="(log, index) in clearanceLogs" :key="index" :class="`log-item log-${log.type}`">
+            <div
+              v-for="(log, index) in clearanceLogs"
+              :key="index"
+              :class="`log-item log-${log.type}`"
+            >
               <span class="log-time">{{ log.time }}</span>
               <span class="log-message">{{ log.message }}</span>
             </div>
           </div>
-          <div v-if="clearanceStatus === 'success' && clearanceResults.length > 0" class="results-area">
+          <div
+            v-if="clearanceStatus === 'success' && clearanceResults.length > 0"
+            class="results-area"
+          >
             <strong>处理结果:</strong>
             <ul>
               <li v-for="(res, i) in clearanceResults" :key="i">{{ res }}</li>
@@ -508,8 +507,22 @@ const handleRunClearanceImmediately = async () => {
   color: #909399;
 }
 
+.operation-wrapper {
+  flex: 0 0 400px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid #e0e0e0;
+  background-color: #ffffff;
+}
+
+.operation-wrapper > div {
+  overflow-y: auto;
+  padding: 20px;
+}
+
 .new-feature-section {
-  border-top: 1px solid #444;
+  border-top: 1px solid #eee;
   padding-top: 15px;
   margin-top: 15px;
 }
@@ -620,5 +633,18 @@ const handleRunClearanceImmediately = async () => {
 .results-area ul {
   padding-left: 20px;
   margin: 0;
+}
+</style>
+
+<style>
+.form-label,
+.radio-label,
+.checkbox-label {
+  color: #333 !important;
+}
+
+.form-label .required-tip {
+  color: #999 !important;
+  font-weight: normal;
 }
 </style>

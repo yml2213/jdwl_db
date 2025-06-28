@@ -17,7 +17,11 @@
     <div v-if="form.mode === 'sku'">
       <div class="form-group">
         <label class="form-label">输入SKU</label>
-        <textarea v-model="form.sku" placeholder="请输入SKU (多个SKU请每行一个)" class="form-input"></textarea>
+        <textarea
+          v-model="form.sku"
+          placeholder="请输入SKU (多个SKU请每行一个)"
+          class="form-input"
+        ></textarea>
       </div>
       <div class="form-group">
         <FileUploader @file-change="handleFileChange" />
@@ -47,7 +51,7 @@
         @change="$emit('shop-change', $event)"
       />
     </div>
-    
+
     <div class="form-group">
       <button class="btn btn-primary" @click="handleAddTask">添加任务</button>
     </div>
@@ -68,13 +72,6 @@ const handleFileChange = inject('handleFileChange')
 </script>
 
 <style scoped>
-.operation-area {
-  flex: 0 0 350px;
-  padding: 20px;
-  background-color: #f8f9fa;
-  overflow-y: auto;
-  border-right: 1px solid #dee2e6;
-}
 .form-group {
   margin-bottom: 1.5rem;
 }
@@ -83,11 +80,13 @@ const handleFileChange = inject('handleFileChange')
   margin-bottom: 0.5rem;
   font-weight: bold;
 }
-.radio-group, .checkbox-group {
+.radio-group,
+.checkbox-group {
   display: flex;
   gap: 1rem;
 }
-.radio-label, .checkbox-label {
+.radio-label,
+.checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
