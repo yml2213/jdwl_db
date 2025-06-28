@@ -1,10 +1,8 @@
-import { queryProductStatus } from '../../services/apiService'
+import { executeTask } from '../../services/apiService'
 import { getSelectedDepartment, getSelectedShop } from '../../utils/storageHelper'
 
-const BATCH_SIZE = 1000 // 每个请求的最大SKU数量
-
 /**
- * 主执行函数
+ * 主执行函数 - 重构后
  * @param {string[]} skusToCheck - 需要检查状态的SKU列表
  * @param {function} log - 日志回调函数
  * @returns {Promise<Object>} - 返回包含已停用和已启用商品列表的对象
@@ -15,42 +13,37 @@ async function mainExecute(skusToCheck, log = console.log) {
     return { disabledProducts: [], enabledProducts: [] }
   }
 
-  log(`开始检查 ${skusToCheck.length} 个SKU的状态...`)
+  log(`开始将 ${skusToCheck.length} 个SKU 的状态检查任务提交到后端...`, 'info')
 
-  const totalSkus = skusToCheck.length
-  let allDisabledProducts = []
-  let allEnabledProducts = []
-  let processedCount = 0
-
-  for (let i = 0; i < totalSkus; i += BATCH_SIZE) {
-    const batch = skusToCheck.slice(i, i + BATCH_SIZE)
-    log(`正在处理批次: ${Math.floor(i / BATCH_SIZE) + 1}，包含 ${batch.length} 个SKU...`)
-
-    try {
-      // 直接调用apiService中的queryProductStatus
-      const { disabledProducts, enabledProducts } = await queryProductStatus(
-        batch,
-        getSelectedShop(),
-        getSelectedDepartment()
-      )
-      allDisabledProducts = allDisabledProducts.concat(disabledProducts)
-      allEnabledProducts = allEnabledProducts.concat(enabledProducts)
-      processedCount += batch.length
-      log(`批次处理完成。已处理 ${processedCount}/${totalSkus} 个SKU。`)
-    } catch (error) {
-      log(`处理批次时出错: ${error.message}`, 'error')
-      // 这里我们选择记录错误并继续
+  try {
+    // 准备发送到后端的 payload
+    const payload = {
+      skus: skusToCheck,
+      store: getSelectedShop(),
+      department: getSelectedDepartment()
     }
-  }
 
-  log(
-    `状态检查完成。停用: ${allDisabledProducts.length}个, 启用: ${allEnabledProducts.length}个。`,
-    'success'
-  )
+    // 调用通用的任务执行接口，任务名称与后端任务文件名一致
+    const result = await executeTask('checkProductStatus', payload)
 
-  return {
-    disabledProducts: allDisabledProducts,
-    enabledProducts: allEnabledProducts
+    if (result && result.success) {
+      log(
+        `后端任务执行成功。停用: ${result.disabledProducts.length}个, 启用: ${result.enabledProducts.length}个。`,
+        'success'
+      )
+      // 返回与旧函数一致的结构
+      return {
+        disabledProducts: result.disabledProducts || [],
+        enabledProducts: result.enabledProducts || []
+      }
+    } else {
+      const errorMessage = result ? result.message : '未知错误'
+      log(`后端任务执行失败: ${errorMessage}`, 'error')
+      throw new Error(errorMessage)
+    }
+  } catch (error) {
+    log(`调用后端任务时发生网络或未知错误: ${error.message}`, 'error')
+    throw error // 重新抛出错误，以便上层可以捕获
   }
 }
 

@@ -1,35 +1,29 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import {
-  saveSelectedShop,
-  getSelectedShop,
-  saveShopsList,
-  getShopsList,
-  saveSelectedWarehouse,
-  getSelectedWarehouse,
-  saveWarehousesList,
-  getWarehousesList,
-  getSelectedDepartment,
-  getSelectedVendor,
   saveLastWorkflow,
   getLastWorkflow,
   saveManualOptions,
   getManualOptions,
   saveLastSkuInput,
-  getLastSkuInput
+  getLastSkuInput,
+  getSelectedDepartment,
+  getSelectedVendor
 } from '../utils/storageHelper'
-import { getShopList, getWarehouseList } from '../services/apiService'
 import { useTask } from '@/composables/useTask.js'
+import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import taskFlowExecutor from '@/features/warehouseLabeling/taskFlowExecutor'
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 import ProductNameImporter from './warehouse/feature/ProductNameImporter.vue'
 
+// 定义组件的 props
 const props = defineProps({
   isLoggedIn: Boolean
 })
 
-// === WORKFLOW DEFINITIONS ===
+// --- 工作流定义 ---
+// 定义了不同的自动化任务流程，每个流程包含一组预设的配置选项
 const workflows = {
   manual: {
     name: '手动选择',
@@ -39,7 +33,7 @@ const workflows = {
       importProps: false,
       useMainData: false,
       useWarehouse: false,
-      useJdEffect: false,
+      useJPEffect: false,
       importProductNames: false,
       skipConfigErrors: true,
       useAddInventory: false,
@@ -54,7 +48,7 @@ const workflows = {
       importProps: true,
       useMainData: true,
       useWarehouse: true,
-      useJdEffect: true,
+      useJPEffect: true,
       importProductNames: false,
       skipConfigErrors: true,
       useAddInventory: true,
@@ -63,25 +57,42 @@ const workflows = {
   }
 }
 
-// === STATE MANAGEMENT ===
+// --- 核心状态管理 ---
+// 表单和用户输入的核心响应式状态
 const form = ref({
-  quickSelect: 'warehouseLabeling',
-  sku: '',
-  options: {}, // Initialize empty, will be populated on mount
-  selectedStore: '',
-  selectedWarehouse: ''
+  quickSelect: 'warehouseLabeling', // 当前选择的快捷流程
+  sku: '', // 用户输入的SKU
+  options: {}, // 手动模式下的功能选项
+  selectedStore: '', // 已选择的店铺，由 useShopAndWarehouse 管理
+  selectedWarehouse: '' // 已选择的仓库，由 useShopAndWarehouse 管理
 })
 
-const taskList = ref([])
-const shopsList = ref([])
-const warehousesList = ref([])
-const isLoadingShops = ref(false)
-const isLoadingWarehouses = ref(false)
-const shopLoadError = ref('')
-const warehouseLoadError = ref('')
-const activeTab = ref('tasks') // 'tasks' or 'logs'
+// 从组合式函数中引入店铺和仓库相关的功能和状态
+const {
+  shopsList,
+  warehousesList,
+  isLoadingShops,
+  isLoadingWarehouses,
+  shopLoadError,
+  warehouseLoadError,
+  selectedStore,
+  selectedWarehouse,
+  loadShops,
+  loadWarehouses,
+  persistSelectedShop,
+  persistSelectedWarehouse
+} = useShopAndWarehouse()
 
-// Logistics attributes state
+// 将组合式函数中的 ref 直接赋值给 form 中对应的属性，以实现双向绑定
+form.value.selectedStore = selectedStore
+form.value.selectedWarehouse = selectedWarehouse
+
+// 任务列表
+const taskList = ref([])
+// 当前激活的标签页 ('tasks' 或 'logs')
+const activeTab = ref('tasks')
+
+// 物流属性状态
 const logisticsOptions = ref({
   length: '120.00',
   width: '60.00',
@@ -89,83 +100,38 @@ const logisticsOptions = ref({
   grossWeight: '0.1'
 })
 
-// === COMPUTED PROPERTIES ===
+// --- 计算属性 ---
+// 判断当前是否为手动模式
 const isManualMode = computed(() => form.value.quickSelect === 'manual')
 
+// 获取当前选中的店铺完整信息
 const currentShopInfo = computed(() =>
   shopsList.value.find((shop) => shop.shopNo === form.value.selectedStore)
 )
+// 获取当前选中的仓库完整信息
 const currentWarehouseInfo = computed(() =>
   warehousesList.value.find((w) => w.warehouseNo === form.value.selectedWarehouse)
 )
 
-// === API & DATA LOADING ===
-const loadShops = async () => {
-  isLoadingShops.value = true
-  shopLoadError.value = ''
-  try {
-    const cachedShops = getShopsList()
-    if (cachedShops && cachedShops.length > 0) {
-      shopsList.value = cachedShops
-    } else {
-      const department = getSelectedDepartment()
-      if (!department || !department.deptNo) throw new Error('未选择事业部')
-      const deptId = department.deptNo.replace('CBU', '')
-      const shops = await getShopList(deptId)
-      shopsList.value = shops
-      saveShopsList(shops)
-    }
-    const selected = getSelectedShop()
-    form.value.selectedStore = selected?.shopNo || shopsList.value[0]?.shopNo
-  } catch (error) {
-    shopLoadError.value = `加载店铺失败: ${error.message}`
-  } finally {
-    isLoadingShops.value = false
-  }
-}
-
-const loadWarehouses = async () => {
-  isLoadingWarehouses.value = true
-  warehouseLoadError.value = ''
-  try {
-    const cached = getWarehousesList()
-    if (cached && cached.length > 0) {
-      warehousesList.value = cached
-    } else {
-      const vendor = getSelectedVendor()
-      const department = getSelectedDepartment()
-      if (!vendor?.id || !department?.sellerId || !department?.deptNo)
-        throw new Error('未选择供应商或事业部')
-      const warehouses = await getWarehouseList(
-        department.sellerId,
-        department.deptNo.replace('CBU', '')
-      )
-      warehousesList.value = warehouses
-      saveWarehousesList(warehouses)
-    }
-    const selected = getSelectedWarehouse()
-    form.value.selectedWarehouse = selected?.warehouseNo || warehousesList.value[0]?.warehouseNo
-  } catch (error) {
-    warehouseLoadError.value = `加载仓库失败: ${error.message}`
-  } finally {
-    isLoadingWarehouses.value = false
-  }
-}
-
-// === TASK EXECUTION LOGIC ===
+// --- 任务执行逻辑 ---
+// 从 useTask 组合式函数中获取任务执行器
 const { execute: executeTaskFlow, ...taskFlowState } = useTask(taskFlowExecutor)
 
+// 功能选项到中文名称的映射，用于在UI上显示任务名称
 const featureNameMap = {
   importStore: '导入店铺商品',
   useStore: '启用店铺商品',
   importProps: '导入物流属性',
-  useMainData: '启用库存分配',
+  useMainData: '启用库存商品分配',
   useWarehouse: '添加库存',
-  useJdEffect: '京东打标生效',
+  useJPEffect: '启用京配打标生效',
   importProductNames: '导入商品简称',
   useAddInventory: '添加库存'
 }
 
+/**
+ * @description 处理"添加到任务列表"按钮点击事件
+ */
 const handleAddTask = () => {
   const skus = form.value.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
   if (skus.length === 0) return alert('请输入有效的SKU')
@@ -184,7 +150,7 @@ const handleAddTask = () => {
 
   const newTask = {
     id: `task-${Date.now()}`,
-    // Properties for display in TaskListTable
+    // 用于在任务列表表格中显示的信息
     displaySku: `任务 (${skus.length}个SKU)`,
     featureName,
     storeName: currentShopInfo.value.shopName,
@@ -193,11 +159,11 @@ const handleAddTask = () => {
     status: '等待中',
     result: '',
 
-    // Raw data for execution
+    // 用于任务执行的原始数据
     skus: skus,
     options: {
       ...JSON.parse(JSON.stringify(form.value.options)),
-      logistics: { ...logisticsOptions.value } // Add logistics options
+      logistics: { ...logisticsOptions.value } // 添加物流属性
     },
     selectedStore: currentShopInfo.value,
     selectedWarehouse: currentWarehouseInfo.value
@@ -205,8 +171,12 @@ const handleAddTask = () => {
   taskList.value.push(newTask)
 }
 
+/**
+ * @description 执行单个任务
+ * @param {object} taskToRun - 需要执行的任务对象
+ */
 const handleExecuteTask = async (taskToRun) => {
-  activeTab.value = 'logs'
+  activeTab.value = 'logs' // 切换到日志标签页
 
   const task = taskList.value.find((t) => t.id === taskToRun.id)
   if (!task) {
@@ -217,6 +187,7 @@ const handleExecuteTask = async (taskToRun) => {
   try {
     const departmentInfo = getSelectedDepartment()
     const vendorInfo = getSelectedVendor()
+    // 构建任务执行器所需的上下文对象
     const context = {
       skus: task.skus,
       options: task.options,
@@ -229,9 +200,10 @@ const handleExecuteTask = async (taskToRun) => {
 
     await executeTaskFlow(context)
 
+    // 根据任务流的最终状态更新UI
     if (taskFlowState.status.value === 'success') {
       task.status = '成功'
-      task.result = '任务执行成功'
+      task.result = '任务执行成功-1'
     } else {
       task.status = '失败'
       const errorLog = taskFlowState.logs.value
@@ -247,73 +219,47 @@ const handleExecuteTask = async (taskToRun) => {
   }
 }
 
+/**
+ * @description 按顺序执行所有待处理的任务
+ */
 const runAllTasks = async () => {
-  activeTab.value = 'logs'
-
-  const tasksToRun = taskList.value.filter((task) => ['等待中', '失败'].includes(task.status))
-
-  for (const task of tasksToRun) {
-    task.status = '运行中'
-    try {
-      const departmentInfo = getSelectedDepartment()
-      const vendorInfo = getSelectedVendor()
-      const context = {
-        skus: task.skus,
-        options: task.options,
-        store: { ...task.selectedStore, ...departmentInfo },
-        warehouse: task.selectedWarehouse,
-        vendor: vendorInfo,
-        taskName: task.featureName
-      }
-
-      await executeTaskFlow(context)
-
-      if (taskFlowState.status.value === 'success') {
-        task.status = '成功'
-        task.result = '任务执行成功'
-      } else {
-        task.status = '失败'
-        const errorLog = taskFlowState.logs.value
-          .slice()
-          .reverse()
-          .find((l) => l.type === 'error')
-        task.result = errorLog ? errorLog.message : '执行失败，未知错误'
-      }
-    } catch (error) {
-      console.error(`执行任务 ${task.id} 失败:`, error)
-      task.status = '失败'
-      task.result = `执行失败: ${error.message}`
+  for (const task of taskList.value) {
+    if (task.status === '等待中') {
+      await handleExecuteTask(task)
     }
   }
 }
 
-const handleClearTasks = () => {
+/**
+ * @description 清除已完成或失败的任务
+ */
+const clearFinishedTasks = () => {
+  taskList.value = taskList.value.filter((t) => t.status === '等待中' || t.status === '运行中')
+}
+
+/**
+ * @description 清空所有任务
+ */
+const clearAllTasks = () => {
   taskList.value = []
-  // 日志将在下次任务开始时由 useTask 自动清除
 }
 
-const handleDeleteTask = (taskId) => {
-  taskList.value = taskList.value.filter((task) => task.id !== taskId)
-}
+// --- 生命周期与侦听器 ---
 
-const handleManualAddInventoryChange = (event) => {
-  if (event.target.checked) {
-    form.value.options.inventoryAmount = 1000
-  }
-}
-
-// === WATCHERS ===
+// 侦听快捷选择的变化，更新功能选项并保存状态
 watch(
   () => form.value.quickSelect,
-  (newFlow) => {
-    if (workflows[newFlow]) {
-      form.value.options = { ...workflows[newFlow].options }
-      saveLastWorkflow(newFlow)
+  (newVal) => {
+    form.value.options = { ...workflows[newVal].options }
+    saveLastWorkflow(newVal)
+    if (newVal === 'manual') {
+      const savedOptions = getManualOptions()
+      if (savedOptions) form.value.options = savedOptions
     }
-  },
-  { deep: true }
+  }
 )
 
+// 深度侦听手动模式下的选项变化，并持久化
 watch(
   () => form.value.options,
   (newOptions) => {
@@ -324,34 +270,43 @@ watch(
   { deep: true }
 )
 
+// 侦听SKU输入框的变化并保存
 watch(
   () => form.value.sku,
-  (newSku) => {
-    saveLastSkuInput(newSku)
+  (newVal) => saveLastSkuInput(newVal)
+)
+
+// 侦听店铺选择变化并保存
+watch(
+  () => form.value.selectedStore,
+  (newVal) => {
+    if (newVal) persistSelectedShop(newVal)
   }
 )
 
-// === LIFECYCLE HOOKS ===
-onMounted(() => {
-  const lastWorkflow = getLastWorkflow() || 'warehouseLabeling'
-  form.value.quickSelect = lastWorkflow
-
-  if (lastWorkflow === 'manual') {
-    const manualOptions = getManualOptions()
-    if (manualOptions) {
-      form.value.options = manualOptions
-    } else {
-      form.value.options = { ...workflows.manual.options }
-    }
-  } else {
-    form.value.options = { ...workflows[lastWorkflow].options }
+// 侦听仓库选择变化并保存
+watch(
+  () => form.value.selectedWarehouse,
+  (newVal) => {
+    if (newVal) persistSelectedWarehouse(newVal)
   }
+)
 
-  form.value.sku = getLastSkuInput()
-
+// 组件挂载时，加载数据并恢复上次的状态
+onMounted(() => {
   if (props.isLoggedIn) {
     loadShops()
     loadWarehouses()
+    // 恢复上次的工作流选择
+    form.value.quickSelect = getLastWorkflow() || 'warehouseLabeling'
+    form.value.options = { ...workflows[form.value.quickSelect].options }
+    // 如果是手动模式，则加载保存的选项
+    if (form.value.quickSelect === 'manual') {
+      const savedOptions = getManualOptions()
+      if (savedOptions) form.value.options = savedOptions
+    }
+    // 恢复上次输入的SKU
+    form.value.sku = getLastSkuInput() || ''
   }
 })
 
@@ -364,17 +319,11 @@ watch(
     }
   }
 )
-
-watch(currentShopInfo, (newShop) => {
-  if (newShop) saveSelectedShop(newShop)
-})
-watch(currentWarehouseInfo, (newWarehouse) => {
-  if (newWarehouse) saveSelectedWarehouse(newWarehouse)
-})
 </script>
 
 <template>
   <div v-if="isLoggedIn" class="warehouse-labeling-container">
+    <div v-if="isLoadingShops || isLoadingWarehouses || shopLoadError || warehouseLoadError" />
     <div class="main-content">
       <OperationArea
         v-model:quick-select="form.quickSelect"
@@ -446,8 +395,8 @@ watch(currentWarehouseInfo, (newWarehouse) => {
             <label for="useMainData">启用库存商品分配</label>
           </div>
           <div class="option-item">
-            <input type="checkbox" id="useJdEffect" v-model="form.options.useJdEffect" />
-            <label for="useJdEffect">启用京配打标生效</label>
+            <input type="checkbox" id="useJPEffect" v-model="form.options.useJPEffect" />
+            <label for="useJPEffect">启用京配打标生效</label>
           </div>
           <div class="option-item">
             <input
@@ -458,12 +407,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
             <label for="importProductNames">导入商品简称</label>
           </div>
           <div class="option-item">
-            <input
-              type="checkbox"
-              id="useAddInventory"
-              v-model="form.options.useAddInventory"
-              @change="handleManualAddInventoryChange"
-            />
+            <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
             <label for="useAddInventory">添加库存</label>
           </div>
           <!-- Logistics Attributes Inputs -->
@@ -486,8 +430,8 @@ watch(currentWarehouseInfo, (newWarehouse) => {
         :is-running="taskFlowState.isRunning.value"
         :active-tab="activeTab"
         @execute-tasks="runAllTasks"
-        @clear-tasks="handleClearTasks"
-        @delete-task="handleDeleteTask"
+        @clear-tasks="clearAllTasks"
+        @delete-task="clearFinishedTasks"
         @execute-one="handleExecuteTask"
         @update:active-tab="activeTab = $event"
       />

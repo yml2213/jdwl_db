@@ -43,7 +43,8 @@ async function execute(context, sessionData) {
 
     // 4. 处理API响应
     //   { success: false, tipMsg: '', data: '5分钟内只能导入一次,请稍后再试!!' }
-    if (result && result.success) {
+    // {success: true,tipMsg: '',data: '导入成功,任务编号:WLSX20250629052602,请于10分钟之后查看导入日志!'}
+    if (result.success) {
       console.log('[Task: importLogisticsAttributes] "导入物流属性" 任务成功完成。')
       return { success: true, message: result.data || '物流属性导入成功' }
     } else if (result.data.includes('5分钟内只能导入一次')) {
@@ -107,5 +108,6 @@ function createLogisticsExcelBuffer(skuList, department, logisticsOptions) {
 
 export default {
   name: 'importLogisticsAttributes',
+  description: '导入物流属性',
   execute: execute
 }

@@ -23,8 +23,14 @@ async function execute(context, { log, isManual }) {
   try {
     // 调用通用的任务执行接口
     const result = await executeTask('importStoreProducts', context)
+    console.log(`[导入店铺商品] 前端收到结果======>`, result)
+    // {"success": false,"message": "1分钟内不要频繁操作!"}
+    //   {
+    //     "success": true,
+    //     "message": "导入成功，成功1条，失败0条，将进入后台任务处理阶段，请在任务日志界面查询结果，任务号：AsynTask20250629055311921"
+    // }
 
-    if (result && result.success) {
+    if (result.success) {
       log('后端任务提交成功。', 'success')
       return result
     } else {

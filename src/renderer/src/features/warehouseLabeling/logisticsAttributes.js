@@ -37,6 +37,8 @@ export default {
       // 3. 调用通用的任务执行接口
       const result = await executeTask('importLogisticsAttributes', payload)
 
+      console.log(`[导入物流属性] 前端收到结果======>`, result)
+
       if (result && result.success) {
         log('后端任务[导入物流属性]成功完成。', 'success')
         return result
