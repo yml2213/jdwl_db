@@ -178,3 +178,111 @@ export async function fetchCSGList(skus, sessionId) {
     return { success: false, message: '未能从任何批次中获取到CSG编号。' }
   }
 }
+
+/**
+ * 分页查询商品状态并返回停用的商品列表
+ * @param {string[]} skuBatch - 一批SKU
+ * @param {object} authData - 认证和店铺信息
+ * @param {number} start - 分页起始位置
+ * @param {number} length - 分页大小
+ * @returns {Promise<{aaData: object[], iTotalRecords: number}>}
+ */
+async function fetchProductStatusPage(skuBatch, authData, start, length) {
+  const { cookieString, store, department, vendor } = authData
+
+  const params = {
+    sEcho: 1, // 通常是递增的请求序号，但固定值也可以
+    iColumns: 13,
+    sColumns: '',
+    iDisplayStart: start,
+    iDisplayLength: length,
+    _: Date.now(),
+    venderId: vendor.id,
+    deptId: department.id,
+    shopId: store.id,
+    goodsNo: skuBatch.join(','), // SKU列表
+    status: 4 // 4代表"停用"状态
+  }
+
+  const url = '/shopGoods/queryPopSgForJp.do'
+  console.log(
+    `[jdApiService] 查询停用商品, SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
+  )
+  return await requestJdApi({
+    method: 'GET',
+    url,
+    params,
+    headers: { Cookie: cookieString }
+  })
+}
+
+/**
+ * 查询指定SKU列表中所有已停用的商品
+ * @param {string[]} skus - 要查询的SKU列表
+ * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
+ * @returns {Promise<Array<object>>} - 返回停用商品对象的列表，每个对象包含shopGoodsNo等信息
+ */
+export async function getDisabledProducts(skus, sessionData) {
+  const authData = getAuthInfo(sessionData)
+  const allDisabledProducts = []
+  const PAGE_SIZE = 200 // 京东接口分页大小
+
+  // 京东接口限制单次查询的SKU数量，所以也需要分批
+  const SKU_BATCH_SIZE = 50
+  for (let i = 0; i < skus.length; i += SKU_BATCH_SIZE) {
+    const skuBatch = skus.slice(i, i + SKU_BATCH_SIZE)
+    let hasMore = true
+    let start = 0
+    console.log(`[jdApiService] 正在处理SKU批次: ${i / SKU_BATCH_SIZE + 1}`)
+
+    while (hasMore) {
+      const response = await fetchProductStatusPage(
+        skuBatch,
+        authData.sessionData,
+        start,
+        PAGE_SIZE
+      )
+
+      if (response && response.aaData) {
+        allDisabledProducts.push(...response.aaData)
+
+        const receivedCount = start + response.aaData.length
+        if (receivedCount >= response.iTotalRecords) {
+          hasMore = false
+        } else {
+          start = receivedCount
+        }
+      } else {
+        hasMore = false
+      }
+    }
+  }
+
+  console.log(`[jdApiService] 查询完成，共发现 ${allDisabledProducts.length} 个停用商品。`)
+  return allDisabledProducts
+}
+
+/**
+ * 批量启用商品
+ * @param {string[]} csgNumbers - 要启用的CSG编号列表
+ * @param {object} sessionData - 包含认证信息的完整会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function enableProductsByCSG(csgNumbers, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const url = '/shopGoods/batchUpdateStatus.do'
+  const data = `shopGoodsNos=${csgNumbers.join(',')}&status=1&csrfToken=${csrfToken}`
+
+  console.log(`[jdApiService] 准备启用 ${csgNumbers.length} 个商品...`)
+
+  return await requestJdApi({
+    method: 'POST',
+    url,
+    data,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString
+    }
+  })
+}
