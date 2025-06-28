@@ -598,8 +598,12 @@ export function setupRequestHandlers() {
       const url = `https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=${Math.random()}`
       const FormData = require('form-data')
 
+      const sendLog = (message, type = 'info') => {
+        event.sender.send('ipc-log', { message: `[IPC] ${message}`, type })
+      }
+
       try {
-        await logRequest(`[IPC] 上传库存商品分配文件...`)
+        sendLog(`上传库存商品分配文件...`)
 
         if (!cookies || cookies.length === 0) throw new Error('从渲染器进程接收到的Cookies为空')
         const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
@@ -620,7 +624,7 @@ export function setupRequestHandlers() {
         })
 
         const responseData = response.data
-        await logRequest(`[IPC] 库存分配导入响应: ${JSON.stringify(responseData)}`)
+        sendLog(`库存分配导入响应: ${JSON.stringify(responseData)}`)
         console.log('[IPC] 库存分配导入响应:', responseData)
 
         if (responseData && responseData.resultCode === '1') {
@@ -644,7 +648,7 @@ export function setupRequestHandlers() {
         return { success: false, message: `上传失败: ${finalErrorMessage}` }
 
       } catch (error) {
-        await logRequest(`[IPC] 库存分配上传失败: ${error.message}`)
+        sendLog(`库存分配上传失败: ${error.message}`, 'error')
         return { success: false, message: `上传失败: ${error.message}` }
       }
     }

@@ -52,7 +52,7 @@ const workflows = {
       importStore: true,
       useStore: false,
       importProps: true,
-      useMainData: false,
+      useMainData: true,
       useWarehouse: true,
       useJdEffect: true,
       importProductNames: false,
@@ -231,12 +231,12 @@ const handleExecuteTask = async (taskToRun) => {
 
     await executeTaskFlow(context)
 
-    if (taskFlowState.status.value === 'success') {
+    if (taskFlowState.status === 'success') {
       task.status = '成功'
       task.result = '任务执行成功'
     } else {
       task.status = '失败'
-      const errorLog = taskFlowState.logs.value
+      const errorLog = taskFlowState.logs
         .slice()
         .reverse()
         .find((l) => l.type === 'error')
@@ -274,12 +274,12 @@ const runAllTasks = async () => {
 
       await executeTaskFlow(context)
 
-      if (taskFlowState.status.value === 'success') {
+      if (taskFlowState.status === 'success') {
         task.status = '成功'
         task.result = '任务执行成功'
       } else {
         task.status = '失败'
-        const errorLog = taskFlowState.logs.value
+        const errorLog = taskFlowState.logs
           .slice()
           .reverse()
           .find((l) => l.type === 'error')
@@ -297,7 +297,7 @@ const runAllTasks = async () => {
 
 const handleClearTasks = () => {
   taskList.value = []
-  taskFlowState.logs.value = []
+  // 日志将在下次任务开始时由 useTask 自动清除
 }
 
 const handleDeleteTask = (taskId) => {
@@ -490,7 +490,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
       </OperationArea>
       <TaskArea
         :task-list="taskList"
-        :logs="taskFlowState.logs.value"
+        :logs="taskFlowState.logs"
         :is-running="isExecuting"
         :active-tab="activeTab"
         @execute-tasks="runAllTasks"

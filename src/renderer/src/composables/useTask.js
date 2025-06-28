@@ -1,4 +1,4 @@
-import { reactive, toRefs } from 'vue'
+import { ref, readonly, onMounted, onUnmounted, toRef } from 'vue'
 
 /**
  * 一个通用的、可复用的任务执行器 (Vue Composable)
@@ -6,7 +6,7 @@ import { reactive, toRefs } from 'vue'
  */
 export function useTask(featureDefinition) {
     // 响应式状态，用于驱动UI更新
-    const state = reactive({
+    const state = ref({
         isRunning: false,
         status: 'idle', // idle | running | success | error | batching
         logs: [],
@@ -14,14 +14,29 @@ export function useTask(featureDefinition) {
         progress: { current: 0, total: 0 }
     })
 
+    const error = ref(null)
+
     /**
      * 记录日志
      * @param {string} message - 日志信息
      * @param {'info' | 'success' | 'error' | 'warning'} type - 日志类型
      */
     const log = (message, type = 'info') => {
-        state.logs.push({ message, type, time: new Date().toLocaleString() })
+        const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+        state.value.logs.push({ timestamp, message, type })
+        console.log(`[useTask Log - ${type}]: ${message}`)
     }
+
+    onMounted(() => {
+        const handleLog = (event, logData) => {
+            log(`[IPC] ${logData.message}`, logData.type)
+        }
+        window.electron.ipcRenderer.on('ipc-log', handleLog)
+
+        onUnmounted(() => {
+            window.electron.ipcRenderer.removeListener('ipc-log', handleLog)
+        })
+    })
 
     /**
      * 主执行函数
@@ -30,11 +45,11 @@ export function useTask(featureDefinition) {
      */
     const execute = async (context) => {
         // 1. 初始化状态
-        state.isRunning = true
-        state.status = 'running'
-        state.logs = []
-        state.results = []
-        state.progress = { current: 0, total: 0 }
+        state.value.isRunning = true
+        state.value.status = 'running'
+        state.value.logs = []
+        state.value.results = []
+        state.value.progress = { current: 0, total: 0 }
         const taskLabel = context.taskName || featureDefinition.label
         log(`任务 "${taskLabel}" 开始...`, 'info')
 
@@ -43,35 +58,37 @@ export function useTask(featureDefinition) {
             const helpers = {
                 log,
                 updateProgress: (current, total) => {
-                    state.progress = { current, total }
+                    state.value.progress = { current, total }
                 },
-                isRunning: toRefs(state).isRunning
+                isRunning: readonly(toRef(state.value, 'isRunning'))
             }
 
             // 3. 调用功能定义中的核心逻辑
             const resultData = await featureDefinition.execute(context, helpers)
 
             // 4. 处理成功结果
-            state.results = resultData
-            state.status = 'success'
+            state.value.results = resultData
+            state.value.status = 'success'
             log(`任务 "${taskLabel}" 成功完成。`, 'success')
             return resultData
-        } catch (error) {
+        } catch (e) {
             // 5. 处理异常
             const taskLabel = context.taskName || featureDefinition.label
-            console.error(`[useTask] 任务 "${taskLabel}" 执行失败:`, error)
-            state.status = 'error'
-            const errorMessage = error.message || '发生未知错误'
+            console.error(`[useTask] 任务 "${taskLabel}" 执行失败:`, e)
+            state.value.status = 'error'
+            error.value = e
+            const errorMessage = e.message || '发生未知错误'
             log(errorMessage, 'error')
-            return { success: false, message: errorMessage }
+            throw e
         } finally {
             // 6. 结束运行状态
-            state.isRunning = false
+            state.value.isRunning = false
         }
     }
 
     return {
-        ...toRefs(state),
+        ...state.value,
+        error,
         execute
     }
 } 

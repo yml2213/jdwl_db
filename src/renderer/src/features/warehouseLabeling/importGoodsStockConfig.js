@@ -102,8 +102,11 @@ async function importGoodsStockConfigExecute(context, helpers) {
 
     // 通过IPC请求主进程上传库存分配文件
     const ipcPayload = { fileBuffer: Array.from(new Uint8Array(fileBuffer)), cookies, csrfToken }
-    log('通过IPC请求主进程上传库存分配文件...', 'info')
-    const resultIPC = await window.electron.ipcRenderer.invoke('upload-goods-stock-config', ipcPayload)
+
+    const resultIPC = await window.electron.ipcRenderer.invoke(
+      'upload-goods-stock-config',
+      ipcPayload
+    )
 
     const endTime = new Date()
     result.success = resultIPC && resultIPC.success
