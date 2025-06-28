@@ -10,13 +10,20 @@
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group sku-input-container">
       <label class="form-label">输入SKU</label>
       <textarea
         v-model="form.sku"
         placeholder="请输入SKU (多个SKU请每行一个)"
         class="sku-textarea"
       ></textarea>
+      <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
+        >清空</el-button
+      >
+    </div>
+
+    <div class="form-group">
+      <FileUploader @file-change="handleFileChange" />
     </div>
 
     <!-- Manual Options Section -->
@@ -73,10 +80,6 @@
     </div>
 
     <div class="form-group">
-      <FileUploader @file-change="handleFileChange" />
-    </div>
-
-    <div class="form-group">
       <StoreSelector
         v-model="storeVModel"
         :shops="shopsList"
@@ -103,6 +106,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { ElButton } from 'element-plus'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
 import FileUploader from './FileUploader.vue'
@@ -297,5 +301,17 @@ const handleFileChange = (file) => {
   background-color: #67c23a;
   color: white;
   border-color: #67c23a;
+}
+
+.sku-input-container {
+  position: relative;
+}
+
+.clear-sku-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0;
+  height: auto;
 }
 </style>
