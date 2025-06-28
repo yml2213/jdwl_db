@@ -1,49 +1,60 @@
 import { batchProcessSKUs } from '../../services/apiService'
-import { getSelectedDepartment } from '../../utils/storageHelper'
+import { getSelectedDepartment, getSelectedShop } from '../../utils/storageHelper'
+
+const BATCH_SIZE = 1000 // 每个请求的最大SKU数量
+
+/**
+ * 主执行函数
+ * @param {string[]} skusToCheck - 需要检查状态的SKU列表
+ * @param {function} log - 日志回调函数
+ * @returns {Promise<Object>} - 返回包含已停用和已启用商品列表的对象
+ */
+async function mainExecute(skusToCheck, log = console.log) {
+  if (!skusToCheck || skusToCheck.length === 0) {
+    log('没有需要检查状态的SKU。', 'warn')
+    return { disabledProducts: [], enabledProducts: [] }
+  }
+
+  log(`开始检查 ${skusToCheck.length} 个SKU的状态...`)
+
+  const totalSkus = skusToCheck.length
+  let allDisabledProducts = []
+  let allEnabledProducts = []
+  let processedCount = 0
+
+  for (let i = 0; i < totalSkus; i += BATCH_SIZE) {
+    const batch = skusToCheck.slice(i, i + BATCH_SIZE)
+    log(`正在处理批次: ${Math.floor(i / BATCH_SIZE) + 1}，包含 ${batch.length} 个SKU...`)
+
+    try {
+      // 直接调用apiService中的batchProcessSKUs
+      const { disabledProducts, enabledProducts } = await batchProcessSKUs(
+        batch,
+        getSelectedShop(),
+        false, // importStore
+        false, // useStore
+        getSelectedDepartment()
+      )
+      allDisabledProducts = allDisabledProducts.concat(disabledProducts)
+      allEnabledProducts = allEnabledProducts.concat(enabledProducts)
+      processedCount += batch.length
+      log(`批次处理完成。已处理 ${processedCount}/${totalSkus} 个SKU。`)
+    } catch (error) {
+      log(`处理批次时出错: ${error.message}`, 'error')
+      // 这里我们选择记录错误并继续
+    }
+  }
+
+  log(`状态检查完成。停用: ${allDisabledProducts.length}个, 启用: ${allEnabledProducts.length}个。`, 'success')
+
+  return {
+    disabledProducts: allDisabledProducts,
+    enabledProducts: allEnabledProducts
+  }
+}
 
 export default {
   name: 'checkProductStatus',
-  label: '查询商品状态',
-
-  /**
-   * 执行查询商品状态功能
-   * @param {Array<string>} skuList - SKU列表
-   * @param {Object} shopInfo - 店铺信息
-   * @returns {Promise<Object>} 执行结果
-   */
-  async execute(skuList, shopInfo) {
-    console.log('执行[查询商品状态]功能，SKU列表:', skuList)
-
-    // 获取事业部信息
-    const department = getSelectedDepartment()
-    if (!department) {
-      throw new Error('未选择事业部，无法查询商品状态')
-    }
-
-    // 调用批量处理SKU的功能，仅查询状态
-    const result = await batchProcessSKUs(
-      skuList,
-      shopInfo,
-      false, // importStore
-      false, // useStore
-      department
-    )
-
-    return {
-      success: result.success,
-      message: result.message,
-      processedCount: result.processedCount,
-      failedCount: result.failedCount,
-      skippedCount: result.skippedCount
-    }
-  },
-
-  /**
-   * 处理查询结果
-   * @returns {Promise<Object>} 处理结果
-   */
-  async handleResult() {
-    // 查询状态功能结果已经在execute方法中完成，不需要额外处理
-    return null
-  }
+  label: '检查商品状态(停用)',
+  execute: mainExecute
 }

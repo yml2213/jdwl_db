@@ -1,10 +1,15 @@
 import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
 import * as XLSX from 'xlsx'
-import { getSelectedVendor, getSelectedDepartment } from '../utils/storageHelper'
+import { getSelectedDepartment, getSelectedShop } from '../utils/storageHelper'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
+
+// 从主进程发送请求的辅助函数
+async function sendRequest(url, options) {
+  return await window.electron.ipcRenderer.invoke('sendRequest', url, options)
+}
 
 /**
  * 从cookie中获取csrfToken
@@ -737,189 +742,107 @@ export async function enableShopProducts(disabledItems) {
 }
 
 /**
- * 根据SKU列表获取CSG编号列表
+ * 根据SKU列表获取CSG列表
  * @param {Array<string>} skuList - SKU列表
- * @param {Object} deptInfo - 事业部信息
- * @returns {Promise<Array<string>>} CSG编号列表
+ * @param {Object} storeInfo - 店铺信息
+ * @returns {Promise<Object>} - 包含CSG列表或错误信息的对象
  */
 export async function getCSGList(skuList, storeInfo = null) {
-  console.log('开始查询', skuList.length, '个SKU对应的CSG编号')
-  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
-  console.log('查询接口URL:', url)
-  const csrfToken = await getCsrfToken()
-
-  let department = null
-  let vendor = null
-
-  if (storeInfo) {
-    department = {
-      deptId: storeInfo.deptId,
-      deptNo: storeInfo.deptNo,
-      sellerId: storeInfo.sellerId,
-      sellerNo: storeInfo.sellerNo
-    }
-    // vendor信息在storeInfo中可能不完整，这里仅作为一个例子
-    // 实际场景下可能需要从其他地方获取完整的vendor信息
-    vendor = {
-      id: storeInfo.sellerId // 假设sellerId可以作为vendor的id
-    }
-  } else {
-    department = getSelectedDepartment()
-    vendor = getSelectedVendor()
+  const BATCH_SIZE = 1000
+  const shop = storeInfo || getSelectedShop()
+  if (!shop) {
+    return { success: false, message: '无法获取店铺信息' }
   }
 
-  // 参数校验
-  if (!vendor || !vendor.id) {
-    throw new Error('未提供有效的供应商信息')
+  if (!skuList || skuList.length === 0) {
+    return { success: false, message: 'SKU列表为空' }
   }
 
-  // 将SKU列表转换为英文逗号分隔的字符串
-  const skuString = skuList.join(',')
+  const allCsg = []
+  const totalSkus = skuList.length
 
-  console.log(`开始查询${skuList.length}个SKU对应的CSG编号`)
-  console.log('查询接口URL:', url)
+  for (let i = 0; i < totalSkus; i += BATCH_SIZE) {
+    const batchSkus = skuList.slice(i, i + BATCH_SIZE)
+    console.log(`[getCSGList] 正在处理批次 ${Math.floor(i / BATCH_SIZE) + 1}, SKU数量: ${batchSkus.length}`)
 
-  try {
-    let allCSGItems = [] // 存储所有页的CSG商品
     let currentStart = 0
-    const pageSize = 100 // 每页请求的数量，增大以减少请求次数
-    let totalRecords = null
-    let hasMoreData = true
+    const pageSize = 100 // 每次请求获取的结果数量
+    let hasMoreDataInBatch = true
+    let totalRecordsInBatch = 0
 
-    // 循环查询所有页的数据
-    while (hasMoreData) {
-      console.log(`查询CSG商品分页数据：起始位置=${currentStart}, 每页数量=${pageSize}`)
-
-      // 构建aoData参数，注意修改分页参数
-      const aoDataObj = [
+    while (hasMoreDataInBatch) {
+      const aoData = [
         { name: 'sEcho', value: 2 },
         { name: 'iColumns', value: 14 },
         { name: 'sColumns', value: ',,,,,,,,,,,,,' },
         { name: 'iDisplayStart', value: currentStart },
         { name: 'iDisplayLength', value: pageSize },
-        { name: 'mDataProp_0', value: 0 },
-        { name: 'bSortable_0', value: false },
-        { name: 'mDataProp_1', value: 1 },
-        { name: 'bSortable_1', value: false },
-        { name: 'mDataProp_2', value: 'shopGoodsName' },
-        { name: 'bSortable_2', value: false },
-        { name: 'mDataProp_3', value: 'goodsNo' },
-        { name: 'bSortable_3', value: false },
-        { name: 'mDataProp_4', value: 'spGoodsNo' },
-        { name: 'bSortable_4', value: false },
-        { name: 'mDataProp_5', value: 'isvGoodsNo' },
-        { name: 'bSortable_5', value: false },
-        { name: 'mDataProp_6', value: 'shopGoodsNo' },
-        { name: 'bSortable_6', value: false },
-        { name: 'mDataProp_7', value: 'barcode' },
-        { name: 'bSortable_7', value: false },
-        { name: 'mDataProp_8', value: 'shopName' },
-        { name: 'bSortable_8', value: false },
-        { name: 'mDataProp_9', value: 'createTime' },
-        { name: 'bSortable_9', value: false },
-        { name: 'mDataProp_10', value: 10 },
-        { name: 'bSortable_10', value: false },
-        { name: 'mDataProp_11', value: 'isCombination' },
-        { name: 'bSortable_11', value: false },
-        { name: 'mDataProp_12', value: 'status' },
-        { name: 'bSortable_12', value: false },
-        { name: 'mDataProp_13', value: 13 },
-        { name: 'bSortable_13', value: false },
+        { name: 'mDataProp_0', value: 0 }, { name: 'bSortable_0', value: false },
+        { name: 'mDataProp_1', value: 1 }, { name: 'bSortable_1', value: false },
+        { name: 'mDataProp_2', value: 'shopGoodsName' }, { name: 'bSortable_2', value: false },
+        { name: 'mDataProp_3', value: 'goodsNo' }, { name: 'bSortable_3', value: false },
+        { name: 'mDataProp_4', value: 'spGoodsNo' }, { name: 'bSortable_4', value: false },
+        { name: 'mDataProp_5', value: 'isvGoodsNo' }, { name: 'bSortable_5', value: false },
+        { name: 'mDataProp_6', value: 'shopGoodsNo' }, { name: 'bSortable_6', value: false },
+        { name: 'mDataProp_7', value: 'barcode' }, { name: 'bSortable_7', value: false },
+        { name: 'mDataProp_8', value: 'shopName' }, { name: 'bSortable_8', value: false },
+        { name: 'mDataProp_9', value: 'createTime' }, { name: 'bSortable_9', value: false },
+        { name: 'mDataProp_10', value: 10 }, { name: 'bSortable_10', value: false },
+        { name: 'mDataProp_11', value: 'isCombination' }, { name: 'bSortable_11', value: false },
+        { name: 'mDataProp_12', value: 'status' }, { name: 'bSortable_12', value: false },
+        { name: 'mDataProp_13', value: 13 }, { name: 'bSortable_13', value: false },
         { name: 'iSortCol_0', value: 9 },
         { name: 'sSortDir_0', value: 'desc' },
         { name: 'iSortingCols', value: 1 }
       ]
 
-      // 构建查询参数
-      const data = qs.stringify({
-        csrfToken: csrfToken,
-        ids: '',
-        shopId: '',
-        sellerId: department.sellerId || '',
-        deptId: department.deptId || '',
-        sellerNo: department.sellerNo || '',
-        deptNo: department.deptNo || '',
-        shopNo: '',
-        spSource: '',
-        shopGoodsName: '',
-        isCombination: '',
-        barcode: '',
-        jdDeliver: '',
-        sellerGoodsSigns: skuString,
-        spGoodsNos: '',
-        goodsNos: '',
-        isvGoodsNos: '',
+      const data = {
+        shopNo: shop.shopNo,
+        sellerId: shop.sellerId,
+        deptId: shop.deptId,
         status: '1',
-        originSend: '',
-        aoData: JSON.stringify(aoDataObj)
-      })
-      console.log('data', data)
+        sellerGoodsSigns: batchSkus.join(','),
+        aoData: JSON.stringify(aoData)
+      }
 
-      const response = await fetchApi(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          Accept: 'application/json, text/javascript, */*; q=0.01',
-          Origin: BASE_URL,
-          Referer: `${BASE_URL}/goToMainIframe.do`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: data
-      })
+      try {
+        const response = await sendRequest(
+          `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`,
+          {
+            method: 'POST',
+            body: qs.stringify(data),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }
+          }
+        )
 
-      // 处理响应
-      if (response && response.aaData) {
-        // 首次获取总记录数
-        if (totalRecords === null) {
-          totalRecords = response.iTotalRecords || 0
-          console.log(`查询到总共有${totalRecords}个商品`)
+        if (response && response.aaData) {
+          if (totalRecordsInBatch === 0) {
+            totalRecordsInBatch = response.iTotalRecords || 0
+          }
+          const csgListFromPage = response.aaData.map((item) => item.shopGoodsNo).filter(Boolean)
+          allCsg.push(...csgListFromPage)
+
+          currentStart += response.aaData.length
+          if (currentStart >= totalRecordsInBatch || response.aaData.length === 0) {
+            hasMoreDataInBatch = false
+          }
+        } else {
+          console.warn(`[getCSGList] 批次查询未返回有效数据:`, response)
+          hasMoreDataInBatch = false
         }
-
-        // 解析本页数据，提取CSG编号  shopGoodsNo
-        const pageCSGItems = response.aaData
-          .filter(item => item.shopGoodsNo) // 只保留有CSG编号的商品
-          .map(item => item.shopGoodsNo)
-
-        // 合并到总结果中
-        allCSGItems = [...allCSGItems, ...pageCSGItems]
-
-        console.log(`当前已获取${allCSGItems.length}/${totalRecords}个CSG编号`)
-
-        // 判断是否还有更多数据
-        currentStart += response.aaData.length
-        hasMoreData = currentStart < totalRecords
-
-        // 如果没有更多数据或已获取所有记录，退出循环
-        if (!hasMoreData || allCSGItems.length >= totalRecords) {
-          break
-        }
-
-        // 添加短暂延迟避免频繁请求
-        if (hasMoreData) {
-          await new Promise((resolve) => setTimeout(resolve, 300))
-        }
-      } else {
-        // 如果响应异常，退出循环
-        console.warn('查询CSG编号响应异常:', response)
-        hasMoreData = false
+      } catch (error) {
+        console.error(`[getCSGList] 处理批次分页时发生网络错误:`, error)
+        hasMoreDataInBatch = false
       }
     }
+  }
 
-    console.log(`CSG编号查询完成，共获取${allCSGItems.length}个CSG编号`)
 
-    return {
-      success: true,
-      message: `查询到${allCSGItems.length}个CSG编号`,
-      csgList: allCSGItems,
-      totalCount: totalRecords || allCSGItems.length
-    }
-  } catch (error) {
-    console.error('查询CSG编号失败:', error)
-    return {
-      success: false,
-      message: `查询CSG编号失败: ${error.message || '未知错误'}`,
-      csgList: []
-    }
+  if (allCsg.length > 0) {
+    console.log(`[getCSGList] 总共获取了 ${allCsg.length} 个CSG。`)
+    return { success: true, csgList: allCsg }
+  } else {
+    return { success: false, message: '未能从任何批次中获取到CSG编号。' }
   }
 }
 
@@ -940,7 +863,7 @@ export async function getCSGList_cancelJpSearch(skuList) {
   // 将SKU列表转换为英文逗号分隔的字符串
   const skuString = skuList.join(',')
 
-  console.log(`开始查询${skuList.length}个SKU对应的CSG编号`)
+  console.log(`开始查询${skuList.length}个SKU对应的CSG编号-3`)
   const baseUrl = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
   console.log('查询接口URL:', baseUrl)
   const csrfToken = await getCsrfToken()
@@ -954,7 +877,7 @@ export async function getCSGList_cancelJpSearch(skuList) {
 
     // 循环查询所有页的数据
     while (hasMoreData) {
-      console.log(`查询CSG商品分页数据：起始位置=${currentStart}, 每页数量=${pageSize}`)
+      console.log(`查询CSG商品分页数据-2：起始位置=${currentStart}, 每页数量=${pageSize}`)
 
       // 构建aoData参数，注意修改分页参数
       const aoDataObj = [
