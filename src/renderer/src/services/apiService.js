@@ -758,6 +758,14 @@ export async function getCSGList(skuList, storeInfo = null) {
     return { success: false, message: 'SKU列表为空' }
   }
 
+  // 关键修复：获取 Cookies 和 CSRF Token
+  const cookies = await getAllCookies()
+  const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+  const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
+  if (!csrfToken) {
+    return { success: false, message: '无法获取 csrfToken' }
+  }
+
   const allCsg = []
   const totalSkus = skuList.length
 
@@ -766,7 +774,7 @@ export async function getCSGList(skuList, storeInfo = null) {
     console.log(`[getCSGList] 正在处理批次 ${Math.floor(i / BATCH_SIZE) + 1}, SKU数量: ${batchSkus.length}`)
 
     let currentStart = 0
-    const pageSize = 100 // 每次请求获取的结果数量
+    const pageSize = 100
     let hasMoreDataInBatch = true
     let totalRecordsInBatch = 0
 
@@ -797,6 +805,7 @@ export async function getCSGList(skuList, storeInfo = null) {
       ]
 
       const data = {
+        csrfToken, // 关键修复：添加CSRF Token
         shopNo: shop.shopNo,
         sellerId: shop.sellerId,
         deptId: shop.deptId,
@@ -811,7 +820,11 @@ export async function getCSGList(skuList, storeInfo = null) {
           {
             method: 'POST',
             body: qs.stringify(data),
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'Cookie': cookieString, // 关键修复：添加Cookie
+              'Referer': 'https://o.jdl.com/goToMainIframe.do' // 关键修复：添加Referer
+            }
           }
         )
 
