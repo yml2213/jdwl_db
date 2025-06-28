@@ -7,7 +7,7 @@ import logisticsAttributesFeature from './logisticsAttributes'
 import addInventoryFeature from './addInventory'
 import importGoodsStockConfigFeature from './importGoodsStockConfig'
 import enableJpSearchFeature from './enableJpSearch'
-import { getCSGList } from '../../services/apiService'
+import { executeTask } from '../../services/apiService'
 
 // 定义任务流的每个步骤
 const taskFlowSteps = [
@@ -18,7 +18,7 @@ const taskFlowSteps = [
     },
     {
         name: '等待后台任务处理',
-        shouldExecute: (context) => context.options.importStore,
+        shouldExecute: (context) => context.options.importStore && context.quickSelect === 'warehouseLabeling',
         execute: async (context, { log }) => {
             log('--- 开始执行步骤: 等待后台任务处理 ---', 'step')
             log('等待3秒，以便服务器处理后台任务...', 'info')
@@ -28,14 +28,19 @@ const taskFlowSteps = [
     },
     {
         name: '获取店铺商品编号',
-        shouldExecute: (context) => context.options.importStore,
+        shouldExecute: (context) => context.options.importStore && context.quickSelect === 'warehouseLabeling',
         execute: async (context, { log }) => {
-            log('开始获取店铺商品CSG编号...', 'info')
-            const result = await getCSGList(context.skus, context.store)
+            log('正在请求后端执行[获取店铺商品编号]任务...', 'info')
+            // 调用后端的 'getCSG' 任务
+            const result = await executeTask('getCSG', {
+                skus: context.skus,
+                store: context.store
+            })
             if (!result.success || !result.csgList || result.csgList.length === 0) {
                 throw new Error(result.message || '未能获取到CSG编号，可能是后台任务尚未完成。')
             }
             log(`成功获取到 ${result.csgList.length} 个CSG编号。`, 'success')
+            // **关键**: 返回 csgList 以便合并到 context 中
             return { csgList: result.csgList }
         }
     },

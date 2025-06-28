@@ -2,6 +2,8 @@ import express from 'express'
 import cors from 'cors'
 import { JSONFilePreset } from 'lowdb/node'
 import { v4 as uuidv4 } from 'uuid'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 const app = express()
 const port = 3000
@@ -64,6 +66,45 @@ app.post('/api/session', async (req, res) => {
     }
 })
 
+/**
+ * @description 通用的任务执行接口
+ */
+app.post('/api/execute-task', async (req, res) => {
+    const { sessionId, taskName, payload } = req.body
+
+    if (!sessionId || !taskName || !payload) {
+        return res.status(400).json({ message: '缺少 sessionId, taskName 或 payload' })
+    }
+
+    // 1. 验证会话
+    const session = db.data.sessions.find(s => s.sessionId === sessionId)
+    if (!session) {
+        return res.status(401).json({ message: '无效的会话ID' })
+    }
+
+    try {
+        // 2. 动态加载任务模块
+        const __dirname = path.dirname(fileURLToPath(import.meta.url))
+        const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
+        const taskModule = await import(taskPath)
+
+        if (!taskModule.default || typeof taskModule.default.execute !== 'function') {
+            throw new Error(`任务 ${taskName} 或其 execute 方法未找到`)
+        }
+
+        // 3. 执行任务
+        console.log(`Executing task: ${taskName}`)
+        const result = await taskModule.default.execute(payload, session)
+
+        // 4. 返回结果
+        res.status(200).json(result)
+
+    } catch (error) {
+        console.error(`执行任务 ${taskName} 时出错:`, error)
+        // Be careful not to leak stack traces or sensitive info in production
+        res.status(500).json({ success: false, message: error.message })
+    }
+})
 
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`)

@@ -223,7 +223,8 @@ const handleExecuteTask = async (taskToRun) => {
       store: { ...task.selectedStore, ...departmentInfo },
       warehouse: task.selectedWarehouse,
       vendor: vendorInfo,
-      taskName: task.featureName
+      taskName: task.featureName,
+      quickSelect: form.value.quickSelect // 直接传递模式选择
     }
 
     await executeTaskFlow(context)

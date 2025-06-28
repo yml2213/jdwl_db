@@ -1494,5 +1494,31 @@ export const createSession = async (sessionData) => {
     console.error('Error creating session:', error)
     throw error
   }
+}
+
+/**
+ * @description 调用后端的通用任务执行接口
+ * @param {string} taskName 要执行的任务名称
+ * @param {object} payload 任务需要的具体数据
+ * @returns {Promise<object>} 任务执行结果
+ */
+export const executeTask = async (taskName, payload) => {
+  try {
+    const sessionId = localStorage.getItem('sessionId')
+    if (!sessionId) {
+      throw new Error('No session ID found. Please log in again.')
+    }
+
+    const response = await apiClient.post('/api/execute-task', {
+      sessionId: JSON.parse(sessionId),
+      taskName,
+      payload,
+    })
+
+    return response.data
+  } catch (error) {
+    console.error(`Error executing task ${taskName}:`, error)
+    throw error
+  }
 };
 
