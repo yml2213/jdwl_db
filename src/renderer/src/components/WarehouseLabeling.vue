@@ -303,6 +303,12 @@ const handleDeleteTask = (taskId) => {
   taskList.value = taskList.value.filter((task) => task.id !== taskId)
 }
 
+const handleManualAddInventoryChange = (event) => {
+  if (event.target.checked) {
+    form.value.options.inventoryAmount = 1000
+  }
+}
+
 // === WATCHERS ===
 watch(
   () => form.value.quickSelect,
@@ -461,8 +467,24 @@ watch(currentWarehouseInfo, (newWarehouse) => {
             <label for="importProductNames">导入商品简称</label>
           </div>
           <div class="option-item">
-            <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
+            <input
+              type="checkbox"
+              id="useAddInventory"
+              v-model="form.options.useAddInventory"
+              @change="handleManualAddInventoryChange"
+            />
             <label for="useAddInventory">添加库存</label>
+          </div>
+          <!-- Logistics Attributes Inputs -->
+          <div v-if="form.options.useAddInventory" class="inventory-container">
+            <label class="inventory-label">库存数量：</label>
+            <input
+              type="number"
+              v-model="form.options.inventoryAmount"
+              min="1"
+              max="10000"
+              class="inventory-input"
+            />
           </div>
         </div>
       </OperationArea>
@@ -498,19 +520,19 @@ watch(currentWarehouseInfo, (newWarehouse) => {
 }
 
 .login-prompt {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  font-size: 1.5rem;
+  padding: 40px;
+  text-align: center;
 }
 
 .manual-options-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-top: 10px;
-  align-items: center;
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
 }
 
 .option-item {
@@ -518,16 +540,18 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   align-items: center;
 }
 
+.option-item input[type='checkbox'] {
+  margin-right: 8px;
+}
+
 .logistics-options {
-  grid-column: 1 / -1; /* Span across all columns */
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  margin-top: 5px;
-  background-color: #f9f9f9;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e8e8e8;
 }
 
 .logistics-input-group {
@@ -536,15 +560,46 @@ watch(currentWarehouseInfo, (newWarehouse) => {
 }
 
 .logistics-input-group label {
+  margin-bottom: 5px;
   font-size: 12px;
-  margin-bottom: 4px;
-  color: #555;
+  color: #666;
 }
 
 .logistics-input-group input {
-  padding: 6px;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.inventory-container {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border: 1px solid #eaeaea;
+  display: flex;
+  align-items: center;
+  max-width: 250px;
+}
+
+.inventory-label {
+  font-weight: 500;
+  margin-right: 8px;
+  color: #333;
+}
+
+.inventory-input {
+  width: 100px;
+  padding: 6px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.inventory-input:focus {
+  border-color: #1890ff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
 }
 </style>
