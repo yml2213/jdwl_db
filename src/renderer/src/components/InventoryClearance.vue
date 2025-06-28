@@ -11,6 +11,7 @@ import { getShopList } from '../services/apiService'
 
 import { useTask } from '../composables/useTask'
 import stockAllocationClearanceFeature from '../features/warehouseLabeling/stockAllocationClearance'
+import cancelJpSearchFeature from '../features/warehouseLabeling/cancelJpSearch'
 
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
@@ -139,6 +140,10 @@ watch(
   }
 )
 
+const isAnyTaskRunning = computed(() => {
+  return taskList.value.some((task) => task.status === '运行中...')
+})
+
 const handleFileChange = (file) => {
   if (file && file.name.endsWith('.txt')) {
     const reader = new FileReader()
@@ -147,64 +152,87 @@ const handleFileChange = (file) => {
   }
 }
 
-const {
-  isRunning: isClearanceRunning,
-  status: clearanceStatus,
-  logs: clearanceLogs,
-  execute: executeClearance
-} = useTask(stockAllocationClearanceFeature)
-
 const handleAddTask = () => {
   const shopInfo = currentShopInfo.value
   if (!shopInfo) return alert('请选择店铺')
   if (!form.value.options.clearStockAllocation && !form.value.options.cancelJpSearch)
     return alert('请至少选择一个功能选项')
 
-  const functionList = []
-  if (form.value.options.clearStockAllocation) functionList.push('库存分配清零')
-  if (form.value.options.cancelJpSearch) functionList.push('取消京配')
-  const featureName = functionList.join('，')
-
-  const skus = form.value.sku.split(/[\n,，\s]+/).filter((s) => s.trim())
+  const skus = form.value.sku.split(/[\n,，\\s]+/).filter((s) => s.trim())
   if (form.value.mode === 'sku' && skus.length === 0) return alert('请输入至少一个SKU')
 
   const isWholeStore = form.value.mode === 'whole_store'
-  const task = {
-    id: `task-${Date.now()}`,
-    // Display properties
-    displaySku: isWholeStore
-      ? '整店操作'
-      : skus.length > 1
-        ? `批量任务 (${skus.length}个SKU)`
-        : skus[0],
-    featureName,
-    storeName: shopInfo.shopName,
-    warehouseName: 'N/A',
-    createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    status: '等待中',
-    result: '',
-    // Execution properties
-    executionData: {
-      skuList: isWholeStore ? ['WHOLE_STORE'] : skus,
-      shopInfo: JSON.parse(JSON.stringify(shopInfo)), // Crucial fix for cloning error
-      options: JSON.parse(JSON.stringify(form.value.options))
+
+  if (form.value.options.clearStockAllocation) {
+    const task = {
+      id: `task-${Date.now()}-clear`,
+      displaySku: isWholeStore
+        ? '整店操作'
+        : skus.length > 1
+          ? `批量任务 (${skus.length}个SKU)`
+          : skus[0],
+      featureName: '库存分配清零',
+      storeName: shopInfo.shopName,
+      warehouseName: 'N/A',
+      createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      status: '等待中',
+      result: '',
+      executionFeature: stockAllocationClearanceFeature,
+      executionData: {
+        skuList: isWholeStore ? ['WHOLE_STORE'] : skus,
+        shopInfo: JSON.parse(JSON.stringify(shopInfo)),
+        options: { clearStockAllocation: true, cancelJpSearch: false }
+      }
     }
+    taskList.value.push(task)
   }
-  taskList.value.push(task)
+
+  if (form.value.options.cancelJpSearch) {
+    const task = {
+      id: `task-${Date.now()}-cancelJp`,
+      displaySku: isWholeStore
+        ? '整店操作'
+        : skus.length > 1
+          ? `批量任务 (${skus.length}个SKU)`
+          : skus[0],
+      featureName: '取消京配打标',
+      storeName: shopInfo.shopName,
+      warehouseName: 'N/A',
+      createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      status: '等待中',
+      result: '',
+      executionFeature: cancelJpSearchFeature,
+      executionData: {
+        skuList: isWholeStore ? ['WHOLE_STORE'] : skus,
+        shopInfo: JSON.parse(JSON.stringify(shopInfo)),
+        options: { clearStockAllocation: false, cancelJpSearch: true }
+      }
+    }
+    taskList.value.push(task)
+  }
 }
 
 const handleExecuteTask = async (task) => {
   task.status = '运行中...'
   task.result = ''
-  clearanceLogs.value = [] // Clear previous logs
 
-  // CRUCIAL FIX: Only pass serializable data. The `onLog` function was causing the clone error.
+  if (!task.executionFeature || typeof task.executionFeature.execute !== 'function') {
+    task.status = '失败'
+    task.result = '任务功能模块未正确定义'
+    return
+  }
+
+  // Create a new task runner for the specific feature of this task
+  const { status, logs, execute } = useTask(task.executionFeature)
+
+  // Clear previous logs for the specific runner
+  logs.value = []
+
   const context = task.executionData
+  await execute(context)
 
-  await executeClearance(context)
-
-  task.status = clearanceStatus.value
-  const finalLog = clearanceLogs.value[clearanceLogs.value.length - 1]
+  task.status = status.value
+  const finalLog = logs.value[logs.value.length - 1]
   task.result = finalLog ? finalLog.message : '执行完毕'
 }
 
@@ -243,7 +271,7 @@ provide('disabledProducts', disabledProducts)
       </div>
       <TaskArea
         :task-list="taskList"
-        :is-running="isClearanceRunning"
+        :is-running="isAnyTaskRunning"
         :logs="clearanceLogs"
         @execute-one="handleExecuteTask"
         @delete-task="handleDeleteTask"

@@ -1,5 +1,4 @@
 import { getAllCookies } from '../../utils/cookieHelper'
-import * as XLSX from 'xlsx'
 import { getCSGList_cancelJpSearch, getShopGoodsList } from '../../services/apiService'
 
 // --- 内部核心函数 ---
