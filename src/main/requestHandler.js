@@ -621,8 +621,7 @@ export function setupRequestHandlers() {
     }
 
     try {
-      sendLog(`上传库存商品分配文件...`)
-
+      sendLog(`上传 启用库存商品分配 的文件...`)
       if (!cookies || cookies.length === 0) throw new Error('从渲染器进程接收到的Cookies为空')
       const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
 
@@ -642,27 +641,20 @@ export function setupRequestHandlers() {
       })
 
       const responseData = response.data
-      console.log('======库存分配导入响应 开始======: ')
-      console.log(responseData)
-      console.log('======库存分配导入响应 结束======: ')
       sendLog(`库存分配导入响应: ${JSON.stringify(responseData)}`)
-      console.log('[IPC] 库存分配导入响应:', responseData)
       // { resultCode: '0', resultMessage: '5分钟内不要频繁操作!' }
       // {resultData: 'report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751105299155.csv',resultCode: '1'}
 
 
       // resultCode '1' 代表同步成功
       if (responseData && responseData.resultCode === '1') {
-        console.log('======结果码1 成功======: ')
         const logFileName = responseData.resultData
           ? responseData.resultData.split('/').pop()
           : '未知日志文件'
         return { success: true, message: `导入任务已提交，请在报表中心查看日志: ${logFileName}` }
       } else if (responseData && responseData.resultCode === '0') {
-        console.log('======结果码0 失败======: ')
         return { success: false, message: responseData.resultMessage || '库存分配导入失败' }
       } else {
-        console.log('======结果码其他 失败======: ')
         return { success: false, message: responseData.resultMessage }
       }
     } catch (error) {

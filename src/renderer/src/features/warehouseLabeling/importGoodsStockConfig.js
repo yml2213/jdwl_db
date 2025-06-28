@@ -84,12 +84,13 @@ async function mainExecute(context, helpers) {
 
       const ipcResult = await window.electron.ipcRenderer.invoke('upload-goods-stock-config', ipcPayload)
 
-      // 根据此API的特性，resultCode '2' 表示成功提交异步任务
-      if (ipcResult && ipcResult.resultCode === '2') {
-        return { success: true, message: `任务已成功提交，日志文件: ${ipcResult.resultData}` }
+      // 主进程的 'upload-goods-stock-config' handle 返回 { success: true, message: '...' } 时表示成功
+      if (ipcResult && ipcResult.success) {
+        log(ipcResult.message, 'info')
+        return { success: true, message: ipcResult.message }
       } else {
         // 其他情况都视为失败
-        const errorMessage = `上传失败: ${JSON.stringify(ipcResult)}`
+        const errorMessage = `上传失败: ${ipcResult.message || JSON.stringify(ipcResult)}`
         log(errorMessage, 'error')
         return { success: false, message: errorMessage }
       }
