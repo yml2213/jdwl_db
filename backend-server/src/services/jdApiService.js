@@ -348,3 +348,36 @@ export async function enableProductsByCSG(csgNumbers, sessionData) {
     }
   })
 }
+
+/**
+ * 上传状态更新文件
+ * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function uploadStatusUpdateFile(fileBuffer, sessionData) {
+  const { cookieString, csrfToken, sessionData: authData } = getAuthInfo(sessionData)
+  const { store, department } = authData
+
+  const url = `/shopGoods/importPopSG.do?spShopNo=${store.spShopNo}&_r=${Math.random()}`
+  const formData = new FormData()
+  formData.append('csrfToken', csrfToken)
+  formData.append('shopGoodsPopGoodsListFile', fileBuffer, 'StatusUpdate.xls')
+
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    // 使用一个更通用的Referer
+    Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${store.spShopNo}&deptId=${department.deptId}`
+  }
+
+  console.log('[jdApiService] 尝试上传商品状态更新文件...')
+  const responseText = await requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
+  console.log('[jdApiService] 文件上传成功，响应:', responseText)
+  return { success: true, message: `导入完成: ${responseText}` }
+}
