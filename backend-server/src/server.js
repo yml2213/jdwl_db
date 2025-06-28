@@ -1,8 +1,14 @@
-const express = require('express')
-const cors = require('cors')
+import express from 'express'
+import cors from 'cors'
+import { JSONFilePreset } from 'lowdb/node'
+import { v4 as uuidv4 } from 'uuid'
 
 const app = express()
 const port = 3000
+
+// 初始化 lowdb
+const defaultData = { sessions: [] }
+const db = await JSONFilePreset('db.json', defaultData)
 
 // Middlewares
 app.use(cors()) // 允许跨域请求
@@ -17,19 +23,30 @@ app.get('/', (req, res) => {
  * @description 接收并处理前端发送的会话信息
  * 前端登录成功后，将调用此接口
  */
-app.post('/api/session', (req, res) => {
+app.post('/api/session', async (req, res) => {
     const { cookies, supplierInfo, departmentInfo } = req.body
 
-    console.log('Received session data:')
-    console.log('Cookies:', cookies)
-    console.log('Supplier Info:', supplierInfo)
-    console.log('Department Info:', departmentInfo)
+    if (!cookies || !supplierInfo || !departmentInfo) {
+        return res.status(400).json({ message: 'Missing session data.' })
+    }
 
-    // TODO: 在此处添加逻辑来安全地存储和管理这些信息
-    // 例如，可以创建一个会话ID，将这些信息存入数据库或缓存（如Redis），
-    // 然后将该会d话ID返回给前端。
+    const sessionId = uuidv4()
+    const newSession = {
+        sessionId,
+        cookies,
+        supplierInfo,
+        departmentInfo,
+        createdAt: new Date().toISOString(),
+    }
 
-    res.status(200).json({ message: 'Session data received successfully.' })
+    // 将新会话存入数据库
+    db.data.sessions.push(newSession)
+    await db.write()
+
+    console.log(`Session created with ID: ${sessionId}`)
+
+    // 将 sessionId 返回给前端
+    res.status(200).json({ sessionId })
 })
 
 
