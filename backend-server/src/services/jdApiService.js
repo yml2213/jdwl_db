@@ -1,5 +1,6 @@
 import axios from 'axios'
 import FormData from 'form-data'
+import qs from 'qs'
 
 // 创建一个专门用于京东API请求的axios实例
 const jdApiAxios = axios.create({
@@ -137,7 +138,7 @@ async function fetchCSGPage(skuBatch, sessionData, start, length) {
     method: 'GET',
     url,
     params,
-    headers: { Cookie: cookieString }
+    headers: { Cookie: cookieString, Referer: 'https://o.jdl.com/shopGoods/queryPopSgForJp.do' }
   })
 
   if (response && response.aaData) {
@@ -182,37 +183,106 @@ export async function fetchCSGList(skus, sessionId) {
 /**
  * 分页查询商品状态并返回停用的商品列表
  * @param {string[]} skuBatch - 一批SKU
- * @param {object} authData - 认证和店铺信息
+ * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
  * @param {number} start - 分页起始位置
  * @param {number} length - 分页大小
  * @returns {Promise<{aaData: object[], iTotalRecords: number}>}
  */
-async function fetchProductStatusPage(skuBatch, authData, start, length) {
-  const { cookieString, store, department, vendor } = authData
+async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { store, department, departmentInfo } = sessionData
 
-  const params = {
-    sEcho: 1, // 通常是递增的请求序号，但固定值也可以
-    iColumns: 13,
-    sColumns: '',
-    iDisplayStart: start,
-    iDisplayLength: length,
-    _: Date.now(),
-    venderId: vendor.id,
-    deptId: department.id,
-    shopId: store.id,
-    goodsNo: skuBatch.join(','), // SKU列表
-    status: 4 // 4代表"停用"状态
+  console.log('sessionData', sessionData)
+  console.log('store', store)
+  console.log('department', department)
+  console.log('departmentInfo', departmentInfo)
+
+  const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+
+  const aoDataObj = [
+    { name: 'sEcho', value: 2 },
+    { name: 'iColumns', value: 14 },
+    { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+    { name: 'iDisplayStart', value: start },
+    { name: 'iDisplayLength', value: length },
+    { name: 'mDataProp_0', value: 0 },
+    { name: 'bSortable_0', value: false },
+    { name: 'mDataProp_1', value: 1 },
+    { name: 'bSortable_1', value: false },
+    { name: 'mDataProp_2', value: 'shopGoodsName' },
+    { name: 'bSortable_2', value: false },
+    { name: 'mDataProp_3', value: 'goodsNo' },
+    { name: 'bSortable_3', value: false },
+    { name: 'mDataProp_4', value: 'spGoodsNo' },
+    { name: 'bSortable_4', value: false },
+    { name: 'mDataProp_5', value: 'isvGoodsNo' },
+    { name: 'bSortable_5', value: false },
+    { name: 'mDataProp_6', value: 'shopGoodsNo' },
+    { name: 'bSortable_6', value: false },
+    { name: 'mDataProp_7', value: 'barcode' },
+    { name: 'bSortable_7', value: false },
+    { name: 'mDataProp_8', value: 'shopName' },
+    { name: 'bSortable_8', value: false },
+    { name: 'mDataProp_9', value: 'createTime' },
+    { name: 'bSortable_9', value: false },
+    { name: 'mDataProp_10', value: 10 },
+    { name: 'bSortable_10', value: false },
+    { name: 'mDataProp_11', value: 'isCombination' },
+    { name: 'bSortable_11', value: false },
+    { name: 'mDataProp_12', value: 'status' },
+    { name: 'bSortable_12', value: false },
+    { name: 'mDataProp_13', value: 13 },
+    { name: 'bSortable_13', value: false },
+    { name: 'iSortCol_0', value: 9 },
+    { name: 'sSortDir_0', value: 'desc' },
+    { name: 'iSortingCols', value: 1 }
+  ]
+
+  const data_obj = {
+    csrfToken: csrfToken,
+    ids: '',
+    shopId: store?.id || '',
+    sellerId: departmentInfo?.sellerId || '', // 20000021459
+    deptId: departmentInfo?.id || '', // 22010232593780
+    sellerNo: department?.sellerNo || '', // CCP0020000021459
+    deptNo: departmentInfo?.deptNo || '', // CBU22010232593780
+    shopNo: 'CSP' + store?.id || '', // CSP0020000352400
+    spSource: '',
+    shopGoodsName: '',
+    isCombination: '',
+    barcode: '',
+    jdDeliver: '',
+    createTimeRange: '',
+    sellerGoodsSigns: skuBatch.join(','),
+    spGoodsNos: '',
+    goodsNos: '',
+    isvGoodsNos: '',
+    status: '2', // 2代表"停用"状态
+    originSend: '',
+    aoData: JSON.stringify(aoDataObj)
   }
+  console.log('data_obj', JSON.stringify(data_obj, null, 2))
 
-  const url = '/shopGoods/queryPopSgForJp.do'
+  const data = qs.stringify(data_obj)
+
   console.log(
     `[jdApiService] 查询停用商品, SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
   )
+  console.log('data', JSON.stringify(data, null, 2))
+
   return await requestJdApi({
-    method: 'GET',
+    method: 'POST',
     url,
-    params,
-    headers: { Cookie: cookieString }
+    data,
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      Origin: 'https://o.jdl.com',
+      Referer: 'https://o.jdl.com/goToMainIframe.do',
+      Cookie: cookieString
+    }
   })
 }
 
@@ -223,9 +293,9 @@ async function fetchProductStatusPage(skuBatch, authData, start, length) {
  * @returns {Promise<Array<object>>} - 返回停用商品对象的列表，每个对象包含shopGoodsNo等信息
  */
 export async function getDisabledProducts(skus, sessionData) {
-  const authData = getAuthInfo(sessionData)
+  getAuthInfo(sessionData)
   const allDisabledProducts = []
-  const PAGE_SIZE = 200 // 京东接口分页大小
+  const PAGE_SIZE = 100 // 与前端保持一致
 
   // 京东接口限制单次查询的SKU数量，所以也需要分批
   const SKU_BATCH_SIZE = 50
@@ -233,21 +303,22 @@ export async function getDisabledProducts(skus, sessionData) {
     const skuBatch = skus.slice(i, i + SKU_BATCH_SIZE)
     let hasMore = true
     let start = 0
+    let totalRecords = null // 用于跟踪总记录数
     console.log(`[jdApiService] 正在处理SKU批次: ${i / SKU_BATCH_SIZE + 1}`)
 
     while (hasMore) {
-      const response = await fetchProductStatusPage(
-        skuBatch,
-        authData.sessionData,
-        start,
-        PAGE_SIZE
-      )
+      const response = await fetchProductStatusPage(skuBatch, sessionData, start, PAGE_SIZE)
+      console.log('response', response)
 
       if (response && response.aaData) {
+        if (totalRecords === null) {
+          totalRecords = response.iTotalRecords || 0
+        }
+
         allDisabledProducts.push(...response.aaData)
 
         const receivedCount = start + response.aaData.length
-        if (receivedCount >= response.iTotalRecords) {
+        if (receivedCount >= totalRecords || response.aaData.length === 0) {
           hasMore = false
         } else {
           start = receivedCount
@@ -257,8 +328,6 @@ export async function getDisabledProducts(skus, sessionData) {
       }
     }
   }
-
-  console.log(`[jdApiService] 查询完成，共发现 ${allDisabledProducts.length} 个停用商品。`)
   return allDisabledProducts
 }
 
