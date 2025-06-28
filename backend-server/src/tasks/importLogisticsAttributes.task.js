@@ -42,9 +42,15 @@ async function execute(context, sessionData) {
     const result = await uploadLogisticsAttributesFile(fileBuffer, dataForApi)
 
     // 4. 处理API响应
+    //   { success: false, tipMsg: '', data: '5分钟内只能导入一次,请稍后再试!!' }
     if (result && result.success) {
       console.log('[Task: importLogisticsAttributes] "导入物流属性" 任务成功完成。')
       return { success: true, message: result.data || '物流属性导入成功' }
+    } else if (result.data.includes('5分钟内只能导入一次')) {
+      console.log(
+        '[Task: importLogisticsAttributes] "导入物流属性" 5分钟内只能导入一次,请稍后再试!!'
+      )
+      return { success: false, message: result.data || '5分钟内只能导入一次,请稍后再试!!' }
     } else {
       const errorMessage = result.data || '导入物流属性时发生未知错误'
       console.error(`[Task: importLogisticsAttributes] 导入失败: ${errorMessage}`)
