@@ -22,7 +22,7 @@
       :active-tab="activeTab"
       @update:active-tab="$emit('update:active-tab', $event)"
       @delete-task="$emit('delete-task', $event)"
-      @execute-task="$emit('execute-task', $event)"
+      @execute-one="$emit('execute-one', $event)"
     />
   </div>
 </template>
@@ -37,19 +37,19 @@ defineProps({
   },
   logs: {
     type: Array,
-    required: true
+    default: () => []
   },
   isRunning: {
     type: Boolean,
-    required: true
+    default: false
   },
   activeTab: {
     type: String,
-    required: true
+    default: 'tasks'
   }
 })
 
-defineEmits(['execute-tasks', 'clear-tasks', 'delete-task', 'update:active-tab', 'execute-task'])
+defineEmits(['execute-tasks', 'clear-tasks', 'delete-task', 'update:active-tab', 'execute-one'])
 </script>
 
 <style scoped>

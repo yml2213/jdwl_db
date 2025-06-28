@@ -32,12 +32,14 @@
           <td class="task-cell actions-cell">
             <button
               v-if="['等待中', '失败'].includes(task.status)"
-              @click="$emit('execute-task', task)"
+              @click="$emit('execute-one', task)"
               class="action-btn execute-btn"
             >
               执行
             </button>
-            <button @click="$emit('delete-task', task.id)" class="action-btn delete-btn">删除</button>
+            <button @click="$emit('delete-task', task.id)" class="action-btn delete-btn">
+              删除
+            </button>
           </td>
         </tr>
       </tbody>
@@ -55,7 +57,7 @@ defineProps({
   }
 })
 
-defineEmits(['delete-task', 'execute-task'])
+defineEmits(['delete-task', 'execute-one'])
 </script>
 
 <style scoped>

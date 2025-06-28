@@ -24,7 +24,7 @@
           v-if="activeTab === 'tasks'"
           :tasks="tasks"
           @delete-task="$emit('delete-task', $event)"
-          @execute-task="$emit('execute-task', $event)"
+          @execute-one="$emit('execute-one', $event)"
         />
       </div>
       <div :class="['tab-pane', { active: activeTab === 'logs' }]">
@@ -71,7 +71,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-task', 'enable-products'])
+const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-one', 'enable-products'])
 
 const activeTab = ref('tasks')
 
