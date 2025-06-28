@@ -23,6 +23,7 @@ import { useTask } from '@/composables/useTask.js'
 import taskFlowExecutor from '@/features/warehouseLabeling/taskFlowExecutor'
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
+import ProductNameImporter from './warehouse/feature/ProductNameImporter.vue'
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -384,18 +385,16 @@ watch(currentWarehouseInfo, (newWarehouse) => {
   <div v-if="isLoggedIn" class="warehouse-labeling-container">
     <div class="main-content">
       <OperationArea
+        v-model:quick-select="form.quickSelect"
         v-model:sku="form.sku"
-        v-model:quickSelect="form.quickSelect"
-        :workflows="workflows"
-        :is-manual-mode="isManualMode"
-        :shops-list="shopsList"
+        v-model:options="form.options"
         v-model:selected-store="form.selectedStore"
-        :is-loading-shops="isLoadingShops"
-        :shop-load-error="shopLoadError"
-        :warehouses-list="warehousesList"
         v-model:selected-warehouse="form.selectedWarehouse"
-        :is-loading-warehouses="isLoadingWarehouses"
-        :warehouse-load-error="warehouseLoadError"
+        v-model:logistics-options="logisticsOptions"
+        :shops-list="shopsList"
+        :warehouses-list="warehousesList"
+        :is-manual-mode="isManualMode"
+        :is-executing="isExecuting"
         @add-task="handleAddTask"
       >
         <div v-if="isManualMode" class="manual-options-grid">
@@ -487,6 +486,7 @@ watch(currentWarehouseInfo, (newWarehouse) => {
             />
           </div>
         </div>
+        <ProductNameImporter v-if="form.options.importProductNames" />
       </OperationArea>
       <TaskArea
         :task-list="taskList"

@@ -31,18 +31,18 @@ export default {
 
       // 创建新的Excel文件
       const newExcelData = this.createNewExcelData(data, department)
-      
+
       // 检查数据量是否需要分组处理
       const rowCount = newExcelData.length - 2  // 减去两行表头
       const BATCH_SIZE = 2000
-      
+
       if (rowCount <= BATCH_SIZE) {
         // 数据量较小，直接处理
         console.log(`数据量较小(${rowCount}行)，不需要分组处理`)
-        
+
         // 将数据转换为Excel文件
         const newFile = await this.convertToExcelFile(newExcelData)
-        
+
         // 上传数据到服务器
         const result = await this.uploadProductNamesData(newFile)
 
@@ -54,7 +54,7 @@ export default {
       } else {
         // 数据量较大，需要分组处理
         console.log(`数据量较大(${rowCount}行)，需要分组处理，每组最多${BATCH_SIZE}行`)
-        
+
         // 分组处理
         return await this.processBatches(newExcelData, department, BATCH_SIZE)
       }
@@ -76,27 +76,27 @@ export default {
   async readExcelFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      
+
       reader.onload = (e) => {
         try {
           const data = e.target.result
           const workbook = XLSX.read(data, { type: 'array' })
-          
+
           // 获取第一个工作表
           const firstSheetName = workbook.SheetNames[0]
           console.log('Excel工作表名称:', firstSheetName)
-          
+
           const worksheet = workbook.Sheets[firstSheetName]
-          
+
           // 将工作表转换为数组
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-          
+
           // 打印前几行数据用于调试
           console.log('Excel前5行数据:')
           for (let i = 0; i < Math.min(5, jsonData.length); i++) {
             console.log(`行${i}:`, JSON.stringify(jsonData[i]))
           }
-          
+
           console.log('Excel解析结果:', jsonData.length, '行')
           resolve(jsonData)
         } catch (error) {
@@ -104,12 +104,12 @@ export default {
           reject(new Error(`解析Excel文件失败: ${error.message}`))
         }
       }
-      
+
       reader.onerror = (error) => {
         console.error('读取Excel文件失败:', error)
         reject(new Error('读取Excel文件失败'))
       }
-      
+
       reader.readAsArrayBuffer(file)
     })
   },
@@ -123,16 +123,16 @@ export default {
   createNewExcelData(originalData, department) {
     console.log('开始创建新Excel数据，原始数据行数:', originalData.length)
     console.log('使用事业部编码:', department.deptNo)
-    
+
     // 表头行 - 中文
     const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
-    
+
     // 表头行 - 英文（第二行）
     const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
-    
+
     // 数据行
     const rows = []
-    
+
     // 跳过表头行，处理数据行
     for (let i = 1; i < originalData.length; i++) {
       const row = originalData[i]
@@ -141,7 +141,7 @@ export default {
         const sku = String(row[0] || '').trim()
         // 确保商品名称是字符串格式
         const name = String(row[1] || '').trim()
-        
+
         if (sku && name) {
           // 原始数据的第一列是SKU，第二列是商品名称
           rows.push([
@@ -150,15 +150,15 @@ export default {
             name              // 商品名称
           ])
         } else {
-          console.log(`跳过第${i+1}行: SKU或名称为空`, JSON.stringify(row))
+          console.log(`跳过第${i + 1}行: SKU或名称为空`, JSON.stringify(row))
         }
       } else {
-        console.log(`跳过第${i+1}行: 列数不足`, JSON.stringify(row))
+        console.log(`跳过第${i + 1}行: 列数不足`, JSON.stringify(row))
       }
     }
-    
+
     console.log(`处理完成，生成${rows.length}行有效数据`)
-    
+
     // 打印前几行生成的数据用于调试
     console.log('生成的Excel数据结构:')
     // 合并中文表头、英文表头和数据行
@@ -166,9 +166,9 @@ export default {
     console.log(`第1行(中文表头): ${JSON.stringify(mergedData[0])}`)
     console.log(`第2行(英文字段): ${JSON.stringify(mergedData[1])}`)
     for (let i = 2; i < Math.min(7, mergedData.length); i++) {
-      console.log(`第${i+1}行(数据): ${JSON.stringify(mergedData[i])}`)
+      console.log(`第${i + 1}行(数据): ${JSON.stringify(mergedData[i])}`)
     }
-    
+
     return mergedData
   },
 
@@ -182,85 +182,85 @@ export default {
   async processBatches(fullData, department, batchSize) {
     // 表头行（前两行）
     const headers = fullData.slice(0, 2)
-    
+
     // 数据行
     const dataRows = fullData.slice(2)
-    
+
     // 计算总批次数
     const totalBatches = Math.ceil(dataRows.length / batchSize)
     console.log(`共分为${totalBatches}个批次处理`)
-    
+
     // 结果统计
     let totalCount = 0
     let successCount = 0
     let failCount = 0
     let combinedResultMsg = '分批处理汇总:\n'
     let allResults = []
-    
+
     // 进度事件
     const progressEvent = new CustomEvent('importProductNamesProgress', {
       detail: { total: totalBatches, current: 0 }
     })
     window.dispatchEvent(progressEvent)
-    
+
     // 逐批处理
     for (let i = 0; i < totalBatches; i++) {
       const start = i * batchSize
       const end = Math.min(start + batchSize, dataRows.length)
       const currentBatch = dataRows.slice(start, end)
-      
-      console.log(`处理第${i+1}/${totalBatches}批，数据行数:${currentBatch.length}`)
-      
+
+      console.log(`处理第${i + 1}/${totalBatches}批，数据行数:${currentBatch.length}`)
+
       // 更新进度
       const batchProgressEvent = new CustomEvent('importProductNamesProgress', {
         detail: { total: totalBatches, current: i + 1 }
       })
       window.dispatchEvent(batchProgressEvent)
-      
+
       // 创建当前批次的完整数据（表头+数据）
       const batchData = [...headers, ...currentBatch]
-      
+
       // 转换为Excel文件
-      const batchFile = await this.convertToExcelFile(batchData, `批次${i+1}`)
-      
+      const batchFile = await this.convertToExcelFile(batchData, `批次${i + 1}`)
+
       // 上传数据
       const result = await this.uploadProductNamesData(batchFile)
       allResults.push(result)
-      
+
       // 累加统计数据
       if (result.data) {
         const batchTotal = parseInt(result.data.totalNum) || 0
         const batchSuccess = parseInt(result.data.successNum) || 0
         const batchFail = parseInt(result.data.failNum) || 0
-        
+
         totalCount += batchTotal
         successCount += batchSuccess
         failCount += batchFail
-        
+
         // 添加当前批次结果到汇总信息
-        combinedResultMsg += `批次${i+1}: 共${batchTotal}条，成功${batchSuccess}条，失败${batchFail}条\n`
-        
+        combinedResultMsg += `批次${i + 1}: 共${batchTotal}条，成功${batchSuccess}条，失败${batchFail}条\n`
+
         // 如果有错误信息，也添加到汇总
         if (result.data.resultMsg && result.data.failNum > 0) {
           const errorLines = result.data.resultMsg.split('\n')
             .filter(line => line.includes('的商品不存在'))
             .join('\n')
-          
+
           if (errorLines) {
             combinedResultMsg += `${errorLines}\n`
           }
         }
       }
-      
+
       // 如果不是最后一批，等待指定时间再处理下一批
       if (i < totalBatches - 1) {
         console.log(`等待5分钟后处理下一批...`)
-        
+
         // 等待5分钟(300000毫秒)
         await new Promise(resolve => {
           const waitTime = 5 * 60 * 1000 // 5分钟
           const startWait = Date.now()
-          
+
           // 每秒更新等待进度
           const interval = setInterval(() => {
             const elapsed = Date.now() - startWait
@@ -271,10 +271,10 @@ export default {
             } else {
               const remainingMinutes = Math.floor(remaining / 60000)
               const remainingSeconds = Math.floor((remaining % 60000) / 1000)
-              
+
               // 发送等待进度事件
               const waitEvent = new CustomEvent('importProductNamesWaiting', {
-                detail: { 
+                detail: {
                   minutes: remainingMinutes,
                   seconds: remainingSeconds,
                   total: waitTime,
@@ -282,21 +282,21 @@ export default {
                 }
               })
               window.dispatchEvent(waitEvent)
-              
+
               console.log(`等待下一批次: 剩余${remainingMinutes}分${remainingSeconds}秒`)
             }
           }, 1000)
         })
       }
     }
-    
+
     // 发送完成事件
     const completeEvent = new CustomEvent('importProductNamesComplete')
     window.dispatchEvent(completeEvent)
-    
+
     // 汇总最终结果
     console.log(`所有批次处理完成，总计: ${totalCount}条，成功: ${successCount}条，失败: ${failCount}条`)
-    
+
     // 构建最终返回结果
     const finalResult = {
       success: successCount > 0,
@@ -309,7 +309,7 @@ export default {
         batchResults: allResults
       }
     }
-    
+
     return finalResult
   },
 
@@ -322,10 +322,10 @@ export default {
   async convertToExcelFile(data, batchInfo = '') {
     try {
       console.log('开始转换数据为Excel文件...')
-      
+
       // 生成工作表
       const ws = XLSX.utils.aoa_to_sheet(data)
-      
+
       // 设置列宽
       const colWidths = [
         { wch: 20 }, // 事业部编码列宽
@@ -333,11 +333,11 @@ export default {
         { wch: 30 }  // 商品名称列宽
       ]
       ws['!cols'] = colWidths
-      
+
       // 创建工作簿
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-      
+
       // 添加一些元数据
       wb.Props = {
         Title: '商品批量修改自定义模板',
@@ -345,7 +345,7 @@ export default {
         Author: 'JDL系统',
         CreatedDate: new Date()
       }
-      
+
       // 生成二进制数据
       console.log('生成Excel二进制数据...')
       const excelBinaryData = XLSX.write(wb, {
@@ -354,19 +354,19 @@ export default {
         compression: true,
         bookSST: false
       })
-      
+
       // 将二进制字符串转换为ArrayBuffer
       const buf = new ArrayBuffer(excelBinaryData.length)
       const view = new Uint8Array(buf)
       for (let i = 0; i < excelBinaryData.length; i++) {
         view[i] = excelBinaryData.charCodeAt(i) & 0xff
       }
-      
+
       // 创建文件对象，根据是否有批次信息添加批次标记
-      const fileName = batchInfo ? 
-        `商品批量修改自定义模板_${batchInfo}.xls` : 
+      const fileName = batchInfo ?
+        `商品批量修改自定义模板_${batchInfo}.xls` :
         '商品批量修改自定义模板.xls'
-        
+
       console.log('创建Excel文件对象完成:', fileName)
       return new File([buf], fileName, {
         type: 'application/vnd.ms-excel'
@@ -385,30 +385,30 @@ export default {
   async uploadProductNamesData(file) {
     try {
       console.log('准备上传商品简称数据，文件大小:', file.size, '字节')
-      
+
       // 获取所有cookies并构建cookie字符串
       const cookies = await getAllCookies()
       const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
-      
+
       console.log('获取到cookies:', cookieString ? '已获取' : '未获取')
-      
+
       // 创建FormData
       const formData = new FormData()
       formData.append('importFile', file)
-      
+
       // 打印FormData条目
       console.log('FormData条目:')
       for (const pair of formData.entries()) {
         console.log(`  ${pair[0]}: ${pair[1] instanceof File ? pair[1].name + ' (' + pair[1].size + '字节)' : pair[1]}`)
       }
-      
+
       // 序列化FormData
       const serializedFormData = await this.serializeFormData(formData)
       console.log('FormData序列化完成')
-      
+
       // 发送请求
       const url = 'https://o.jdl.com/goods/doUpdateCustomImportGoods.do?_r=' + Math.random()
-      
+
       console.log('开始上传商品简称数据', url)
       const response = await window.api.sendRequest(url, {
         method: 'POST',
@@ -433,66 +433,66 @@ export default {
         },
         body: serializedFormData
       })
-      
+
       console.log('上传商品简称响应:', response)
       console.log('完整响应对象:', JSON.stringify(response, null, 2))
-      
-      
+
+
       // 解析响应结果
       if (response && response.resultCode === "1") {
         // 处理成功响应，但需要区分是否有成功导入的记录
-        const totalCount = parseInt(response.totalNum) || 0;
-        const successCount = parseInt(response.successNum) || 0;
-        const failCount = parseInt(response.failNum) || 0;
-        
-        console.log(`导入统计 - 总数: ${totalCount}, 成功: ${successCount}, 失败: ${failCount}`);
-        
+        const totalCount = parseInt(response.totalNum) || 0
+        const successCount = parseInt(response.successNum) || 0
+        const failCount = parseInt(response.failNum) || 0
+
+        console.log(`导入统计 - 总数: ${totalCount}, 成功: ${successCount}, 失败: ${failCount}`)
+
         // 格式化结果消息，提取错误信息
-        let formattedMsg = '';
+        let formattedMsg = ''
         if (response.resultMsg) {
           // 保留原始消息
-          formattedMsg = response.resultMsg;
-          
+          formattedMsg = response.resultMsg
+
           // 提取并格式化错误信息
-          const lines = response.resultMsg.split('\n');
+          const lines = response.resultMsg.split('\n')
           if (lines.length > 2) {
             // 去掉开头和结尾的固定文本，只保留错误信息
-            const errorLines = lines.slice(1, -1);
+            const errorLines = lines.slice(1, -1)
             if (errorLines.length > 0) {
-              console.log(`检测到${errorLines.length}个错误信息`);
+              console.log(`检测到${errorLines.length}个错误信息`)
             }
           }
         }
-        
+
         if (successCount > 0) {
           // 部分或全部成功
-          const successRatio = Math.round((successCount / totalCount) * 100);
-          console.log(`商品简称导入部分成功 (${successRatio}%)`);
-          
+          const successRatio = Math.round((successCount / totalCount) * 100)
+          console.log(`商品简称导入部分成功 (${successRatio}%)`)
+
           return {
             success: true,
             message: `导入完成: 共${totalCount}条，成功${successCount}条，失败${failCount}条`,
             data: response
-          };
+          }
         } else {
           // 全部失败
-          console.log('商品简称导入失败: 所有记录均导入失败');
-          
+          console.log('商品简称导入失败: 所有记录均导入失败')
+
           return {
             success: false,
             message: formattedMsg || `导入失败: 共${totalCount}条，全部导入失败`,
             data: response
-          };
+          }
         }
       } else {
         // 解析失败或服务器错误
-        console.error('商品简称导入失败:', response);
-        
+        console.error('商品简称导入失败:', response)
+
         return {
           success: false,
           message: response ? response.resultMsg || '导入商品简称失败' : '导入失败，无响应数据',
           data: response
-        };
+        }
       }
     } catch (error) {
       console.error('上传商品简称数据失败:', error)
@@ -507,11 +507,11 @@ export default {
    */
   async serializeFormData(formData) {
     const entries = []
-    
+
     // 处理FormData中的每一个条目
     for (const pair of formData.entries()) {
       const [key, value] = pair
-      
+
       // 如果是文件对象，需要特殊处理
       if (value instanceof File) {
         try {
@@ -522,10 +522,10 @@ export default {
             reader.onerror = reject
             reader.readAsArrayBuffer(value)
           })
-          
+
           // 转换为Uint8Array，然后转为普通数组以便序列化
           const data = Array.from(new Uint8Array(arrayBuffer))
-          
+
           // 将文件信息添加到entries
           entries.push([
             key,
@@ -546,7 +546,7 @@ export default {
         entries.push([key, value])
       }
     }
-    
+
     // 返回可序列化的对象
     return {
       _isFormData: true,

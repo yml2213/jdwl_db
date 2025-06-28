@@ -53,11 +53,15 @@
         :disabled="!isManualMode"
       />
     </div>
+
+    <!-- 动态显示导入商品简称组件 -->
+    <ProductNameImporter v-if="options.importProductNames" />
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import ProductNameImporter from './ProductNameImporter.vue'
 
 const props = defineProps({
   modelValue: {
