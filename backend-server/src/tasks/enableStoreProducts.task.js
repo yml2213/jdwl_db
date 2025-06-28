@@ -71,5 +71,6 @@ async function execute(context, sessionData) {
 
 export default {
   name: 'enableStoreProducts',
+  description: '启用店铺商品',
   execute: execute
 }
