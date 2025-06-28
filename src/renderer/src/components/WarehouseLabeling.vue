@@ -86,7 +86,7 @@ const logisticsOptions = ref({
   length: '120.00',
   width: '60.00',
   height: '6.00',
-  netWeight: ''
+  grossWeight: '0.1'
 })
 
 // === COMPUTED PROPERTIES ===
@@ -209,7 +209,7 @@ const handleExecuteTask = async (taskToRun) => {
   isExecuting.value = true
   activeTab.value = 'logs'
 
-  const task = taskList.value.find(t => t.id === taskToRun.id)
+  const task = taskList.value.find((t) => t.id === taskToRun.id)
   if (!task) {
     isExecuting.value = false
     return
@@ -227,7 +227,7 @@ const handleExecuteTask = async (taskToRun) => {
       vendor: vendorInfo,
       taskName: task.featureName
     }
-    
+
     await executeTaskFlow(context)
 
     if (taskFlowState.status.value === 'success') {
@@ -235,7 +235,10 @@ const handleExecuteTask = async (taskToRun) => {
       task.result = '任务执行成功'
     } else {
       task.status = '失败'
-      const errorLog = taskFlowState.logs.value.slice().reverse().find(l => l.type === 'error')
+      const errorLog = taskFlowState.logs.value
+        .slice()
+        .reverse()
+        .find((l) => l.type === 'error')
       task.result = errorLog ? errorLog.message : '执行失败，未知错误'
     }
   } catch (error) {
@@ -267,7 +270,7 @@ const runAllTasks = async () => {
         vendor: vendorInfo,
         taskName: task.featureName
       }
-      
+
       await executeTaskFlow(context)
 
       if (taskFlowState.status.value === 'success') {
@@ -275,7 +278,10 @@ const runAllTasks = async () => {
         task.result = '任务执行成功'
       } else {
         task.status = '失败'
-        const errorLog = taskFlowState.logs.value.slice().reverse().find(l => l.type === 'error')
+        const errorLog = taskFlowState.logs.value
+          .slice()
+          .reverse()
+          .find((l) => l.type === 'error')
         task.result = errorLog ? errorLog.message : '执行失败，未知错误'
       }
     } catch (error) {
@@ -350,12 +356,15 @@ onMounted(() => {
   }
 })
 
-watch(() => props.isLoggedIn, (loggedIn) => {
-  if (loggedIn) {
-    loadShops()
-    loadWarehouses()
+watch(
+  () => props.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) {
+      loadShops()
+      loadWarehouses()
+    }
   }
-})
+)
 
 watch(currentShopInfo, (newShop) => {
   if (newShop) saveSelectedShop(newShop)
@@ -363,7 +372,6 @@ watch(currentShopInfo, (newShop) => {
 watch(currentWarehouseInfo, (newWarehouse) => {
   if (newWarehouse) saveSelectedWarehouse(newWarehouse)
 })
-
 </script>
 
 <template>
@@ -401,19 +409,39 @@ watch(currentWarehouseInfo, (newWarehouse) => {
           <div v-if="form.options.importProps" class="logistics-options">
             <div class="logistics-input-group">
               <label for="length">长(mm):</label>
-              <input type="text" id="length" v-model="logisticsOptions.length" placeholder="例如: 120.00" />
+              <input
+                type="text"
+                id="length"
+                v-model="logisticsOptions.length"
+                placeholder="例如: 120.00"
+              />
             </div>
             <div class="logistics-input-group">
               <label for="width">宽(mm):</label>
-              <input type="text" id="width" v-model="logisticsOptions.width" placeholder="例如: 60.00" />
+              <input
+                type="text"
+                id="width"
+                v-model="logisticsOptions.width"
+                placeholder="例如: 60.00"
+              />
             </div>
             <div class="logistics-input-group">
               <label for="height">高(mm):</label>
-              <input type="text" id="height" v-model="logisticsOptions.height" placeholder="例如: 6.00" />
+              <input
+                type="text"
+                id="height"
+                v-model="logisticsOptions.height"
+                placeholder="例如: 6.00"
+              />
             </div>
             <div class="logistics-input-group">
-              <label for="netWeight">净重(kg):</label>
-              <input type="text" id="netWeight" v-model="logisticsOptions.netWeight" placeholder="例如: 0.05" />
+              <label for="grossWeight">毛重(kg):</label>
+              <input
+                type="text"
+                id="grossWeight"
+                v-model="logisticsOptions.grossWeight"
+                placeholder="例如: 0.05"
+              />
             </div>
           </div>
           <div class="option-item">
@@ -425,7 +453,11 @@ watch(currentWarehouseInfo, (newWarehouse) => {
             <label for="useJdEffect">启用京配打标生效</label>
           </div>
           <div class="option-item">
-            <input type="checkbox" id="importProductNames" v-model="form.options.importProductNames" />
+            <input
+              type="checkbox"
+              id="importProductNames"
+              v-model="form.options.importProductNames"
+            />
             <label for="importProductNames">导入商品简称</label>
           </div>
           <div class="option-item">

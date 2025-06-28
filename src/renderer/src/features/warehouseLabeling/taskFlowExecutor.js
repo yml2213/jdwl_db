@@ -24,7 +24,7 @@ const taskFlowSteps = [
     {
         name: '等待后台任务处理',
         shouldExecute: (context) => context.options.importStore,
-        execute: async (context, { log, isRunning }) => {
+        execute: async (context, { log }) => {
             log('--- 开始执行步骤: 等待后台任务处理 ---', 'step')
             log('等待3秒，以便服务器处理后台任务...', 'info')
             await new Promise((resolve) => setTimeout(resolve, 3000))
@@ -43,7 +43,7 @@ const taskFlowSteps = [
     },
     {
         name: '启用库存商品分配',
-        shouldExecute: (context) => context.options.useWarehouse,
+        shouldExecute: (context) => context.options.useMainData,
         execute: (context, helpers) => importGoodsStockConfigFeature.execute(context, helpers)
     },
     {

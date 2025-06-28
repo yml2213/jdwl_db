@@ -862,7 +862,7 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
         logCallback(`批次 ${batchIndex + 1} 处理成功。`)
       } else {
         failedCount += batchSkus.length
-        const errorMessage = result.data || result.message || `批次 ${batchIndex + 1} 处理失败`
+        const errorMessage = result.message || `批次 ${batchIndex + 1} 处理失败`
         failedResults.push(errorMessage)
         logCallback(`批次 ${batchIndex + 1} 处理失败: ${errorMessage}`)
 
@@ -888,9 +888,11 @@ async function processLogisticsProperties(skuList, department, cookies, logCallb
   const finalMessage = `导入物流属性完成: 成功 ${processedCount}个, 失败 ${failedCount}个。`
   logCallback(finalMessage)
 
+  const isSuccess = failedCount === 0
+
   return {
-    success: failedCount === 0,
-    message: finalMessage,
+    success: isSuccess,
+    message: !isSuccess && failedResults.length > 0 ? failedResults.join('; ') : finalMessage,
     errorDetail: failedResults.length > 0 ? failedResults.join('; ') : null,
     isPartialSuccess
   }
@@ -927,29 +929,51 @@ async function uploadLogisticsData(batchSkus, department, cookies, logisticsOpti
       headers: {
         ...form.getHeaders(), // form-data 会自动设置正确的 Content-Type 和 boundary
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
         'Referer': 'https://o.jdl.com/goToMainIframe.do',
         'Origin': 'https://o.jdl.com',
         'Cookie': cookieString,
-      },
-      responseType: 'text'
+      }
+      // responseType 留空，让 axios 自动判断
     })
 
-    const responseText = response.data
+    const responseData = response.data
+    console.log('上传物流属性数据响应:', responseData)
 
-    if (typeof responseText === 'string' && responseText.includes("导入成功")) {
-      const taskIdMatch = responseText.match(/任务编号:([^,]+)/)
-      const taskId = taskIdMatch ? taskIdMatch[1] : '未知'
-      return { success: true, message: `导入成功，任务ID: ${taskId}`, data: responseText }
-    }
-    if (typeof responseText === 'string' && responseText.includes("5分钟内只能导入一次")) {
-      return { success: false, message: "API限制：5分钟内只能导入一次。", data: responseText }
+    // 优先处理JSON响应
+    if (typeof responseData === 'object' && responseData !== null) {
+      if (responseData.success) {
+        return { success: true, message: responseData.data || '操作成功', data: responseData }
+      } else {
+        const errorMessage = responseData.data || responseData.tipMsg || '操作失败，但未提供具体信息'
+        // '5分钟内只能导入一次' 是一个关键错误信息，需要检查
+        if (typeof errorMessage === 'string' && errorMessage.includes('5分钟内只能导入一次')) {
+          return { success: false, message: 'API限制：5分钟内只能导入一次。', data: responseData }
+        }
+        return { success: false, message: errorMessage, data: responseData }
+      }
     }
 
-    // 从HTML响应中提取更具体的错误信息
-    const match = typeof responseText === 'string' && responseText.match(/<div class="error-msg">\s*<p>(.*?)<\/p>\s*<\/div>/s)
-    const errorMessage = match ? match[1].trim().replace(/<br\s*\/?>/gi, ' ') : '导入失败，服务器返回未知HTML页面。'
-    return { success: false, message: errorMessage, data: responseText }
+    // 如果不是JSON，则作为字符串处理（兼容旧的HTML响应）
+    if (typeof responseData === 'string') {
+      const responseText = responseData
+      if (responseText.includes('导入成功')) {
+        const taskIdMatch = responseText.match(/任务编号:([^,]+)/)
+        const taskId = taskIdMatch ? taskIdMatch[1] : '未知'
+        return { success: true, message: `导入成功，任务ID: ${taskId}`, data: responseText }
+      }
+      if (responseText.includes('5分钟内只能导入一次')) {
+        return { success: false, message: 'API限制：5分钟内只能导入一次。', data: responseText }
+      }
+
+      // 从HTML响应中提取更具体的错误信息
+      const match = responseText.match(/<div class="error-msg">\s*<p>(.*?)<\/p>\s*<\/div>/s)
+      const errorMessage = match ? match[1].trim().replace(/<br\s*\/?>/gi, ' ') : '导入失败，服务器返回未知HTML页面。'
+      return { success: false, message: errorMessage, data: responseText }
+    }
+
+    // 如果响应是未知格式
+    return { success: false, message: '服务器返回了未知格式的响应。', data: responseData }
 
   } catch (error) {
     console.error('上传物流属性数据失败:', error)
