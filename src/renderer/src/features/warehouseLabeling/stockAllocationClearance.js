@@ -1,4 +1,4 @@
-import { getSelectedDepartment } from '../../utils/storageHelper'
+import { getSelectedDepartment, getSelectedShop } from '../../utils/storageHelper'
 import * as XLSX from 'xlsx'
 import { getAllCookies } from '../../utils/cookieHelper'
 
@@ -33,36 +33,57 @@ async function _callResetGoodsStockRatioAPI(shopInfo) {
   return response
 }
 
-async function _callClearanceAPI(skuList, shopInfo) {
-  const selectedDepartment = getSelectedDepartment()
-  if (!selectedDepartment) {
-    throw new Error('未选择事业部')
-  }
+/**
+ * 为库存清零创建Excel数据Buffer
+ * @param {string[]} skuList SKU列表
+ * @param {object} department 事业部信息
+ * @returns {Buffer} Excel文件的Buffer
+ */
+function _createClearanceExcelFileAsBuffer(skuList, department) {
+  const shop = getSelectedShop()
+  if (!shop) throw new Error('无法获取店铺信息')
 
-  const allCookies = await getAllCookies(selectedDepartment.value)
-  if (!allCookies) {
-    throw new Error('获取Cookies失败')
-  }
+  const headers = [
+    '事业部编码',
+    '主商品编码',
+    '商家商品标识',
+    '店铺编码',
+    '库存管理方式',
+    '库存比例/数值',
+    '仓库编号'
+  ]
+  const introRow = [
+    'CBU开头的事业部编码',
+    'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
+    '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
+    'CSP开头的店铺编码',
+    '纯数值\n1-独占\n2-共享\n3-固定值',
+    '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100\n库存方式为固定值时，填写仓库方式',
+    '可空，只有在库存管理方式为3-固定值时，该仓库编码，若为空则按全部仓执行'
+  ]
+  const rows = skuList.map((sku) => [
+    department.deptNo, // 事业部编码
+    '', // 主商品编码
+    sku, // 商家商品标识
+    shop.shopNo, // 店铺编码
+    1, // 库存管理方式
+    0, // 库存比例/数值
+    '' // 仓库编号
+  ])
 
-  const response = await window.electron.ipcRenderer.invoke('upload-stock-allocation-clearance-data', {
-    cookies: allCookies,
-    skuList,
-    shopInfo,
-    departmentInfo: selectedDepartment
-  })
-
-  if (!response.success) {
-    throw new Error(response.message || 'SKU清零API调用失败')
-  }
-  return response
+  const excelData = [headers, introRow, ...rows]
+  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'GoodsStockConfig')
+  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' })
 }
 
 /**
-* 处理整店清零的核心逻辑
-* @param {object} shopInfo - 店铺信息
-* @param {object} helpers - 辅助函数对象 { log }
-* @returns {Array} 结果数组
-*/
+ * 处理整店清零的核心逻辑
+ * @param {object} shopInfo - 店铺信息
+ * @param {object} helpers - 辅助函数对象 { log }
+ * @returns {Array} 结果数组
+ */
 async function _processWholeStoreClearance(shopInfo, { log }) {
   if (!shopInfo || !shopInfo.shopNo) {
     throw new Error('未提供有效的店铺信息，无法执行整店清零')
@@ -76,19 +97,37 @@ async function _processWholeStoreClearance(shopInfo, { log }) {
 }
 
 /**
-* 处理一个批次的SKU的核心逻辑
-* @param {Array} skuList - SKU列表
-* @param {object} shopInfo - 店铺信息
-* @param {object} helpers - 辅助函数对象 { log }
-* @returns {Array} 结果数组
+ * 处理一个批次的SKU的核心逻辑
+ * @param {Array} skuList - SKU列表
+ * @param {object} shopInfo - 店铺信息
+ * @param {object} helpers - 辅助函数对象 { log }
+ * @returns {Array} 结果数组
  */
 async function _processBatch(skuList, shopInfo, { log }) {
-  log(`开始为 ${skuList.length} 个SKU调用清零API...`)
-  const batchResult = await _callClearanceAPI(skuList, shopInfo)
-  log(`批处理完成: ${batchResult.message}`, 'success')
+  log(`开始为 ${skuList.length} 个SKU生成库存分配清零文件...`)
+  const department = getSelectedDepartment()
+  if (!department) {
+    throw new Error('未选择事业部，无法执行清零操作')
+  }
 
-  // 返回一个包含处理信息的数组，可以根据需要自定义
-  return batchResult.results || [batchResult.message]
+  const fileBuffer = _createClearanceExcelFileAsBuffer(skuList, department)
+  log(`文件创建成功, 大小: ${fileBuffer.length} bytes`)
+
+  const cookies = await getAllCookies()
+  const tokenCookie = cookies.find((c) => c.name === 'csrfToken')
+  const csrfToken = tokenCookie ? tokenCookie.value : ''
+
+  const ipcPayload = { fileBuffer: Array.from(new Uint8Array(fileBuffer)), cookies, csrfToken }
+  log('通过IPC请求主进程上传库存分配清零文件...')
+  const resultIPC = await window.electron.ipcRenderer.invoke('upload-goods-stock-config', ipcPayload)
+
+  if (!resultIPC || !resultIPC.success) {
+    throw new Error(resultIPC.message || 'SKU清零API调用失败')
+  }
+
+  log(`批处理完成: ${resultIPC.message}`, 'success')
+
+  return resultIPC.results || [resultIPC.message]
 }
 
 /**
@@ -96,7 +135,7 @@ async function _processBatch(skuList, shopInfo, { log }) {
  * @param {object} context - { skuList, shopInfo, options }
  * @param {object} helpers - { log, updateProgress }
  * @returns {Promise<Array>} - 返回一个包含所有结果信息的数组
-   */
+ */
 async function stockAllocationClearanceExecute(context, helpers) {
   const { skuList, shopInfo } = context
   const { log, updateProgress } = helpers

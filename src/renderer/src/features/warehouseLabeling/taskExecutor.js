@@ -2,13 +2,7 @@
  * 任务执行器模块
  * 负责执行仓库标签系统的各种功能任务
  */
-import enableStoreProductsFeature from './enableStoreProducts'
-import importStoreProductsFeature from './importStoreProducts'
-import importGoodsStockConfigFeature from './importGoodsStockConfig'
-import enableJpSearchFeature from './enableJpSearch'
-import stockAllocationClearanceFeature from './stockAllocationClearance'
-import cancelJpSearchFeature from './cancelJpSearch'
-import { enableShopProducts, clearStockAllocation, cancelJdDeliveryTag } from '../../services/apiService'
+
 import {
   extractTaskSkuList
 } from './utils/taskUtils'
@@ -54,7 +48,6 @@ export async function executeOneTask(task, shopInfo, options = {}) {
     console.log('选项 - clearStockAllocation (库存分配清零):', taskOptions.clearStockAllocation ? '启用' : '未启用')
 
     // 确保任务有店铺信息
-    const taskShopInfo = task.店铺信息 || shopInfo
 
     // 如果shopInfo是对象但不是正确的shopInfo格式，尝试从task中获取店铺名称并获取详细信息
     if (shopInfo && typeof shopInfo === 'object' && !shopInfo.shopNo && task.店铺) {
@@ -254,10 +247,10 @@ export async function executeOneTask(task, shopInfo, options = {}) {
             log: (message, type = 'info') => {
               // 可以在这里将新模块的日志桥接到旧的任务日志上
               console.log(`[cancelJpSearch log] ${type}: ${message}`);
-              (task.importLogs = task.importLogs || []).push({ type, message, time: new Date().toLocaleString() });
+              (task.importLogs = task.importLogs || []).push({ type, message, time: new Date().toLocaleString() })
             },
             updateProgress: (current, total) => {
-              console.log(`[cancelJpSearch progress] ${current}/${total}`);
+              console.log(`[cancelJpSearch progress] ${current}/${total}`)
             }
           }
 
