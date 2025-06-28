@@ -983,42 +983,37 @@ async function uploadLogisticsData(batchSkus, department, cookies, logisticsOpti
     })
 
     const responseData = response.data
+    // 处理响应数据
     console.log('上传物流属性数据响应:', responseData)
 
-    // 优先处理JSON响应
+    // 根据响应格式处理结果
     if (typeof responseData === 'object' && responseData !== null) {
       if (responseData.success) {
-        return { success: true, message: responseData.data || '操作成功', data: responseData }
-      } else {
-        const errorMessage = responseData.data || responseData.tipMsg || '操作失败，但未提供具体信息'
-        // '5分钟内只能导入一次' 是一个关键错误信息，需要检查
-        if (typeof errorMessage === 'string' && errorMessage.includes('5分钟内只能导入一次')) {
-          return { success: false, message: 'API限制：5分钟内只能导入一次。', data: responseData }
+        return {
+          success: true,
+          message: responseData.data || '操作成功',
+          data: responseData
         }
-        return { success: false, message: errorMessage, data: responseData }
+      } else {
+        const errorMessage = responseData.data || responseData.tipMsg || '操作失败'
+        // 检查是否是5分钟限制错误
+        if (typeof responseData.data === 'string' && responseData.data.includes('5分钟内只能导入一次')) {
+          return {
+            success: false,
+            message: 'API限制：5分钟内只能导入一次，请稍后再试',
+            data: responseData
+          }
+        }
+        return {
+          success: false,
+          message: errorMessage,
+          data: responseData
+        }
       }
     }
 
-    // 如果不是JSON，则作为字符串处理（兼容旧的HTML响应）
-    if (typeof responseData === 'string') {
-      const responseText = responseData
-      if (responseText.includes('导入成功')) {
-        const taskIdMatch = responseText.match(/任务编号:([^,]+)/)
-        const taskId = taskIdMatch ? taskIdMatch[1] : '未知'
-        return { success: true, message: `导入成功，任务ID: ${taskId}`, data: responseText }
-      }
-      if (responseText.includes('5分钟内只能导入一次')) {
-        return { success: false, message: 'API限制：5分钟内只能导入一次。', data: responseText }
-      }
-
-      // 从HTML响应中提取更具体的错误信息
-      const match = responseText.match(/<div class="error-msg">\s*<p>(.*?)<\/p>\s*<\/div>/s)
-      const errorMessage = match ? match[1].trim().replace(/<br\s*\/?>/gi, ' ') : '导入失败，服务器返回未知HTML页面。'
-      return { success: false, message: errorMessage, data: responseText }
-    }
-
-    // 如果响应是未知格式
-    return { success: false, message: '服务器返回了未知格式的响应。', data: responseData }
+    // 默认返回失败
+    return { success: false, message: '服务器返回了未知格式的响应', data: responseData }
 
   } catch (error) {
     console.error('上传物流属性数据失败:', error)

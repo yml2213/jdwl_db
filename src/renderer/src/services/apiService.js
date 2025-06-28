@@ -2,7 +2,6 @@ import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
 import * as XLSX from 'xlsx'
 import { getSelectedVendor, getSelectedDepartment } from '../utils/storageHelper'
-import { wait } from '../features/warehouseLabeling/utils/taskUtils'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
@@ -743,24 +742,42 @@ export async function enableShopProducts(disabledItems) {
  * @param {Object} deptInfo - 事业部信息
  * @returns {Promise<Array<string>>} CSG编号列表
  */
-export async function getCSGList(skuList) {
-  if (!skuList || skuList.length === 0) {
-    return { success: false, message: '未提供SKU列表', csgList: [] }
+export async function getCSGList(skuList, storeInfo = null) {
+  console.log('开始查询', skuList.length, '个SKU对应的CSG编号')
+  const url = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+  console.log('查询接口URL:', url)
+  const csrfToken = await getCsrfToken()
+
+  let department = null
+  let vendor = null
+
+  if (storeInfo) {
+    department = {
+      deptId: storeInfo.deptId,
+      deptNo: storeInfo.deptNo,
+      sellerId: storeInfo.sellerId,
+      sellerNo: storeInfo.sellerNo
+    }
+    // vendor信息在storeInfo中可能不完整，这里仅作为一个例子
+    // 实际场景下可能需要从其他地方获取完整的vendor信息
+    vendor = {
+      id: storeInfo.sellerId // 假设sellerId可以作为vendor的id
+    }
+  } else {
+    department = getSelectedDepartment()
+    vendor = getSelectedVendor()
   }
 
-  // console.log(`============== getCSGList 函数被调用 ==============`)
-  // console.log('skuList', skuList)
-
-  // 打印调用栈，帮助排查调用来源
-  // console.log('调用栈:', new Error().stack)
+  // 参数校验
+  if (!vendor || !vendor.id) {
+    throw new Error('未提供有效的供应商信息')
+  }
 
   // 将SKU列表转换为英文逗号分隔的字符串
   const skuString = skuList.join(',')
 
   console.log(`开始查询${skuList.length}个SKU对应的CSG编号`)
-  const baseUrl = `${BASE_URL}/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
-  console.log('查询接口URL:', baseUrl)
-  const csrfToken = await getCsrfToken()
+  console.log('查询接口URL:', url)
 
   try {
     let allCSGItems = [] // 存储所有页的CSG商品
@@ -813,21 +830,15 @@ export async function getCSGList(skuList) {
         { name: 'iSortingCols', value: 1 }
       ]
 
-      // 从事业部信息中获取sellerId和sellerNo
-      const deptInfo = getSelectedDepartment()
-      if (!deptInfo) {
-        throw new Error('未选择事业部，无法获取CSG编号')
-      }
-
       // 构建查询参数
       const data = qs.stringify({
         csrfToken: csrfToken,
         ids: '',
         shopId: '',
-        sellerId: deptInfo.sellerId || '', // 使用事业部信息中的sellerId
-        deptId: deptInfo.id || '',
-        sellerNo: deptInfo.sellerNo || '', // 使用事业部信息中的sellerNo
-        deptNo: deptInfo.deptNo || '',
+        sellerId: department.sellerId || '',
+        deptId: department.deptId || '',
+        sellerNo: department.sellerNo || '',
+        deptNo: department.deptNo || '',
         shopNo: '',
         spSource: '',
         shopGoodsName: '',
@@ -844,7 +855,7 @@ export async function getCSGList(skuList) {
       })
       console.log('data', data)
 
-      const response = await fetchApi(baseUrl, {
+      const response = await fetchApi(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',

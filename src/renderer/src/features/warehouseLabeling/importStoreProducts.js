@@ -49,28 +49,8 @@ async function execute(context, { log, isManual }) {
   })
 
   if (result && result.success) {
-    log('主进程返回成功信息，现在开始获取全店商品列表以更新上下文...', 'success')
-
-    // 导入成功后，立即获取店铺的所有商品信息
-    const shopGoods = await window.electron.ipcRenderer.invoke('get-shop-goods-list', store)
-
-    if (shopGoods.success) {
-      log(`成功获取到 ${shopGoods.skuList.length} 个SKU和 ${shopGoods.csgList.length} 个CSG。`, 'info')
-      if (!isManual) {
-        log(`任务 "导入店铺商品" 所有步骤执行完毕。`, 'success')
-      }
-      // 将获取到的列表返回，以便注入到context中
-      return {
-        success: true,
-        message: result.message,
-        skuList: shopGoods.skuList,
-        csgList: shopGoods.csgList
-      }
-    } else {
-      // 即使获取列表失败，原始的导入操作也是成功的，所以只记录警告
-      log(`警告：商品导入成功，但未能获取店铺最新商品列表: ${shopGoods.message}`, 'warning')
-      return { success: true, message: result.message }
-    }
+    log('店铺商品导入任务提交成功。', 'success')
+    return { success: true, message: result.message }
   } else {
     log(`主进程返回错误: ${result.message}`, 'error')
     throw new Error(result.message || '主进程文件上传失败')

@@ -16,43 +16,18 @@ function _createExcelFileAsBuffer(csgList) {
 }
 
 /**
- * 获取CSG列表 (API Call)
- */
-async function _getCSGList(skuList, helpers) {
-  const { log } = helpers
-  try {
-    const { getCSGList: getCSGListFromApi } = await import('../../services/apiService.js')
-    const result = await getCSGListFromApi(skuList)
-    if (!result.success) throw new Error(result.message || '获取CSG列表失败')
-    log('获取CSG列表成功', 'debug')
-    if (!result.csgList || result.csgList.length === 0) throw new Error('未找到对应的CSG编号')
-    return result.csgList
-  } catch (error) {
-    log(`获取CSG列表失败: ${error.message}`, 'error')
-    throw error
-  }
-}
-
-/**
  * 主执行函数
  */
 async function enableJpSearchExecute(context, helpers) {
-  const { csgList, skus } = context // csgList可能由前置任务提供, skus来自原始输入
+  const { csgList } = context
   const { log } = helpers
-  let finalCsgList = csgList
 
-  // 如果没有直接提供csgList，但有skus，则尝试通过API获取
-  if (!finalCsgList || finalCsgList.length === 0) {
-    if (!skus || skus.length === 0) {
-      throw new Error('执行京配打标需要 CSG 列表或 SKU 列表，但两者均未提供。')
-    }
-    log('未直接提供CSG列表，开始通过SKU获取...', 'info')
-    // 注意：这里传递的是 skus，即用户在UI上输入的原始SKU列表
-    finalCsgList = await _getCSGList(skus, helpers)
+  if (!csgList || csgList.length === 0) {
+    throw new Error('上下文中未提供有效的CSG列表，无法执行京配打标。')
   }
 
-  log(`获取到 ${finalCsgList.length} 个CSG，开始生成Excel文件...`, 'info')
-  const fileBuffer = _createExcelFileAsBuffer(finalCsgList)
+  log(`获取到 ${csgList.length} 个CSG，开始生成Excel文件...`, 'info')
+  const fileBuffer = _createExcelFileAsBuffer(csgList)
   log(`Excel文件创建成功, 大小: ${fileBuffer.length} bytes`, 'info')
 
   log('通过IPC请求主进程上传京配打标文件...', 'info')
