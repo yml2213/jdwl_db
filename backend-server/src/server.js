@@ -69,10 +69,23 @@ app.post('/api/execute-task', async (req, res) => {
 
     // 3. 执行任务
     console.log(`Executing task: ${taskName}`)
-    const result = await taskModule.default.execute(payload, session)
+
+    // 创建一个简单的日志记录器和任务运行状态
+    const helpers = {
+      log: (message, type = 'info') => {
+        console.log(`[${taskName}] [${type.toUpperCase()}]: ${message}`)
+      },
+      isRunning: { value: true } // 默认任务是运行状态
+    }
+
+    // 将 session 信息合并到 payload 中
+    const fullPayload = { ...payload, session }
+
+    // 将 fullPayload 和 helpers 作为参数传递
+    const result = await taskModule.default.execute(fullPayload, helpers)
 
     // 4. 返回结果
-    res.status(200).json(result)
+    res.status(200).json({ success: true, ...result })
   } catch (error) {
     console.error(`执行任务 ${taskName} 时出错:`, error)
     // Be careful not to leak stack traces or sensitive info in production

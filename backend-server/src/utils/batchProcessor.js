@@ -9,7 +9,7 @@
  * @param {object} options.isRunning - An object with a 'value' property to check if the task should continue.
  * @returns {Promise<object>} A promise that resolves with the aggregated results.
  */
-async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunning }) {
+export async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunning }) {
   let successCount = 0
   let failureCount = 0
   const totalBatches = Math.ceil(items.length / batchSize)
@@ -47,5 +47,3 @@ async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunni
     message: overallMessage.trim()
   }
 }
-
-module.exports = { executeInBatches }

@@ -1,6 +1,5 @@
 import XLSX from 'xlsx'
 import FormData from 'form-data'
-import { getSession } from '../services/sessionManager.js'
 import { requestJdApi } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 
@@ -46,16 +45,11 @@ function createExcelFile(skuList, department, store) {
  * @param {object} helpers.isRunning - Task running state.
  */
 async function execute(payload, { log, isRunning }) {
-  const { skus, csgList, sessionId } = payload
-  log('Starting "fat" inventory allocation task...', 'info')
+  const { skus, csgList, session } = payload
+  log('Starting inventory allocation task...', 'info')
 
-  if (!sessionId) {
-    throw new Error('Session ID is required.')
-  }
-
-  const session = await getSession(sessionId)
   if (!session) {
-    throw new Error(`No valid session found for ID: ${sessionId}`)
+    throw new Error('Session data is missing in the payload.')
   }
 
   const { cookies, department, store } = session

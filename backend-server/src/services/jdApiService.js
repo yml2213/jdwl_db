@@ -43,7 +43,7 @@ function getAuthInfo(session) {
  * @param {object} config - Axios请求配置
  * @returns
  */
-async function requestJdApi(config) {
+export async function requestJdApi(config) {
   try {
     const response = await jdApiAxios(config)
     // 检查京东返回的特定错误格式
