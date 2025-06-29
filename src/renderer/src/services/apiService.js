@@ -11,6 +11,7 @@ const API_BASE_URL = 'http://localhost:3000' // 后端服务器地址
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true, // 允许跨域请求携带cookie
   headers: {
     'Content-Type': 'application/json'
   }
@@ -1512,10 +1513,12 @@ export async function getShopInfoByName(shopName) {
  */
 export const createSession = async (sessionData) => {
   try {
+    // 后端现在通过cookie处理会话，不再返回sessionId
     const response = await apiClient.post('/api/session', sessionData)
-    return response.data
+    console.log('Session created on backend:', response.data.message)
+    return response.data // 可以直接返回后端的响应消息
   } catch (error) {
-    console.error('Error creating session:', error)
+    console.error('Failed to create session:', error)
     throw error
   }
 }
@@ -1527,26 +1530,15 @@ export const createSession = async (sessionData) => {
  * @returns {Promise<object>} 任务执行结果
  */
 export const executeTask = async (taskName, payload) => {
+  // sessionId 不再需要手动传递，它会通过cookie自动发送
   try {
-    const sessionId = localStorage.getItem('sessionId')
-    if (!sessionId) {
-      throw new Error('No session ID found. Please log in again.')
-    }
-
     const response = await apiClient.post('/api/execute-task', {
-      sessionId: JSON.parse(sessionId),
       taskName,
       payload
     })
-
     return response.data
   } catch (error) {
-    console.error(`Error executing task ${taskName}:`, error)
-    // 优先使用后端返回的详细错误信息
-    if (error.response && error.response.data && error.response.data.message) {
-      throw new Error(error.response.data.message)
-    }
-    // 否则，使用通用的错误信息
+    console.error(`Failed to execute task ${taskName}:`, error)
     throw error
   }
 }

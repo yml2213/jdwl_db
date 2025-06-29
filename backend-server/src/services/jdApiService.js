@@ -151,19 +151,26 @@ async function fetchCSGPage(skuBatch, sessionData, start, length) {
  * 根据SKU列表获取CSG列表 (处理分页)
  * @param {string[]} skus - 全部SKU列表
  * @param {object} sessionData - 完整的会话对象
- * @param {string} sessionId - 当前会话ID
  * @returns {Promise<{success: boolean, csgList: string[], message?: string}>}
  */
-export async function fetchCSGList(skus, sessionId) {
+export async function fetchCSGList(skus, sessionData) {
   const BATCH_SIZE = 50 // 根据旧代码经验，每次查询50个SKU
   const allCsgs = []
+
+  // 在循环外注入store和department信息，避免重复操作
+  const enrichedSessionData = {
+    ...sessionData,
+    vendor: sessionData.vendor,
+    department: sessionData.department,
+    store: sessionData.store
+  }
 
   for (let i = 0; i < skus.length; i += BATCH_SIZE) {
     const skuBatch = skus.slice(i, i + BATCH_SIZE)
     try {
       console.log(`[jdApiService] 正在处理批次 ${Math.floor(i / BATCH_SIZE) + 1}`)
       // 京东这个接口自身也支持分页返回，但我们按SKU批次调用，每次都从头获取
-      const csgBatch = await fetchCSGPage(skuBatch, sessionId, 0, 200) // 假设单批SKU的结果不会超过200条
+      const csgBatch = await fetchCSGPage(skuBatch, enrichedSessionData, 0, 200) // 假设单批SKU的结果不会超过200条
       allCsgs.push(...csgBatch)
     } catch (error) {
       console.error(`[jdApiService] 处理批次查询时出错: ${error.message}`)

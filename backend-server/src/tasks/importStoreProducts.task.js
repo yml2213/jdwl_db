@@ -28,14 +28,15 @@ function createExcelFileAsBuffer(skuList, departmentInfo) {
  */
 async function execute(context, sessionData) {
   const { skus, store } = context
-
+  // const sessionData=context.session
   //   console.log('skus', skus)
   //   console.log('store', store)
   // 参数校验
   if (!store || !store.spShopNo) throw new Error('缺少有效的店铺信息或spShopNo')
   if (!store.deptNo) throw new Error('缺少有效的事业部信息')
   if (!skus || skus.length === 0) throw new Error('SKU列表为空')
-  if (!sessionData || !sessionData.sessionId) throw new Error('缺少会话ID')
+  // 会话验证已由server.js中间件处理，不再需要检查sessionId
+  if (!sessionData || !sessionData.cookies) throw new Error('缺少会话信息')
 
   console.log(`[Task: importStoreProducts] "导入店铺商品" 开始，店铺 [${store.shopName}]...`)
 

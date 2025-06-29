@@ -20,8 +20,8 @@ async function execute(context, sessionData) {
   if (!store) {
     throw new Error('缺少有效的店铺信息。')
   }
-  if (!sessionData || !sessionData.sessionId) {
-    throw new Error('缺少会话ID')
+  if (!sessionData || !sessionData.cookies) {
+    throw new Error('缺少会话信息')
   }
 
   console.log(`[Task: enableStoreProducts] "启用店铺商品" 开始，店铺 [${store.name}]...`)

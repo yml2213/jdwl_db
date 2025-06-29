@@ -20,15 +20,21 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 // 用户是否已登录
 const isUserLoggedIn = ref(false)
 
-// 检查登录状态
+// 检查登录状态 (注意：此函数现在主要用于登出和初始化)
 const checkLoginStatus = () => {
   const sessionId = getLocalStorage('sessionId')
+  // 因为改用cookie，此检查在启动时可能不准确，但对登出有效
   isUserLoggedIn.value = !!sessionId
+}
+
+// 会话创建成功后的处理
+const handleSessionCreated = () => {
+  isUserLoggedIn.value = true
 }
 
 // 处理退出登录
 const handleLogout = () => {
-  setLocalStorage('sessionId', null)
+  setLocalStorage('sessionId', null) // 清除旧的标记（以防万一）
   isUserLoggedIn.value = false
   clearSelections()
   // TODO: 调用后端接口来使会话失效
@@ -129,7 +135,7 @@ const selectJsonContent = (event) => {
       </div>
 
       <div class="header-right">
-        <AccountManager @session-created="checkLoginStatus" />
+        <AccountManager @session-created="handleSessionCreated" @logout="handleLogout" />
         <!-- 开发模式下的调试按钮 -->
         <button v-if="isDev" @click="toggleDebugPanel" class="debug-toggle">
           {{ showDebugPanel ? '隐藏调试' : '显示调试' }}

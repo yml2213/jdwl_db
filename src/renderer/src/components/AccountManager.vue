@@ -78,7 +78,7 @@ import {
 import VendorSelector from './VendorSelector.vue'
 import DepartmentSelector from './DepartmentSelector.vue'
 
-const emit = defineEmits(['session-created'])
+const emit = defineEmits(['session-created', 'logout'])
 
 // 登录状态
 const isLoggedIn = ref(false)
@@ -128,14 +128,9 @@ const openLoginWindow = () => {
 const logout = () => {
   if (window.electron && window.electron.ipcRenderer) {
     window.electron.ipcRenderer.send('logout')
-  } else {
-    // 兼容旧版或无预加载脚本的环境
-    isLoggedIn.value = false
-    username.value = ''
-    selectedVendor.value = null
-    selectedDepartment.value = null
-    hasSelected.value = false
   }
+  // 触发logout事件，通知App.vue更新状态
+  emit('logout')
 }
 
 // 更新登录状态
@@ -223,12 +218,11 @@ const handleDepartmentSelected = async (department) => {
     }
     const response = await createSession(sessionData)
 
-    if (response && response.sessionId) {
-      setLocalStorage('sessionId', response.sessionId)
+    if (response) {
       alert('供应商和事业部选择成功，后端会话已创建！')
       emit('session-created')
     } else {
-      throw new Error('后端未能返回sessionId')
+      throw new Error('创建后端会话失败，未收到有效响应。')
     }
   } catch (error) {
     console.error('创建后端会话失败:', error)

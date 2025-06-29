@@ -40,19 +40,23 @@ function createExcelFile(skuList, department, store) {
  * @param {object} payload - The data from the frontend.
  * @param {string[]} payload.skus - The list of SKUs.
  * @param {string[]} [payload.csgList] - Optional list of CSG numbers.
- * @param {object} helpers - Task helpers provided by the task runner.
- * @param {Function} helpers.log - Logging function.
- * @param {object} helpers.isRunning - Task running state.
+ * @param {object} sessionData - The session data.
  */
-async function execute(payload, { log, isRunning }) {
-  const { skus, csgList, session } = payload
+async function execute(payload, sessionData) {
+  // 临时log和isRunning, 兼容executeInBatches
+  const log = (message, type = 'info') => {
+    console.log(`[enableInventoryAllocation] [${type.toUpperCase()}] ${message}`)
+  }
+  const isRunning = { value: true }
+
+  const { skus, csgList } = payload
   log('Starting inventory allocation task...', 'info')
 
-  if (!session) {
-    throw new Error('Session data is missing in the payload.')
+  if (!sessionData) {
+    throw new Error('Session data is missing.')
   }
 
-  const { cookies, department, store } = session
+  const { cookies, department, store } = sessionData
   const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
   const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
 
