@@ -1,6 +1,6 @@
 import XLSX from 'xlsx'
 import FormData from 'form-data'
-import { requestJdApi } from '../services/jdApiService.js'
+import { uploadInventoryAllocationFile } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 
 const BATCH_SIZE = 2000
@@ -35,12 +35,12 @@ function createExcelFile(skuList, department, store) {
 }
 
 /**
- * Task to enable inventory allocation for a list of products.
- * This task acts as a simple orchestrator, calling the apiService to do the heavy lifting.
- * @param {object} payload - The data from the frontend.
- * @param {string[]} payload.skus - The list of SKUs.
- * @param {string[]} [payload.csgList] - Optional list of CSG numbers.
- * @param {object} sessionData - The session data.
+ * 启用商品库存分配的任务
+ * 该任务作为一个简单的编排器，调用apiService来完成主要工作
+ * @param {object} payload - 来自前端的数据
+ * @param {string[]} payload.skus - SKU列表
+ * @param {string[]} [payload.csgList] - 可选的CSG编号列表
+ * @param {object} sessionData - 会话数据
  */
 async function execute(payload, sessionData) {
   // 临时log和isRunning, 兼容executeInBatches
@@ -74,28 +74,16 @@ async function execute(payload, sessionData) {
       log(`Creating Excel file for ${batchItems.length} items...`, 'info')
       const fileBuffer = createExcelFile(batchItems, department, store)
 
-      const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do'
-      const formData = new FormData()
-      formData.append('file', fileBuffer, 'GoodsStockConfig.xlsx')
-      formData.append('token', csrfToken)
-      formData.append('query.maxCount', 50000)
+      log('Uploading file for batch...', 'info')
+      const responseText = await uploadInventoryAllocationFile(fileBuffer, sessionData)
 
-      const headers = {
-        ...formData.getHeaders(),
-        Cookie: cookieString,
-        Referer: `https://o.jdl.com/goodsStockConfig/showImport.do`
+      let responseString = responseText
+      if (typeof responseString !== 'string') {
+        responseString = JSON.stringify(responseString)
       }
 
-      log('Uploading file for batch...', 'info')
-      const responseText = await requestJdApi({
-        method: 'POST',
-        url: url,
-        data: formData,
-        headers: headers
-      })
-
-      if (responseText && responseText.includes('导入成功')) {
-        const match = responseText.match(/导入成功，总共通告(\d+)条，成功(\d+)条，失败(\d+)条/)
+      if (responseString && responseString.includes('导入成功')) {
+        const match = responseString.match(/导入成功，总共通告(\d+)条，成功(\d+)条，失败(\d+)条/)
         const message = match
           ? `处理成功: 总计 ${match[1]}, 成功 ${match[2]}, 失败 ${match[3]}`
           : '文件上传成功。'

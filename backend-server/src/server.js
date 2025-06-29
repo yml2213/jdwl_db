@@ -110,7 +110,15 @@ app.post('/api/execute-flow', async (req, res) => {
       throw new Error(`工作流 ${flowName} 或其 execute 方法未找到`)
     }
 
-    const result = await flowModule.default.execute(payload, req.session.context, log)
+    // 将前端传递的 store 和 department 信息合并到会话上下文中
+    // 以确保后续任务能获取到完整的店铺和事业部数据
+    const sessionData = {
+      ...req.session.context,
+      store: payload.store,
+      department: payload.store // department 信息通常和 store 绑定在一起
+    }
+
+    const result = await flowModule.default.execute(payload, sessionData, log)
 
     res.status(200).json({ success: true, logs, data: result })
   } catch (error) {

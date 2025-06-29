@@ -107,6 +107,35 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
 }
 
 /**
+ * 上传 启用库存商品分配  的文件  --- 启用库存商品分配
+ * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const url = '/goodsStockConfig/importGoodsStockConfig.do'
+  const formData = new FormData()
+  formData.append('file', fileBuffer, 'GoodsStockConfig.xlsx')
+  formData.append('token', csrfToken)
+  formData.append('query.maxCount', 50000)
+
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: 'https://o.jdl.com/goodsStockConfig/showImport.do'
+  }
+
+  return requestJdApi({
+    method: 'POST',
+    url: url,
+    data: formData,
+    headers: headers
+  })
+}
+
+/**
  * 从京东分页查询CSG编号
  * @param {string[]} skuBatch - 一批SKU编号
  * @param {object} sessionData - 完整的会话对象
