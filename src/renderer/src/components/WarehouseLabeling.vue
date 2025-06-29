@@ -71,6 +71,7 @@ const {
   warehouseLoadError,
   selectedStore,
   selectedWarehouse,
+  selectedDepartment,
   loadShops,
   loadWarehouses,
   persistSelectedShop,
@@ -151,7 +152,7 @@ const handleAddTask = () => {
         ...JSON.parse(JSON.stringify(form.options)),
         logistics: { ...logisticsOptions }
       },
-      store: currentShopInfo.value,
+      store: { ...currentShopInfo.value, ...selectedDepartment.value },
       warehouse: currentWarehouseInfo.value,
       quickSelect: form.quickSelect
     }

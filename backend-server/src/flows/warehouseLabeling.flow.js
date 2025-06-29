@@ -58,7 +58,8 @@ const workflowSteps = [
   },
   {
     name: '等待物流属性后台任务处理',
-    shouldExecute: (context) => context.options.importProps,
+    shouldExecute: (context) =>
+      context.options.importProps && context.quickSelect === 'warehouseLabeling',
     execute: async (context, session, log) => {
       log('等待3秒，以便服务器处理后台任务...')
       await new Promise((resolve) => setTimeout(resolve, 3000))
@@ -99,6 +100,11 @@ async function execute(context, session, log) {
         log(`--- 开始执行步骤: ${step.name} ---`)
         const result = await step.execute(currentContext, session, log)
 
+        // 检查步骤的执行结果，如果显式返回失败，则抛出错误
+        if (result && result.success === false) {
+          throw new Error(result.message || `步骤 ${step.name} 返回了一个失败状态。`)
+        }
+
         // 如果步骤有返回结果，则保存它作为最后一个结果
         if (result) {
           lastResult = result
@@ -110,7 +116,7 @@ async function execute(context, session, log) {
         }
         
         // 使用步骤返回的msg字段，提供更详细的成功日志
-        const successDetails = result?.msg ? `: ${result.msg}` : ''
+        const successDetails = result?.message ? `: ${result.message}` : ''
         log(`步骤 [${step.name}] 执行成功${successDetails}`, 'success')
 
       } catch (error) {

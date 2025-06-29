@@ -64,6 +64,7 @@ defineEmits(['execute-tasks', 'clear-tasks', 'delete-task', 'update:active-tab',
 
 .actions-header {
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
   padding: 15px 0;
   border-bottom: 1px solid #e0e0e0;
