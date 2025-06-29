@@ -2,6 +2,10 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
+import {
+  saveInventoryClearanceForm,
+  getInventoryClearanceForm
+} from '@/utils/storageHelper'
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
@@ -72,6 +76,10 @@ const handleAddTask = () => {
 }
 
 // --- 侦听器和生命周期 ---
+watch(form, (newForm) => {
+  saveInventoryClearanceForm(newForm)
+}, { deep: true })
+
 watch(
   () => props.isLoggedIn,
   (newVal) => {
@@ -85,6 +93,10 @@ watch(selectedStore, (newShopNo) => {
 })
 
 onMounted(() => {
+  const savedForm = getInventoryClearanceForm()
+  if (savedForm) {
+    form.value = savedForm
+  }
   if (props.isLoggedIn) {
     loadShops()
   }
