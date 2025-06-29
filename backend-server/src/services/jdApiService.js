@@ -117,9 +117,9 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
 
   const url = '/goodsStockConfig/importGoodsStockConfig.do'
   const formData = new FormData()
-  formData.append('file', fileBuffer, 'GoodsStockConfig.xlsx')
-  formData.append('token', csrfToken)
-  formData.append('query.maxCount', 50000)
+  formData.append('goodsStockConfigExcelFile', fileBuffer, 'goodsStockConfigTemplate.xlsx')
+  // formData.append('token', csrfToken)
+  // formData.append('query.maxCount', 50000)
 
   const headers = {
     ...formData.getHeaders(),

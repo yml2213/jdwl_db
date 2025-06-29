@@ -75,25 +75,29 @@ async function execute(payload, sessionData) {
       const fileBuffer = createExcelFile(batchItems, department, store)
 
       log('Uploading file for batch...', 'info')
-      const responseText = await uploadInventoryAllocationFile(fileBuffer, sessionData)
+      const response = await uploadInventoryAllocationFile(fileBuffer, sessionData)
 
-      let responseString = responseText
-      if (typeof responseString !== 'string') {
-        responseString = JSON.stringify(responseString)
+      // Case 1: JSON response for success
+      if (response && typeof response === 'object' && response.resultCode === '1') {
+        const message = `导入成功，报告文件: ${response.resultData}`
+        log(message, 'info')
+        return { success: true, message: message }
       }
 
-      if (responseString && responseString.includes('导入成功')) {
-        const match = responseString.match(/导入成功，总共通告(\d+)条，成功(\d+)条，失败(\d+)条/)
+      // Case 2: String response for success (older format)
+      if (typeof response === 'string' && response.includes('导入成功')) {
+        const match = response.match(/导入成功，总共通告(\d+)条，成功(\d+)条，失败(\d+)条/)
         const message = match
           ? `处理成功: 总计 ${match[1]}, 成功 ${match[2]}, 失败 ${match[3]}`
           : '文件上传成功。'
         log(message, 'info')
         return { success: true, message: message }
-      } else {
-        const message = '文件上传失败或响应异常。'
-        log(message, 'error')
-        return { success: false, message }
       }
+
+      // If neither success case matched, it's a failure.
+      const message = `文件上传失败或响应异常: ${JSON.stringify(response)}`
+      log(message, 'error')
+      return { success: false, message }
     } catch (error) {
       const errorMessage = `批次处理异常: ${error.message}`
       log(errorMessage, 'error')
