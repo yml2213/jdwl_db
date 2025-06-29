@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
-import stockClearanceFlow from '@/features/warehouseLabeling/stockClearanceFlow'
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
@@ -67,7 +66,7 @@ const handleAddTask = () => {
     featureName,
     storeName: currentShopInfo.value.shopName,
     warehouseName: 'N/A',
-    executionFeature: stockClearanceFlow, // 指定此任务要使用的执行器
+    executionFeature: 'stockClearance', // 指定后端的 stockClearance 工作流
     executionData // 附加执行所需的数据
   })
 }

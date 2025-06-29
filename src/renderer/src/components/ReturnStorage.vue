@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
-import returnStorageFlow from '@/features/warehouseLabeling/returnStorageFlow'
 import TaskArea from './warehouse/TaskArea.vue'
 
 const props = defineProps({
@@ -41,7 +40,7 @@ const handleAddTask = () => {
       featureName: '退货入库',
       storeName: currentShopInfo.value.shopName,
       warehouseName: 'N/A',
-      executionFeature: returnStorageFlow,
+      executionFeature: 'returnStorage',
       executionData: {
         orderNumber: orderNum,
         year: form.value.year,

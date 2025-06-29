@@ -10,7 +10,6 @@ import {
 } from '../utils/storageHelper'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
-import taskFlowExecutor from '@/features/warehouseLabeling/taskFlowExecutor'
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
