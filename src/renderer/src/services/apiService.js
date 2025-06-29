@@ -1542,3 +1542,18 @@ export const executeTask = async (taskName, payload) => {
     throw error
   }
 }
+
+/**
+ * 检查后端会话状态
+ * @returns {Promise<object>}
+ */
+export const getSessionStatus = async () => {
+  try {
+    const response = await apiClient.get('/api/session/status')
+    return response.data
+  } catch (error) {
+    console.error('Failed to get session status:', error)
+    // 即使出错，也返回一个表明未登录的状态，避免阻塞UI
+    return { success: false, loggedIn: false }
+  }
+}

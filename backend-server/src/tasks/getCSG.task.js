@@ -41,5 +41,6 @@ async function execute(context, sessionData) {
 
 export default {
     name: 'getCSG',
+    description: '获取CSG编号',
     execute: execute,
 } 

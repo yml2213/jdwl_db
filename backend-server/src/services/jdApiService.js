@@ -10,8 +10,7 @@ const jdApiAxios = axios.create({
     Accept: 'application/json, text/javascript, */*; q=0.01',
     'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
     'X-Requested-With': 'XMLHttpRequest'
-  },
-  withCredentials: true // 确保跨域请求发送cookie
+  }
 })
 
 /**

@@ -54,6 +54,24 @@ app.post('/api/session', async (req, res) => {
 })
 
 /**
+ * @description 检查当前会话的状态
+ */
+app.get('/api/session/status', (req, res) => {
+  if (req.session && req.session.context) {
+    res.status(200).json({
+      success: true,
+      loggedIn: true,
+      context: req.session.context
+    })
+  } else {
+    res.status(200).json({
+      success: true,
+      loggedIn: false
+    })
+  }
+})
+
+/**
  * @description 通用的任务执行接口
  */
 app.post('/api/execute-task', async (req, res) => {
@@ -94,5 +112,5 @@ app.post('/api/execute-task', async (req, res) => {
 })
 
 app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`)
+  console.log(`服务已启动，地址: http://localhost:${port}`)
 })

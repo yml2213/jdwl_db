@@ -4,6 +4,7 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
+import { getSessionStatus } from './services/apiService'
 import {
   clearSelections,
   getSelectedDepartment,
@@ -21,10 +22,14 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 const isUserLoggedIn = ref(false)
 
 // 检查登录状态 (注意：此函数现在主要用于登出和初始化)
-const checkLoginStatus = () => {
-  const sessionId = getLocalStorage('sessionId')
-  // 因为改用cookie，此检查在启动时可能不准确，但对登出有效
-  isUserLoggedIn.value = !!sessionId
+const checkLoginStatus = async () => {
+  const status = await getSessionStatus()
+  isUserLoggedIn.value = status.loggedIn
+  if (status.loggedIn) {
+    console.log('会话有效，用户已登录。')
+  } else {
+    console.log('会话无效或已过期，用户未登录。')
+  }
 }
 
 // 会话创建成功后的处理
