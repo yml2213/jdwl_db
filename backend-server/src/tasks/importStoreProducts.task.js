@@ -59,18 +59,14 @@ async function execute(context, sessionData) {
     console.log(`[Task: importStoreProducts] 调用jdApiService以上传文件...`)
     const uploadResult = await uploadStoreProducts(fileBuffer, dataForUpload)
     console.log(`[Task: importStoreProducts] 上传服务调用完成。`)
+    console.log(`[Task: importStoreProducts] 结果======> ${JSON.stringify(uploadResult)}`)
 
-    console.log(`[Task: importStoreProducts] 结果======>`, uploadResult)
-
-    // 3. 返回上传结果
-    //  {result: true, msg: '导入成功，成功1条，失败0条，将进入后台任务处理阶段，请在任务日志界面查询结果，任务号：AsynTask20250629051920062'}
-    if (uploadResult.result) {
-      return { success: true, message: uploadResult.msg }
-    } else if (uploadResult.result === false) {
-      return { success: false, message: uploadResult.msg }
-    } else {
-      throw new Error(uploadResult.message || '上传店铺商品文件失败,未知错误。')
+    // 关键改动：检查业务逻辑是否成功。如果京东API返回 result: false，则抛出错误。
+    if (uploadResult.result === false) {
+      throw new Error(uploadResult.msg || '京东API返回了一个未指定的业务错误。')
     }
+
+    return uploadResult
   } catch (error) {
     console.error('[Task: importStoreProducts] 任务执行失败:', error)
     // 确保抛出错误，以便 executeTask 接口可以捕获并返回给前端

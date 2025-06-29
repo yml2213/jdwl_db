@@ -38,6 +38,7 @@ export function useTaskList(initialTasks = []) {
 
     task.status = '运行中'
     task.logs = [] // 清空旧日志
+    task.result = '' // 清空旧结果
 
     try {
       // 获取全局选定的事业部信息
@@ -59,16 +60,21 @@ export function useTaskList(initialTasks = []) {
 
       if (result.success) {
         task.status = '成功'
-        task.result = result.data?.message || '工作流执行成功'
+        task.result = result.data?.msg || result.data?.message || '工作流执行完毕'
       } else {
         task.status = '失败'
-        task.result = result.message || '工作流执行失败，未知错误'
+        task.result = result.message || '未知错误，请检查提交日志'
       }
     } catch (error) {
-      console.error(`执行任务 ${task.id} 失败:`, error)
       task.status = '失败'
-      task.result = error.message || '客户端执行异常'
-      task.logs.push({ message: `[前端] 客户端执行异常: ${task.result}`, type: 'error' })
+      task.result = error.response?.data?.message || error.message || '执行时发生未知网络或脚本错误'
+      if (task.logs.length === 0 || !task.logs.find(log => log.message.includes(task.result))) {
+        task.logs.push({
+          message: `前端捕获到错误: ${task.result}`,
+          type: 'error',
+          timestamp: new Date().toISOString()
+        })
+      }
     }
   }
 

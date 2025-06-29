@@ -91,6 +91,7 @@ const workflowSteps = [
  */
 async function execute(context, session, log) {
   let currentContext = { ...context }
+  let lastResult = null // 用于存储最后一个有意义的返回结果
 
   for (const step of workflowSteps) {
     if (step.shouldExecute(currentContext)) {
@@ -98,24 +99,31 @@ async function execute(context, session, log) {
         log(`--- 开始执行步骤: ${step.name} ---`)
         const result = await step.execute(currentContext, session, log)
 
+        // 如果步骤有返回结果，则保存它作为最后一个结果
+        if (result) {
+          lastResult = result
+        }
+
         if (result && typeof result === 'object') {
           // 将步骤的执行结果合并到上下文中，供后续步骤使用
           currentContext = { ...currentContext, ...result }
         }
-        log(`步骤 [${step.name}] 执行成功。`)
+        
+        // 使用步骤返回的msg字段，提供更详细的成功日志
+        const successDetails = result?.msg ? `: ${result.msg}` : ''
+        log(`步骤 [${step.name}] 执行成功${successDetails}`, 'success')
+
       } catch (error) {
         log(`步骤 [${step.name}] 执行失败: ${error.message}`, 'error')
-        // 抛出错误以终止整个工作流
+        // 抛出错误以终止整个工作流，并将失败信息传递给前端
         throw new Error(`工作流在步骤 [${step.name}] 失败: ${error.message}`)
       }
     }
   }
 
   log('--- 工作流所有步骤执行完毕 ---', 'success')
-  return {
-    success: true,
-    message: '工作流成功执行完毕。'
-  }
+  // 返回最后一个步骤的结果，或者一个通用的成功信息
+  return lastResult || { success: true, msg: '工作流成功执行完毕。' }
 }
 
 export default {
