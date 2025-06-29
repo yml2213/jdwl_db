@@ -220,7 +220,8 @@ const handleDepartmentSelected = async (department) => {
 
     if (response) {
       alert('供应商和事业部选择成功，后端会话已创建！')
-      emit('session-created')
+      // 关键改动：将完整的会话上下文传递给父组件
+      emit('session-created', sessionData)
     } else {
       throw new Error('创建后端会话失败，未收到有效响应。')
     }

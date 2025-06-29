@@ -40,8 +40,20 @@ export function useTaskList(initialTasks = []) {
     task.logs = [] // 清空旧日志
 
     try {
+      // 获取全局选定的事业部信息
+      const department = getSelectedDepartment()
+      if (!department) {
+        throw new Error('无法获取当前选定的事业部信息，请重新选择。')
+      }
+
+      // 将全局事业部信息合并到payload中
+      const payload = {
+        ...task.executionData,
+        department: department
+      }
+
       // 直接调用后端的flow执行器
-      const result = await executeFlow(task.executionFeature, task.executionData)
+      const result = await executeFlow(task.executionFeature, payload)
       
       task.logs = result.logs || []
 

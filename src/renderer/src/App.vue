@@ -18,29 +18,44 @@ import {
 // 开发模式标志
 const isDev = ref(process.env.NODE_ENV === 'development')
 
-// 用户是否已登录
-const isUserLoggedIn = ref(false)
+// 统一的会话上下文
+const sessionContext = ref(null)
 
-// 检查登录状态 (注意：此函数现在主要用于登出和初始化)
-const checkLoginStatus = async () => {
-  const status = await getSessionStatus()
-  isUserLoggedIn.value = status.loggedIn
-  if (status.loggedIn) {
-    console.log('会话有效，用户已登录。')
-  } else {
-    console.log('会话无效或已过期，用户未登录。')
+// 登录状态现在是一个计算属性，更可靠
+const isLoggedIn = computed(() => !!sessionContext.value)
+
+// 将会话上下文提供给所有子组件
+provide('sessionContext', sessionContext)
+
+/**
+ * @description 检查服务器上的会话状态，并在会话有效时恢复它
+ */
+const checkSessionStatus = async () => {
+  try {
+    const status = await getSessionStatus()
+    if (status.loggedIn && status.context) {
+      handleSessionRestored(status.context)
+    } else {
+      sessionContext.value = null
+    }
+  } catch (error) {
+    console.error('检查会话状态失败:', error)
+    sessionContext.value = null
   }
 }
 
-// 会话创建成功后的处理
-const handleSessionCreated = () => {
-  isUserLoggedIn.value = true
+/**
+ * @description 当会话被创建或恢复时调用
+ * @param {object} context - 从后端获取的会话上下文
+ */
+const handleSessionRestored = (context) => {
+  sessionContext.value = context
+  console.log('会话已恢复/创建:', context)
 }
 
 // 处理退出登录
 const handleLogout = () => {
-  setLocalStorage('sessionId', null) // 清除旧的标记（以防万一）
-  isUserLoggedIn.value = false
+  sessionContext.value = null
   clearSelections()
   // TODO: 调用后端接口来使会话失效
 }
@@ -98,23 +113,8 @@ const copyToClipboard = (text, section) => {
   }
 }
 
-// 组件挂载时检查登录状态
-onMounted(() => {
-  checkLoginStatus()
-
-  // 监听登录成功事件
-  window.electron.ipcRenderer.on('login-successful', () => {
-    alert('登录成功！请选择供应商和事业部。')
-    // 只更新UI状态，不再创建会话
-    checkLoginStatus()
-  })
-
-  // 监听登出事件
-  window.electron.ipcRenderer.on('cookies-cleared', () => {
-    alert('已退出登录')
-    handleLogout()
-  })
-})
+// 组件挂载时检查会话状态
+onMounted(checkSessionStatus)
 
 // 选择JSON内容
 const selectJsonContent = (event) => {
@@ -140,7 +140,7 @@ const selectJsonContent = (event) => {
       </div>
 
       <div class="header-right">
-        <AccountManager @session-created="handleSessionCreated" @logout="handleLogout" />
+        <AccountManager @session-created="handleSessionRestored" @logout="handleLogout" />
         <!-- 开发模式下的调试按钮 -->
         <button v-if="isDev" @click="toggleDebugPanel" class="debug-toggle">
           {{ showDebugPanel ? '隐藏调试' : '显示调试' }}
@@ -224,7 +224,7 @@ const selectJsonContent = (event) => {
     <!-- 主内容区 -->
     <main class="main-content">
       <!-- 登录提示 -->
-      <div v-if="!isUserLoggedIn" class="login-prompt">
+      <div v-if="!isLoggedIn" class="login-prompt">
         <p>请先登录京东账号</p>
       </div>
 
@@ -245,13 +245,13 @@ const selectJsonContent = (event) => {
         <!-- 所有组件同时渲染，但只有当前选中的可见 -->
         <div class="tab-contents">
           <div v-show="activeTab === '入仓打标'" class="tab-content">
-            <WarehouseLabeling :isLoggedIn="isUserLoggedIn" />
+            <WarehouseLabeling :isLoggedIn="isLoggedIn" />
           </div>
           <div v-show="activeTab === '清库下标'" class="tab-content">
-            <InventoryClearance :isLoggedIn="isUserLoggedIn" />
+            <InventoryClearance :isLoggedIn="isLoggedIn" />
           </div>
           <div v-show="activeTab === '退货入库'" class="tab-content">
-            <ReturnStorage :isLoggedIn="isUserLoggedIn" />
+            <ReturnStorage :isLoggedIn="isLoggedIn" />
           </div>
         </div>
       </div>

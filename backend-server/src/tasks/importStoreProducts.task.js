@@ -22,18 +22,18 @@ function createExcelFileAsBuffer(skuList, departmentInfo) {
 
 /**
  * 主执行函数 - 由任务调度器调用
- * @param {object} context 包含 skus, store
+ * @param {object} context 包含 skus, store, department
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, sessionData) {
-  const { skus, store } = context
+  const { skus, store, department } = context
   // const sessionData=context.session
   //   console.log('skus', skus)
   //   console.log('store', store)
   // 参数校验
   if (!store || !store.spShopNo) throw new Error('缺少有效的店铺信息或spShopNo')
-  if (!store.deptNo) throw new Error('缺少有效的事业部信息')
+  if (!department || !department.deptNo) throw new Error('缺少有效的事业部信息')
   if (!skus || skus.length === 0) throw new Error('SKU列表为空')
   // 会话验证已由server.js中间件处理，不再需要检查sessionId
   if (!sessionData || !sessionData.cookies) throw new Error('缺少会话信息')
@@ -43,7 +43,7 @@ async function execute(context, sessionData) {
   try {
     // 1. 根据 skus 生成 Excel 文件 buffer
     console.log(`[Task: importStoreProducts] 正在为 ${skus.length} 个SKU生成Excel文件...`)
-    const fileBuffer = createExcelFileAsBuffer(skus, store)
+    const fileBuffer = createExcelFileAsBuffer(skus, department)
     console.log(
       `[Task: importStoreProducts] Excel文件内存生成完毕，大小: ${fileBuffer.length} bytes`
     )
@@ -52,10 +52,7 @@ async function execute(context, sessionData) {
     const dataForUpload = {
       ...sessionData,
       store: store,
-      department: {
-        // uploadStoreProducts 需要一个 department 对象
-        deptId: store.deptId // 确保 payload 中包含 deptId
-      }
+      department: department
     }
 
     // 2. 调用 jdApiService 上传文件，传递完整的会话数据
