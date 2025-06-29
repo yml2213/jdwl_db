@@ -1557,3 +1557,30 @@ export const getSessionStatus = async () => {
     return { success: false, loggedIn: false }
   }
 }
+
+/**
+ * 执行一个后端工作流
+ * @param {string} flowName - 要执行的工作流名称
+ * @param {object} payload - 工作流所需的负载
+ * @returns {Promise<object>} 后端返回的完整结果，包含success, logs, 和 data/message
+ */
+export const executeFlow = async (flowName, payload) => {
+  try {
+    const response = await apiClient.post('/api/execute-flow', {
+      flowName,
+      payload
+    })
+    return response.data
+  } catch (error) {
+    console.error(`[apiService] 执行工作流 ${flowName} 失败:`, error)
+    // 确保即使在网络层或axios出错时，也返回一个符合格式的错误对象
+    if (error.response) {
+      return error.response.data
+    }
+    return {
+      success: false,
+      logs: [],
+      message: `[前端] 请求后端工作流失败: ${error.message}`
+    }
+  }
+}

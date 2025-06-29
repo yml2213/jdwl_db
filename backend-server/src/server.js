@@ -3,9 +3,14 @@ import cors from 'cors'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import session from 'express-session'
+import { v4 as uuidv4 } from 'uuid'
+import axios from 'axios'
 
 const app = express()
 const port = 3000
+
+// 存储每个客户端ID对应的响应对象，用于服务器发送事件
+const clients = {}
 
 // Middlewares
 app.use(
@@ -72,42 +77,37 @@ app.get('/api/session/status', (req, res) => {
 })
 
 /**
- * @description 通用的任务执行接口
+ * @description 新的、简化的工作流执行接口
  */
-app.post('/api/execute-task', async (req, res) => {
-  // 不再需要从 body 中获取 sessionId
-  const { taskName, payload } = req.body
+app.post('/api/execute-flow', async (req, res) => {
+  const { flowName, payload } = req.body
 
-  // 1. 验证会话
   if (!req.session.context) {
     return res.status(401).json({ message: '无效的会话，请先登录' })
   }
 
-  if (!taskName || !payload) {
-    return res.status(400).json({ message: '缺少 taskName 或 payload' })
+  const logs = []
+  const log = (message, type = 'info') => {
+    logs.push({ message, type, timestamp: new Date().toISOString() })
+    console.log(`[${flowName}] [${type.toUpperCase()}]: ${message}`)
   }
 
   try {
-    // 2. 动态加载任务模块
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
-    const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
-    const taskModule = await import(taskPath)
+    const flowPath = path.join(__dirname, 'flows', `${flowName}.flow.js`)
+    const flowModule = await import(flowPath)
 
-    if (!taskModule.default || typeof taskModule.default.execute !== 'function') {
-      throw new Error(`任务 ${taskName} 或其 execute 方法未找到`)
+    if (!flowModule.default || typeof flowModule.default.execute !== 'function') {
+      throw new Error(`工作流 ${flowName} 或其 execute 方法未找到`)
     }
 
-    // 3. 执行任务
-    console.log(`准备执行任务: ${taskName}`)
+    const result = await flowModule.default.execute(payload, req.session.context, log)
 
-    // 任务模块已更新，直接将会话上下文传递给任务
-    const result = await taskModule.default.execute(payload, req.session.context)
-
-    // 4. 返回结果
-    res.status(200).json({ success: true, ...result })
+    res.status(200).json({ success: true, logs, data: result })
   } catch (error) {
-    console.error(`执行任务 ${taskName} 时出错:`, error)
-    res.status(500).json({ success: false, message: error.message })
+    console.error(`执行工作流 ${flowName} 时出错:`, error)
+    // 即使失败，也返回日志
+    res.status(500).json({ success: false, logs, message: error.message })
   }
 })
 

@@ -145,7 +145,7 @@ const handleAddTask = () => {
     warehouseName: currentWarehouseInfo.value?.warehouseName || '未指定',
 
     // 用于执行
-    executionFeature: taskFlowExecutor,
+    executionFeature: 'warehouseLabeling',
     executionData: {
       skus,
       options: {
@@ -154,7 +154,6 @@ const handleAddTask = () => {
       },
       store: currentShopInfo.value,
       warehouse: currentWarehouseInfo.value,
-      taskName: featureName,
       quickSelect: form.quickSelect
     }
   })
