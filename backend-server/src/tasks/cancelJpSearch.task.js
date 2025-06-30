@@ -1,8 +1,14 @@
 /**
  * 后端任务：取消京配打标
+ * 支持两种模式：
+ * 1. 整店取消京配打标
+ * 2. 部分取消京配打标
  */
 import XLSX from 'xlsx'
-import { uploadJpSearchFile } from '../services/jdApiService.js'
+import {
+    uploadJpSearchFile,
+    getJpEnabledCsgsForStore
+} from '../services/jdApiService.js'
 
 /**
  * 创建用于取消京配查询的Excel文件Buffer
@@ -22,41 +28,54 @@ function createJpSearchExcelBuffer(items) {
 
 /**
  * 主执行函数 - 由工作流调用
- * @param {object} context 包含 skus, csgList
+ * @param {object} context 包含 skus, csgList, store, options
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, sessionData) {
-    const { skus, store } = context
+    const { skus, csgList, store, options } = context
+    const isWholeStore = options?.cancelJpSearchScope === 'all'
 
-    // For this operation, we should probably use SKUs directly.
-    const itemsToProcess = skus
-    if (!itemsToProcess || itemsToProcess.length === 0) {
-        return { success: true, message: '商品列表为空，无需操作。' }
-    }
-
-    if (!sessionData || !sessionData.cookies) {
+    if (!sessionData || !sessionData.cookie) {
         throw new Error('缺少会话信息')
     }
 
     console.log(
-        `[Task: cancelJpSearch] "取消京配打标" 开始，店铺 [${store.shopName}]...`
-    )
-    console.log(
-        `[Task: cancelJpSearch] 将为 ${itemsToProcess.length} 个商品取消京配打标。`
+        `[Task: cancelJpSearch] "取消京配打标" 开始，店铺 [${store.shopName}], 模式: ${isWholeStore ? '整店' : '部分'}`
     )
 
     try {
+        let itemsToProcess = []
+        if (isWholeStore) {
+            // 1. Get all products with JP search enabled for the entire store
+            console.log('[Task: cancelJpSearch] 正在查询整店已开启京配的商品...')
+            itemsToProcess = await getJpEnabledCsgsForStore(sessionData)
+        } else {
+            itemsToProcess = csgList || skus
+        }
+
+        if (!itemsToProcess || itemsToProcess.length === 0) {
+            const message = isWholeStore
+                ? '店铺内没有已开启京配搜索的商品，无需操作。'
+                : '商品列表为空，无需操作。'
+            return { success: true, message }
+        }
+
+        console.log(
+            `[Task: cancelJpSearch] 查询到 ${itemsToProcess.length} 个商品，将为它们取消京配打标。`
+        )
+
+        // 2. Create Excel and upload
         const fileBuffer = createJpSearchExcelBuffer(itemsToProcess)
         const response = await uploadJpSearchFile(fileBuffer, sessionData)
-        // {resultCode: 1,resultMessage: '操作成功！',
-        // resultData: '导入文件之后将进入后台任务处理阶段，任务编号：updateshopgoodsjpsearch20250630172724,请稍后在任务日志查看导入结果' }
-
 
         console.log('取消京配打标=======> response', response)
 
         if (response && response.resultCode === 1) {
-            return { success: true, message: response.resultData || '取消京配打标任务提交成功。' }
+            return {
+                success: true,
+                message: `${response.resultData || '取消京配打标任务提交成功。'} (共 ${itemsToProcess.length} 个商品)`
+            }
         } else {
             const errorMessage = response.message || '取消京配打标时发生未知错误'
             throw new Error(errorMessage)

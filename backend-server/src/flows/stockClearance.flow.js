@@ -22,9 +22,12 @@ const workflowSteps = [
     execute: (context, session) => executeTask('clearStockAllocation', context, session)
   },
   {
-    name: '取消京配',
+    name: '取消京配打标',
     shouldExecute: (context) => context.options.cancelJpSearch,
-    execute: (context, session) => executeTask('cancelJpSearch', context, session)
+    execute: (context, session) => {
+      // The task will handle the logic for 'all' vs 'selected'
+      return executeTask('cancelJpSearch', context, session)
+    }
   }
 ]
 

@@ -915,3 +915,120 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData) {
     }
   })
 }
+
+/**
+ * 获取指定店铺中所有已开启京配搜索的商品
+ * 该函数通过分页处理获取所有商品
+ * @param {object} sessionData - 完整的会话对象,包含店铺和部门信息
+ * @returns {Promise<string[]>} 返回已开启商品的CSG编号(shopGoodsNo)列表
+ */
+export async function getJpEnabledCsgsForStore(sessionData) {
+  const { store, department, vendor, cookie, csrfToken } = sessionData;
+  const { shopId, shopNo } = store;
+  const { sellerId, sellerNo } = vendor;
+  const { deptId, deptNo } = department;
+
+  console.log('sessionData ===>', sessionData)
+  console.log('store ===>', store)
+  console.log('department ===>', department)
+  console.log('vendor ===>', vendor)
+
+  console.log('shopId ===>', shopId)
+  console.log('shopNo ===>', shopNo)
+  console.log('sellerId ===>', sellerId)
+  console.log('sellerNo ===>', sellerNo)
+  console.log('deptId ===>', deptId)
+  console.log('deptNo ===>', deptNo)
+
+
+  const allCsgs = [];
+  let page = 0;
+  const pageSize = 100; // Set a larger page size
+  let hasMore = true;
+  let sEcho = 1;
+
+  while (hasMore) {
+    const iDisplayStart = page * pageSize;
+    const aoData = [
+      { name: 'sEcho', value: sEcho++ },
+      { name: 'iColumns', value: 14 },
+      { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+      { name: 'iDisplayStart', value: iDisplayStart },
+      { name: 'iDisplayLength', value: pageSize },
+      { name: 'mDataProp_0', value: 0 },
+      { name: 'bSortable_0', value: false },
+      { name: 'mDataProp_1', value: 1 },
+      { name: 'bSortable_1', value: false },
+      { name: 'mDataProp_2', value: 'shopGoodsName' },
+      { name: 'bSortable_2', value: false },
+      { name: 'mDataProp_3', value: 'goodsNo' },
+      { name: 'bSortable_3', value: false },
+      { name: 'mDataProp_4', value: 'spGoodsNo' },
+      { name: 'bSortable_4', value: false },
+      { name: 'mDataProp_5', value: 'isvGoodsNo' },
+      { name: 'bSortable_5', value: false },
+      { name: 'mDataProp_6', value: 'shopGoodsNo' },
+      { name: 'bSortable_6', value: false },
+      { name: 'mDataProp_7', value: 'barcode' },
+      { name: 'bSortable_7', value: false },
+      { name: 'mDataProp_8', value: 'shopName' },
+      { name: 'bSortable_8', value: false },
+      { name: 'mDataProp_9', value: 'createTime' },
+      { name: 'bSortable_9', value: false },
+      { name: 'mDataProp_10', value: 10 },
+      { name: 'bSortable_10', value: false },
+      { name: 'mDataProp_11', value: 'isCombination' },
+      { name: 'bSortable_11', value: false },
+      { name: 'mDataProp_12', value: 'status' },
+      { name: 'bSortable_12', value: false },
+      { name: 'mDataProp_13', value: 13 },
+      { name: 'bSortable_13', value: false },
+      { name: 'iSortCol_0', value: 9 },
+      { name: 'sSortDir_0', value: 'desc' },
+      { name: 'iSortingCols', value: 1 }
+    ];
+    const form = new URLSearchParams();
+    form.append('csrfToken', csrfToken);
+    form.append('shopId', shopId);
+    form.append('sellerId', sellerId);
+    form.append('deptId', deptId);
+    form.append('sellerNo', sellerNo);
+    form.append('deptNo', deptNo);
+    form.append('shopNo', shopNo);
+    form.append('jdDeliver', '1'); // 1 for JP search enabled
+    form.append('status', '1');
+    form.append('aoData', JSON.stringify(aoData));
+
+    try {
+      const data = await requestJdApi({
+        method: 'POST',
+        url: `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Cookie: cookie,
+          'X-Requested-With': 'XMLHttpRequest',
+          Referer: 'https://o.jdl.com/goToMainIframe.do',
+          Origin: 'https://o.jdl.com'
+        },
+        data: form.toString(),
+        responseType: 'json'
+      });
+
+      if (data && data.aaData && data.aaData.length > 0) {
+        const csgs = data.aaData.map((item) => item.shopGoodsNo);
+        allCsgs.push(...csgs);
+        // Check if there are more items to fetch
+        hasMore = data.iTotalRecords > allCsgs.length;
+        page++;
+      } else {
+        hasMore = false;
+      }
+    } catch (error) {
+      console.error('Error fetching JP enabled CSGs:', error);
+      // Stop pagination on error
+      hasMore = false;
+    }
+  }
+
+  return allCsgs;
+}

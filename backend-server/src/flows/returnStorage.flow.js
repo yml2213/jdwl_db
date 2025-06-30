@@ -28,5 +28,6 @@ async function execute(context, session, log) {
 
 export default {
   name: 'returnStorage',
+  description: '退货入库',
   execute
 } 
