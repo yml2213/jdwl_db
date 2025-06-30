@@ -51,7 +51,10 @@ const api = {
     ipcRenderer.invoke('import-logistics-properties', options),
 
   // 添加库存
-  addInventory: (context) => ipcRenderer.invoke('add-inventory', context)
+  addInventory: (context) => ipcRenderer.invoke('add-inventory', context),
+
+  // 显示打开对话框
+  showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

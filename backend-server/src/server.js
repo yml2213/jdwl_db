@@ -147,12 +147,22 @@ app.post('/task', async (req, res) => {
     const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
     const taskModule = await import(taskPath)
 
-    if (typeof taskModule.default !== 'function') {
-      throw new Error(`任务 ${taskName} 未找到或其默认导出不是一个函数`)
+    // 检查模块导出的是函数还是对象
+    const taskFunction = typeof taskModule.default === 'function'
+      ? taskModule.default
+      : (taskModule.default && typeof taskModule.default.execute === 'function'
+        ? taskModule.default.execute
+        : null)
+
+    if (!taskFunction) {
+      throw new Error(`任务 ${taskName} 未找到或其导出格式不正确`)
     }
 
-    const taskFunction = taskModule.default
-    const result = await taskFunction(payload, sessionData)
+    // 创建一个空的更新函数
+    const updateFn = (status) => {
+      console.log(`任务 ${taskName} 状态更新:`, status)
+    }
+    const result = await taskFunction(payload, updateFn, sessionData)
 
     res.status(200).json({ success: true, data: result })
   } catch (error) {

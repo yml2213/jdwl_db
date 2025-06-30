@@ -1,12 +1,5 @@
 <template>
   <div class="file-upload-container">
-    <input
-      type="file"
-      ref="fileInputRef"
-      @change="handleFileChange"
-      accept=".txt"
-      style="display: none"
-    />
     <el-button @click="triggerFileInput">选择文件</el-button>
     <div v-if="selectedFile" class="selected-file-info">
       <span class="file-name">{{ selectedFile.name }}</span>
@@ -17,32 +10,60 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { ElButton } from 'element-plus'
 
-const emit = defineEmits(['file-change'])
+const props = defineProps({
+  modelValue: [Object, String], // Can be a File object or a path string
+  accept: {
+    type: String,
+    default: '*' // 默认接受所有文件类型
+  }
+})
 
-const fileInputRef = ref(null)
-const selectedFile = ref(null)
+const emit = defineEmits(['update:modelValue'])
 
-const triggerFileInput = () => {
-  fileInputRef.value.click()
-}
+const selectedFile = ref(props.modelValue)
 
-const handleFileChange = (event) => {
-  const file = event.target.files[0]
-  if (file) {
-    selectedFile.value = file
-    emit('file-change', file)
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    selectedFile.value = newValue
+  }
+)
+
+const fileFilters = computed(() => {
+  if (props.accept === '*' || !props.accept) {
+    return [{ name: 'All Files', extensions: ['*'] }]
+  }
+  const extensions = props.accept.split(',').map((ext) => ext.trim().replace('.', ''))
+  return [{ name: 'Custom Files', extensions }]
+})
+
+const triggerFileInput = async () => {
+  try {
+    const filePath = await window.api.showOpenDialog({
+      properties: ['openFile'],
+      filters: fileFilters.value
+    })
+
+    if (filePath) {
+      const fileName = filePath.split(/[\/\\]/).pop()
+      const fileObject = {
+        name: fileName,
+        path: filePath
+      }
+      selectedFile.value = fileObject
+      emit('update:modelValue', fileObject)
+    }
+  } catch (error) {
+    console.error('选择文件时出错:', error)
   }
 }
 
 const clearFile = () => {
   selectedFile.value = null
-  if (fileInputRef.value) {
-    fileInputRef.value.value = ''
-  }
-  emit('file-change', null)
+  emit('update:modelValue', null)
 }
 </script>
 

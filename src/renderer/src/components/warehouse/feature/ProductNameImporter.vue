@@ -1,11 +1,11 @@
 <template>
-  <div class="importer-container">
+  <div v-if="modelValue" class="importer-container">
     <div class="importer-header">
       <h4>导入商品简称</h4>
       <p class="subtitle">通过Excel文件批量导入商品简称信息。</p>
     </div>
 
-    <div v-if="modelValue" class="feature-options-container">
+    <div class="feature-options-container">
       <FileUploader
         v-model="selectedFile"
         label="选择包含商品简称的Excel文件 (SKU在第一列, 名称在第二列)"

@@ -1532,7 +1532,7 @@ export const createSession = async (sessionData) => {
 export const executeTask = async (taskName, payload) => {
   // sessionId 不再需要手动传递，它会通过cookie自动发送
   try {
-    const response = await apiClient.post('/api/execute-task', {
+    const response = await apiClient.post('/task', {
       taskName,
       payload
     })

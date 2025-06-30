@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -64,6 +64,26 @@ function createWindow() {
       ]
       const menu = Menu.buildFromTemplate(template)
       menu.popup(BrowserWindow.fromWebContents(event.sender))
+    })
+
+    ipcMain.handle('get-session-context', (event) => {
+      // console.log('主进程: get-session-context in main')
+      return getSessionContext()
+    })
+
+    // 示例：处理来自渲染进程的setTitle请求
+    ipcMain.on('set-title', (event, title) => {
+      const webContents = event.sender
+      const win = BrowserWindow.fromWebContents(webContents)
+      win.setTitle(title)
+    })
+
+    ipcMain.handle('show-open-dialog', async (event, options) => {
+      const { filePaths } = await dialog.showOpenDialog(options)
+      if (filePaths && filePaths.length > 0) {
+        return filePaths[0]
+      }
+      return null
     })
   }
 

@@ -1,9 +1,17 @@
 import * as XLSX from 'xlsx'
-import { JdService } from '../services/jdApiService.js'
+import { uploadProductNames } from '../services/jdApiService.js'
+import fs from 'fs'
+import path from 'path'
 
-async function readExcelFile(fileBuffer) {
+async function readExcelFile(filePath) {
     try {
-        const workbook = XLSX.read(fileBuffer, { type: 'buffer' })
+        // 检查文件是否存在
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`文件不存在: ${filePath}`)
+        }
+
+        // 从文件路径读取
+        const workbook = XLSX.readFile(filePath)
         const firstSheetName = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[firstSheetName]
         return XLSX.utils.sheet_to_json(worksheet, { header: 1 })
@@ -48,16 +56,15 @@ async function convertToExcelFile(data, fileName) {
 }
 
 async function execute(payload, updateFn, sessionData) {
-    const { file, store } = payload
-    if (!file) throw new Error('未提供文件')
-    if (!store || !store.deptNo) throw new Error('未提供有效的事业部信息')
+    const { filePath } = payload
+    if (!filePath) throw new Error('未提供文件路径')
 
-    const department = { deptNo: store.deptNo }
+    // 从会话中获取事业部信息
+    const department = sessionData?.department || { deptNo: '10' }  // 默认值
 
     try {
         updateFn({ status: 'processing', message: '正在读取Excel文件...' })
-        const fileBuffer = Buffer.from(file.data)
-        const excelData = await readExcelFile(fileBuffer)
+        const excelData = await readExcelFile(filePath)
 
         if (!excelData || excelData.length < 2) {
             throw new Error('Excel文件内容为空或格式不正确')
@@ -68,12 +75,12 @@ async function execute(payload, updateFn, sessionData) {
         const rowCount = newExcelData.length - 2 // 减去表头
 
         const BATCH_SIZE = 2000
-        const jdService = new JdService(sessionData)
+        // 不再使用 JdService 类，直接使用导出的函数
 
         if (rowCount <= BATCH_SIZE) {
             updateFn({ message: '数据量较小，开始直接上传...' })
             const excelFile = await convertToExcelFile(newExcelData, '商品批量修改自定义模板.xls')
-            const result = await jdService.uploadProductNames(excelFile.buffer, excelFile.fileName)
+            const result = await uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
 
             updateFn({
                 status: result.success ? 'completed' : 'failed',
@@ -101,7 +108,7 @@ async function execute(payload, updateFn, sessionData) {
                 })
 
                 const excelFile = await convertToExcelFile(batchData, batchFileName)
-                const result = await jdService.uploadProductNames(excelFile.buffer, excelFile.fileName)
+                const result = await uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
 
                 finalMessage += `批次 ${i + 1}: ${result.message}\\n`
                 if (!result.success) allSuccess = false
