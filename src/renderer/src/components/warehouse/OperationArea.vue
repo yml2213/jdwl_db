@@ -64,7 +64,7 @@
         </div>
       </div>
       <!-- Logistics & Inventory Sub-options -->
-      <div v-if="form.options.importProps" class="logistics-options">
+      <div v-if="form.options.importProps" class="sub-options-container logistics-options">
         <div class="logistics-input-group">
           <label>长(mm):</label>
           <input type="text" v-model="logisticsOptions.length" />
@@ -82,7 +82,7 @@
           <input type="text" v-model="logisticsOptions.grossWeight" />
         </div>
       </div>
-      <div v-if="form.options.useAddInventory" class="inventory-container">
+      <div v-if="form.options.useAddInventory" class="sub-options-container inventory-container">
         <label class="inventory-label">库存数量：</label>
         <input type="number" v-model="form.options.inventoryAmount" class="inventory-input" />
       </div>
@@ -270,24 +270,33 @@ const handleFileChange = (file) => {
   white-space: nowrap;
 }
 
-.logistics-options,
-.inventory-container {
+.sub-options-container {
   margin-top: 15px;
   padding-top: 15px;
   border-top: 1px dashed #e8e8e8;
 }
 
-.logistics-input-group {
+.logistics-options {
   display: grid;
-  grid-template-columns: 80px 1fr;
-  align-items: center;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-bottom: 8px;
 }
+
+.logistics-input-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.logistics-input-group label {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
 .logistics-input-group input {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
 }
 
