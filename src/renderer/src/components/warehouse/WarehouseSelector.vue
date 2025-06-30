@@ -1,6 +1,7 @@
 <template>
   <div class="form-group">
     <label class="form-label">选择仓库</label>
+    <slot name="info" :warehouse="currentWarehouseInfo"></slot>
     <div class="select-wrapper">
       <select
         :value="modelValue"
@@ -19,7 +20,6 @@
       </select>
       <div v-if="loading" class="loading-indicator">加载中...</div>
       <div v-if="error" class="error-message">{{ error }}</div>
-      <slot name="info" :warehouse="currentWarehouseInfo"></slot>
     </div>
   </div>
 </template>

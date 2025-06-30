@@ -11,6 +11,7 @@
       />
       <button v-if="searchText" class="clear-search-btn" @click="clearSearch">×</button>
     </div>
+    <slot name="info" :shop="currentShopInfo"></slot>
     <div class="select-wrapper">
       <select :value="modelValue" @change="onStoreChange" class="form-select" :disabled="loading">
         <option value="" disabled>请选择店铺</option>
@@ -20,7 +21,6 @@
       </select>
       <div v-if="loading" class="loading-indicator">加载中...</div>
       <div v-if="error" class="error-message">{{ error }}</div>
-      <slot name="info" :shop="currentShopInfo"></slot>
     </div>
   </div>
 </template>
