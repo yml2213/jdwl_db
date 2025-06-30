@@ -700,3 +700,70 @@ export async function createPurchaseOrder(products, context, sessionData) {
     headers
   })
 }
+
+/**
+ * 上传商品简称数据到服务器
+ * @param {Buffer} fileBuffer - Excel文件的Buffer
+ * @param {string} fileName - 文件名
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<Object>} 上传结果
+ */
+export async function uploadProductNames(fileBuffer, fileName, sessionData) {
+  const { cookieString } = getAuthInfo(sessionData)
+
+  const formData = new FormData()
+  formData.append('importFile', fileBuffer, {
+    filename: fileName,
+    contentType: 'application/vnd.ms-excel'
+  })
+
+  const url = `/goods/doUpdateCustomImportGoods.do?_r=${Math.random()}`
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: 'https://o.jdl.com/goToMainIframe.do',
+    Origin: 'https://o.jdl.com',
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+  }
+
+  console.log('[jdApiService] 尝试上传商品简称文件...')
+  const responseData = await requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
+
+  console.log('[jdApiService] 商品简称文件上传成功，响应:', responseData)
+
+  // 后端返回的是HTML，需要自行解析判断
+  // 这里我们简化处理，认为只要请求不抛异常就是成功，具体结果需要从 message 中看
+  if (responseData && typeof responseData === 'object' && responseData.resultCode === '1') {
+    const totalCount = parseInt(responseData.totalNum) || 0
+    const successCount = parseInt(responseData.successNum) || 0
+    const failCount = parseInt(responseData.failNum) || 0
+    return {
+      success: successCount > 0 || totalCount === 0,
+      message:
+        responseData.resultMsg ||
+        `导入完成: 共${totalCount}条, 成功${successCount}条, 失败${failCount}条`,
+      data: responseData
+    }
+  } else if (typeof responseData === 'string' && responseData.includes('导入结果')) {
+    // 处理HTML响应
+    return {
+      success: true, // 假设只要看到导入结果页面就是成功提交
+      message: '文件已上传，请在页面查看具体导入结果。'
+    }
+  }
+  else {
+    return {
+      success: false,
+      message: responseData ? responseData.resultMsg || '导入商品简称失败' : '导入失败，无响应数据',
+      data: responseData
+    }
+  }
+}

@@ -5,7 +5,14 @@
       <p class="subtitle">通过Excel文件批量导入商品简称信息。</p>
     </div>
 
-    <FileUploader @file-selected="handleFileSelect" :disabled="isProcessing" />
+    <div v-if="modelValue" class="feature-options-container">
+      <FileUploader
+        v-model="selectedFile"
+        label="选择包含商品简称的Excel文件 (SKU在第一列, 名称在第二列)"
+        accept=".xls,.xlsx"
+        :required="true"
+      />
+    </div>
 
     <button @click="startImport" :disabled="!selectedFile || isProcessing" class="import-button">
       <span v-if="isProcessing">
@@ -30,25 +37,42 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import FileUploader from '../FileUploader.vue'
-import importProductNamesFeature from '../../../features/warehouseLabeling/importProductNames'
+import importProductNamesFeature from '../../../features/warehouseLabeling/importProductNames.js'
 import { ElNotification } from 'element-plus'
+
+const props = defineProps({
+  modelValue: Boolean, // 控制显示/隐藏
+  payload: Object // v-model:payload
+})
+
+const emit = defineEmits(['update:payload'])
 
 const selectedFile = ref(null)
 const isProcessing = ref(false)
 const logs = ref([])
+
+// 当组件被隐藏时，清空文件
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (!newValue) {
+      selectedFile.value = null
+    }
+  }
+)
+
+// 当文件变化时，更新payload
+watch(selectedFile, (newFile) => {
+  emit('update:payload', newFile ? { file: newFile } : null)
+})
 
 const addLog = (message, type = 'info') => {
   logs.value.push({
     text: `[${new Date().toLocaleTimeString()}] ${message}`,
     type
   })
-}
-
-const handleFileSelect = (file) => {
-  selectedFile.value = file
-  addLog(`已选择文件: ${file.name}`)
 }
 
 const startImport = async () => {
@@ -83,9 +107,18 @@ const startImport = async () => {
       })
     }
 
-    if (result.data?.resultMsg) {
+    if (result.data) {
       addLog('-----服务器返回详细信息-----', 'info')
-      addLog(result.data.resultMsg, result.success ? 'info' : 'error')
+      // 后端返回的原始结果可能在 response.data.data 中
+      const serverResult = result.data || result
+      if (serverResult?.resultMsg) {
+        addLog(serverResult.resultMsg, result.success ? 'info' : 'error')
+      } else if (result.data.message) {
+        addLog(result.data.message, result.success ? 'info' : 'error')
+      } else if (!result.success) {
+        // 如果没有具体的 resultMsg，也显示一个通用消息
+        addLog(result.message || '未知服务端错误', 'error')
+      }
       addLog('--------------------------', 'info')
     }
   } catch (error) {
@@ -233,5 +266,13 @@ const clearLogs = () => {
 
 .log-error {
   color: #f56c6c;
+}
+
+.feature-options-container {
+  padding: 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-top: 10px;
+  background-color: #f8f9fa;
 }
 </style>

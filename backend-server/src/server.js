@@ -31,7 +31,7 @@ app.use(
       path: './sessions', // 会话文件存储路径
       ttl: 24 * 60 * 60, // 会话有效期（秒），这里是24小时
       reapInterval: -1, // 禁用自动清理过期的会话文件，可根据需要调整
-      logFn: function () {} // 禁用默认的日志输出，保持控制台干净
+      logFn: function () { } // 禁用默认的日志输出，保持控制台干净
     }),
     secret: 'a_secret_key_for_jdwl_db_session', // 在生产环境中应使用更安全的密钥，并从环境变量中读取
     resave: false,
@@ -126,6 +126,38 @@ app.post('/api/execute-flow', async (req, res) => {
     console.error(`执行工作流 ${flowName} 时出错:`, error)
     // 即使失败，也返回日志
     res.status(500).json({ success: false, logs, message: error.message })
+  }
+})
+
+/**
+ * @description 执行单个任务的端点
+ */
+app.post('/task', async (req, res) => {
+  const { taskName, payload } = req.body
+
+  if (!taskName) {
+    return res.status(400).json({ success: false, message: '必须提供 taskName' })
+  }
+
+  // 从会话中获取上下文
+  const sessionData = req.session.context || {}
+
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
+    const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
+    const taskModule = await import(taskPath)
+
+    if (typeof taskModule.default !== 'function') {
+      throw new Error(`任务 ${taskName} 未找到或其默认导出不是一个函数`)
+    }
+
+    const taskFunction = taskModule.default
+    const result = await taskFunction(payload, sessionData)
+
+    res.status(200).json({ success: true, data: result })
+  } catch (error) {
+    console.error(`执行任务 ${taskName} 时出错:`, error)
+    res.status(500).json({ success: false, message: error.message, stack: error.stack })
   }
 })
 

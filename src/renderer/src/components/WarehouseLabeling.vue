@@ -58,7 +58,8 @@ const workflows = {
 const form = reactive({
   quickSelect: 'warehouseLabeling', // 当前选择的快捷流程
   sku: '', // 用户输入的SKU
-  options: {} // 手动模式下的功能选项
+  options: {}, // 手动模式下的功能选项
+  payloads: {} // 用于存储与特定功能相关的额外数据，例如文件
 })
 
 // 从组合式函数中引入店铺和仓库相关的功能和状态
@@ -122,6 +123,37 @@ const featureNameMap = {
  * @description 处理"添加到任务列表"按钮点击事件
  */
 const handleAddTask = () => {
+  // --- 导入商品简称任务 ---
+  if (isManualMode.value && form.options.importProductNames) {
+    const payload = form.payloads?.importProductNames
+    if (!payload || !payload.file) {
+      return alert('请选择要上传的商品简称Excel文件')
+    }
+    if (!currentShopInfo.value) return alert('请选择店铺')
+
+    addTask({
+      displaySku: `文件: ${payload.file.name}`,
+      featureName: featureNameMap.importProductNames,
+      storeName: currentShopInfo.value.shopName,
+      warehouseName: 'N/A',
+      executionFeature: 'importProductNames',
+      executionData: {
+        file: {
+          name: payload.file.name,
+          path: payload.file.path,
+          size: payload.file.size,
+          type: payload.file.type,
+          data: payload.file.data // 确保文件内容被传递
+        },
+        store: { ...currentShopInfo.value, ...selectedDepartment.value }
+      }
+    })
+    // 重置，避免影响下一个任务
+    form.payloads.importProductNames = null
+    return // 单独处理，不继续执行下面的逻辑
+  }
+
+  // --- 原有的SKU任务 ---
   const skus = form.sku.split(/[\n,，\s]+/).filter((sku) => sku.trim())
   if (skus.length === 0) return alert('请输入有效的SKU')
   if (!currentShopInfo.value) return alert('请选择店铺')
@@ -173,6 +205,8 @@ watch(
       const savedOptions = getManualOptions()
       if (savedOptions) form.options = savedOptions
     }
+    // 重置payloads确保切换后不会残留文件等信息
+    form.payloads = {}
   }
 )
 

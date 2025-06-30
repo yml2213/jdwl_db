@@ -53,6 +53,14 @@
           <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
           <label for="useAddInventory">添加库存</label>
         </div>
+        <div class="option-item">
+          <input
+            type="checkbox"
+            id="importProductNames"
+            v-model="form.options.importProductNames"
+          />
+          <label for="importProductNames">导入商品简称</label>
+        </div>
       </div>
       <!-- Logistics & Inventory Sub-options -->
       <div v-if="form.options.importProps" class="logistics-options">
@@ -77,6 +85,11 @@
         <label class="inventory-label">库存数量：</label>
         <input type="number" v-model="form.options.inventoryAmount" class="inventory-input" />
       </div>
+      <!-- Product Name Importer Sub-options -->
+      <ProductNameImporter
+        v-model="form.options.importProductNames"
+        v-model:payload="form.payloads.importProductNames"
+      />
     </div>
 
     <div class="form-group">
@@ -110,6 +123,7 @@ import { ElButton } from 'element-plus'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
 import FileUploader from './FileUploader.vue'
+import ProductNameImporter from './feature/ProductNameImporter.vue'
 
 const props = defineProps({
   form: Object,

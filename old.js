@@ -1,373 +1,355 @@
-import { getSelectedDepartment, getSelectedShop } from '../../utils/storageHelper'
+import { getSelectedDepartment } from '../../utils/storageHelper'
 import * as XLSX from 'xlsx'
 import { getAllCookies } from '../../utils/cookieHelper'
-import { wait } from './utils/taskUtils'
 
 export default {
-    name: 'importGoodsStockConfig',
-    label: '启用库存商品分配',
+    name: 'importProductNames',
+    label: '导入商品简称',
 
     /**
-     * 执行仓库商品配置导入
-     * @param {Array} skuList SKU列表
-     * @param {Object} task 任务对象
-     * @param {Function} createBatchTask 创建批次任务的回调函数
-     * @returns {Object} 执行结果
+     * 执行导入商品简称功能
+     * @param {File} file - Excel文件
+     * @returns {Promise<Object>} 执行结果
      */
-    async execute(skuList, task, createBatchTask) {
-        const BATCH_SIZE = 2000
-        const totalBatches = Math.ceil(skuList.length / BATCH_SIZE)
-        let processedCount = 0
-        let failedCount = 0
-        const errorMessages = []
+    async execute(file) {
+        console.log('执行[导入商品简称]功能，文件:', file.name)
 
-        for (let i = 0; i < totalBatches; i++) {
-            const batchSkus = skuList.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
-
-            try {
-                const batchResult = await this._processBatch(batchSkus, task)
-                if (batchResult.success) {
-                    processedCount += batchSkus.length
-                } else {
-                    failedCount += batchSkus.length
-                    errorMessages.push(batchResult.message || '一个批次处理失败')
-                }
-            } catch (error) {
-                failedCount += batchSkus.length
-                errorMessages.push(error.message || '一个批次处理时发生未知错误')
-            }
-
-            // 如果不是最后一个批次，等待5分钟
-            if (i < totalBatches - 1) {
-                await wait(300000) // 等待5分钟
-            }
-        }
-
-        if (failedCount > 0) {
-            return {
-                success: false,
-                message: `库存分配完成，但有 ${failedCount} 个失败。错误: ${errorMessages.join('; ')}`,
-                processedCount,
-                failedCount
-            }
-        }
-
-        return {
-            success: true,
-            message: `成功为 ${processedCount} 个SKU启用库存分配。`,
-            processedCount,
-            failedCount
-        }
-    },
-
-    /**
-     * 处理一个批次的SKU
-     * @param {Array} skuList 批次中的SKU列表
-     * @param {Object} task 任务对象
-     * @returns {Object} 处理结果
-     */
-    async _processBatch(skuList, task) {
-        const result = {
-            success: false,
-            message: '',
-            importLogs: [],
-            results: []
+        // 获取事业部信息
+        const department = getSelectedDepartment()
+        if (!department) {
+            throw new Error('未选择事业部，无法导入商品简称')
         }
 
         try {
-            // 记录批次开始时间
-            const startTime = new Date()
-
-            result.importLogs.push({
-                type: 'info',
-                message: `开始处理${skuList.length}个SKU`,
-                time: startTime.toLocaleString()
-            })
-
-            // 更新任务状态为处理中
-            if (task) {
-                task.状态 = '处理中'
-                task.结果 = [`正在处理${skuList.length}个SKU`]
+            // 读取Excel文件内容
+            const data = await this.readExcelFile(file)
+            if (!data || data.length < 2) {
+                throw new Error('Excel文件内容为空或格式不正确')
             }
 
-            // 获取事业部信息
-            const department = getSelectedDepartment()
-            if (!department) {
-                throw new Error('未选择事业部，无法启用库存商品分配')
-            }
+            console.log('读取到Excel数据:', data.length, '行')
 
-            // 实际处理SKU - 调用上传方法
-            const uploadResult = await this.uploadGoodsStockConfigData(skuList, department)
+            // 创建新的Excel文件
+            const newExcelData = this.createNewExcelData(data, department)
 
-            // 记录处理结果
-            const endTime = new Date()
-            const processingTime = (endTime - startTime) / 1000 // 秒
+            // 检查数据量是否需要分组处理
+            const rowCount = newExcelData.length - 2  // 减去两行表头
+            const BATCH_SIZE = 2000
 
-            // 根据上传结果设置成功/失败状态
-            result.success = uploadResult.success
-            result.message = uploadResult.message
-            result.results.push(result.message)
+            if (rowCount <= BATCH_SIZE) {
+                // 数据量较小，直接处理
+                console.log(`数据量较小(${rowCount}行)，不需要分组处理`)
 
-            result.importLogs.push({
-                type: uploadResult.success ? 'success' : 'error',
-                message: result.message,
-                time: endTime.toLocaleString(),
-                successCount: uploadResult.processedCount || 0,
-                failureCount: uploadResult.failedCount || 0,
-                processingTime
-            })
+                // 将数据转换为Excel文件
+                const newFile = await this.convertToExcelFile(newExcelData)
 
-            // 更新任务状态
-            if (task) {
-                task.状态 = uploadResult.success ? '成功' : '失败'  // 确保任何失败（包括时间限制）都标记为失败
-                task.结果 = result.results
-                task.importLogs = result.importLogs
-            }
-
-            return result
-        } catch (error) {
-            console.error('处理批次出错:', error)
-
-            result.success = false
-            result.message = `批次处理失败: ${error.message || '未知错误'}`
-            result.importLogs.push({
-                type: 'error',
-                message: result.message,
-                time: new Date().toLocaleString()
-            })
-            result.results.push(result.message)
-
-            // 更新任务状态
-            if (task) {
-                task.状态 = '失败'
-                task.结果 = result.results
-                task.importLogs = result.importLogs
-            }
-
-            return result
-        }
-    },
-
-    /**
-     * 上传商品库存配置数据到服务器
-     * @param {Array<string>} skuList - 当前批次的SKU列表
-     * @param {Object} department - 事业部信息
-     * @returns {Promise<Object>} 上传结果
-     */
-    async uploadGoodsStockConfigData(skuList, department) {
-        try {
-            // 记录接收到的SKU批次信息
-            console.log(`处理批次SKU数量: ${skuList.length}`)
-
-            // 获取所有cookies并构建cookie字符串
-            const cookies = await getAllCookies()
-            const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
-
-            console.log('获取到cookies:', cookieString ? '已获取' : '未获取')
-            console.log(`开始处理当前批次，共${skuList.length}个SKU，${skuList.length > 0 ? `第一个SKU: ${skuList[0]}, 最后一个SKU: ${skuList[skuList.length - 1]}` : '无SKU'}`)
-
-            // 创建Excel数据结构
-            const data = this.createExcelData(skuList, department)
-
-            // 将数据转换为xlsx文件
-            const file = await this.convertToExcelFile(data)
-
-            // 创建FormData - 确保参数名称正确
-            const formData = new FormData()
-            // 根据curl命令使用正确的参数名
-            formData.append('goodsStockConfigExcelFile', file)
-
-            // 打印FormData条目
-            console.log('FormData条目:')
-            for (const pair of formData.entries()) {
-                console.log(`  ${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`)
-            }
-
-            // 序列化FormData
-            const serializedFormData = await this.serializeFormData(formData)
-
-            // 发送请求
-            const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=' + Math.random()
-            const response = await window.api.sendRequest(url, {
-                method: 'POST',
-                headers: {
-                    'User-Agent':
-                        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-                    Accept:
-                        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                    'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
-                    'cache-control': 'no-cache',
-                    origin: 'https://o.jdl.com',
-                    pragma: 'no-cache',
-                    priority: 'u=0, i',
-                    referer: 'https://o.jdl.com/goToMainIframe.do',
-                    'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"macOS"',
-                    'sec-fetch-dest': 'iframe',
-                    'sec-fetch-mode': 'navigate',
-                    'sec-fetch-site': 'same-origin',
-                    'sec-fetch-user': '?1',
-                    'upgrade-insecure-requests': '1',
-                    Cookie: cookieString
-                },
-                body: serializedFormData
-            })
-
-            console.log('上传库存商品分配数据响应:', response)
-
-            // 解析响应结果
-            if (response && (response.resultCode === "1" || response.resultCode === "2")) {
-                // 成功响应 - resultCode为1或2都表示成功
-                // resultCode为2时通常会返回包含导入日志的文件路径
-
-                // 获取日志文件名，方便查看
-                let logFileName = "无日志文件"
-                if (response.resultCode === "2" && response.resultData && typeof response.resultData === 'string') {
-                    const parts = response.resultData.split('/')
-                    logFileName = parts[parts.length - 1] || response.resultData
-                }
-
-                console.log(`批次导入成功，状态码: ${response.resultCode}，导入日志: ${logFileName}`)
-
-                // 将日志信息添加到window上下文，使UI可以访问
-                if (!window.importLogs) {
-                    window.importLogs = []
-                }
-                window.importLogs.push({
-                    timestamp: new Date().toLocaleTimeString(),
-                    type: 'success',
-                    batchSize: skuList.length,
-                    logFile: logFileName,
-                    message: `成功导入${skuList.length}个SKU，日志文件: ${logFileName}`
-                })
+                // 上传数据到服务器
+                const result = await this.uploadProductNamesData(newFile)
 
                 return {
-                    success: true,
-                    message: '启用库存商品分配成功',
-                    processedCount: skuList.length,
-                    failedCount: 0,
-                    skippedCount: 0,
-                    data: response.resultData,
-                    logFileName: logFileName
+                    success: result.success,
+                    message: result.message,
+                    data: result.data
                 }
             } else {
-                // 失败响应
-                let errorMessage = response?.resultMessage || response?.message || '启用库存商品分配失败，未知原因'
-                let isTimeLimit = false
+                // 数据量较大，需要分组处理
+                console.log(`数据量较大(${rowCount}行)，需要分组处理，每组最多${BATCH_SIZE}行`)
 
-                // 如果是5分钟限制的错误，修改错误信息格式
-                if (response?.resultMessage?.includes('5分钟内不要频繁操作') || response?.message?.includes('5分钟内不要频繁操作')) {
-                    errorMessage = '启用库存商品分配: 已失败 - 5分钟内不要频繁操作！'
-                    isTimeLimit = true
-                }
-
-                console.error('库存商品分配导入失败:', errorMessage)
-
-                // 将错误信息添加到window上下文，使UI可以访问
-                if (!window.importLogs) {
-                    window.importLogs = []
-                }
-                window.importLogs.push({
-                    timestamp: new Date().toLocaleTimeString(),
-                    type: 'error',
-                    batchSize: skuList.length,
-                    message: errorMessage
-                })
-
-                return {
-                    success: false,
-                    message: errorMessage,
-                    processedCount: 0,
-                    failedCount: skuList.length,
-                    skippedCount: 0,
-                    data: response,
-                    isTimeLimit: isTimeLimit  // 添加标记以便上层代码知道是时间限制错误
-                }
+                // 分组处理
+                return await this.processBatches(newExcelData, department, BATCH_SIZE)
             }
         } catch (error) {
-            console.error('上传库存商品分配数据失败:', error)
+            console.error('导入商品简称失败:', error)
             return {
                 success: false,
-                message: `上传失败: ${error.message || '未知错误'}`,
-                processedCount: 0,
-                failedCount: skuList.length,
-                skippedCount: 0,
+                message: `导入失败: ${error.message || '未知错误'}`,
                 error
             }
         }
     },
 
     /**
-     * 创建Excel数据结构
-     * @param {Array<string>} skuList - SKU列表
-     * @param {Object} department - 事业部信息
-     * @returns {Array<Array<any>>} Excel数据
+     * 读取Excel文件内容
+     * @param {File} file - Excel文件
+     * @returns {Promise<Array>} Excel数据
      */
-    createExcelData(skuList, department) {
-        // 表头行，按照图片要求的顺序排列
-        const headers = [
-            '事业部编码',
-            '主商品编码',
-            '商家商品标识',
-            '店铺编码',
-            '库存管理方式',
-            '库存比例/数值',
-            '仓库编号'
-        ]
+    async readExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
 
-        // 第二行介绍说明
-        const introRow = [
-            'CBU开头的事业部编码',
-            'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
-            '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
-            'CSP开头的店铺编码',
-            '纯数值\n1-独占\n2-共享\n3-固定值',
-            '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100\n库存方式为固定值时，填写仓库方式',
-            '可空，只有在库存管理方式为3-固定值时，该仓库编码，若为空则按全部仓执行'
-        ]
+            reader.onload = (e) => {
+                try {
+                    const data = e.target.result
+                    const workbook = XLSX.read(data, { type: 'array' })
 
-        // 动态获取店铺信息
-        const shop = getSelectedShop()
-        const shopInfo = {
-            shopNo: shop?.shopNo || ''  // 使用选择的店铺编码，如果没有则为空字符串
-        }
+                    // 获取第一个工作表
+                    const firstSheetName = workbook.SheetNames[0]
+                    console.log('Excel工作表名称:', firstSheetName)
+
+                    const worksheet = workbook.Sheets[firstSheetName]
+
+                    // 将工作表转换为数组
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+
+                    // 打印前几行数据用于调试
+                    console.log('Excel前5行数据:')
+                    for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+                        console.log(`行${i}:`, JSON.stringify(jsonData[i]))
+                    }
+
+                    console.log('Excel解析结果:', jsonData.length, '行')
+                    resolve(jsonData)
+                } catch (error) {
+                    console.error('解析Excel文件失败:', error)
+                    reject(new Error(`解析Excel文件失败: ${error.message}`))
+                }
+            }
+
+            reader.onerror = (error) => {
+                console.error('读取Excel文件失败:', error)
+                reject(new Error('读取Excel文件失败'))
+            }
+
+            reader.readAsArrayBuffer(file)
+        })
+    },
+
+    /**
+     * 创建新的Excel数据结构
+     * @param {Array} originalData - 原始Excel数据
+     * @param {Object} department - 事业部信息
+     * @returns {Array} 新的Excel数据
+     */
+    createNewExcelData(originalData, department) {
+        console.log('开始创建新Excel数据，原始数据行数:', originalData.length)
+        console.log('使用事业部编码:', department.deptNo)
+
+        // 表头行 - 中文
+        const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
+
+        // 表头行 - 英文（第二行）
+        const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
 
         // 数据行
-        const rows = skuList.map((sku) => {
-            return [
-                department.deptNo, // 事业部编码（CBU开头）
-                '', // 主商品编码（CMG开头，设为空）
-                sku, // 商家商品标识（SKU）
-                shopInfo.shopNo, // 店铺编码（CSP开头）
-                1, // 库存管理方式（默认为1-独占）
-                100, // 库存比例/数值（默认为100）
-                '' // 仓库编号（设为空）
-            ]
-        })
+        const rows = []
 
-        // 合并表头、介绍行和数据行
-        return [headers, introRow, ...rows]
+        // 跳过表头行，处理数据行
+        for (let i = 1; i < originalData.length; i++) {
+            const row = originalData[i]
+            if (row && row.length >= 2) {
+                // 确保SKU是字符串格式
+                const sku = String(row[0] || '').trim()
+                // 确保商品名称是字符串格式
+                const name = String(row[1] || '').trim()
+
+                if (sku && name) {
+                    // 原始数据的第一列是SKU，第二列是商品名称
+                    rows.push([
+                        department.deptNo, // 事业部编码
+                        sku,              // 商家商品标识（SKU）
+                        name              // 商品名称
+                    ])
+                } else {
+                    console.log(`跳过第${i + 1}行: SKU或名称为空`, JSON.stringify(row))
+                }
+            } else {
+                console.log(`跳过第${i + 1}行: 列数不足`, JSON.stringify(row))
+            }
+        }
+
+        console.log(`处理完成，生成${rows.length}行有效数据`)
+
+        // 打印前几行生成的数据用于调试
+        console.log('生成的Excel数据结构:')
+        // 合并中文表头、英文表头和数据行
+        const mergedData = [chineseHeaders, englishHeaders, ...rows]
+        console.log(`第1行(中文表头): ${JSON.stringify(mergedData[0])}`)
+        console.log(`第2行(英文字段): ${JSON.stringify(mergedData[1])}`)
+        for (let i = 2; i < Math.min(7, mergedData.length); i++) {
+            console.log(`第${i + 1}行(数据): ${JSON.stringify(mergedData[i])}`)
+        }
+
+        return mergedData
+    },
+
+    /**
+     * 分组处理大量数据
+     * @param {Array} fullData - 完整的Excel数据（包含表头）
+     * @param {Object} department - 事业部信息
+     * @param {Number} batchSize - 每组数据量
+     * @returns {Promise<Object>} 处理结果
+     */
+    async processBatches(fullData, department, batchSize) {
+        // 表头行（前两行）
+        const headers = fullData.slice(0, 2)
+
+        // 数据行
+        const dataRows = fullData.slice(2)
+
+        // 计算总批次数
+        const totalBatches = Math.ceil(dataRows.length / batchSize)
+        console.log(`共分为${totalBatches}个批次处理`)
+
+        // 结果统计
+        let totalCount = 0
+        let successCount = 0
+        let failCount = 0
+        let combinedResultMsg = '分批处理汇总:\n'
+        let allResults = []
+
+        // 进度事件
+        const progressEvent = new CustomEvent('importProductNamesProgress', {
+            detail: { total: totalBatches, current: 0 }
+        })
+        window.dispatchEvent(progressEvent)
+
+        // 逐批处理
+        for (let i = 0; i < totalBatches; i++) {
+            const start = i * batchSize
+            const end = Math.min(start + batchSize, dataRows.length)
+            const currentBatch = dataRows.slice(start, end)
+
+            console.log(`处理第${i + 1}/${totalBatches}批，数据行数:${currentBatch.length}`)
+
+            // 更新进度
+            const batchProgressEvent = new CustomEvent('importProductNamesProgress', {
+                detail: { total: totalBatches, current: i + 1 }
+            })
+            window.dispatchEvent(batchProgressEvent)
+
+            // 创建当前批次的完整数据（表头+数据）
+            const batchData = [...headers, ...currentBatch]
+
+            // 转换为Excel文件
+            const batchFile = await this.convertToExcelFile(batchData, `批次${i + 1}`)
+
+            // 上传数据
+            const result = await this.uploadProductNamesData(batchFile)
+            allResults.push(result)
+
+            // 累加统计数据
+            if (result.data) {
+                const batchTotal = parseInt(result.data.totalNum) || 0
+                const batchSuccess = parseInt(result.data.successNum) || 0
+                const batchFail = parseInt(result.data.failNum) || 0
+
+                totalCount += batchTotal
+                successCount += batchSuccess
+                failCount += batchFail
+
+                // 添加当前批次结果到汇总信息
+                combinedResultMsg += `批次${i + 1}: 共${batchTotal}条，成功${batchSuccess}条，失败${batchFail}条\n`
+
+                // 如果有错误信息，也添加到汇总
+                if (result.data.resultMsg && result.data.failNum > 0) {
+                    const errorLines = result.data.resultMsg.split('\n')
+                        .filter(line => line.includes('的商品不存在'))
+                        .join('\n')
+
+                    if (errorLines) {
+                        combinedResultMsg += `${errorLines}\n`
+                    }
+                }
+            }
+
+            // 如果不是最后一批，等待指定时间再处理下一批
+            if (i < totalBatches - 1) {
+                console.log(`等待5分钟后处理下一批...`)
+
+                // 等待5分钟(300000毫秒)
+                await new Promise(resolve => {
+                    const waitTime = 5 * 60 * 1000 // 5分钟
+                    const startWait = Date.now()
+
+                    // 每秒更新等待进度
+                    const interval = setInterval(() => {
+                        const elapsed = Date.now() - startWait
+                        const remaining = waitTime - elapsed
+                        if (remaining <= 0) {
+                            clearInterval(interval)
+                            resolve()
+                        } else {
+                            const remainingMinutes = Math.floor(remaining / 60000)
+                            const remainingSeconds = Math.floor((remaining % 60000) / 1000)
+
+                            // 发送等待进度事件
+                            const waitEvent = new CustomEvent('importProductNamesWaiting', {
+                                detail: {
+                                    minutes: remainingMinutes,
+                                    seconds: remainingSeconds,
+                                    total: waitTime,
+                                    elapsed: elapsed
+                                }
+                            })
+                            window.dispatchEvent(waitEvent)
+
+                            console.log(`等待下一批次: 剩余${remainingMinutes}分${remainingSeconds}秒`)
+                        }
+                    }, 1000)
+                })
+            }
+        }
+
+        // 发送完成事件
+        const completeEvent = new CustomEvent('importProductNamesComplete')
+        window.dispatchEvent(completeEvent)
+
+        // 汇总最终结果
+        console.log(`所有批次处理完成，总计: ${totalCount}条，成功: ${successCount}条，失败: ${failCount}条`)
+
+        // 构建最终返回结果
+        const finalResult = {
+            success: successCount > 0,
+            message: `分批导入完成: 共${totalCount}条，成功${successCount}条，失败${failCount}条`,
+            data: {
+                totalNum: totalCount,
+                successNum: successCount,
+                failNum: failCount,
+                resultMsg: combinedResultMsg,
+                batchResults: allResults
+            }
+        }
+
+        return finalResult
     },
 
     /**
      * 将数据转换为Excel文件
-     * @param {Array<Array<any>>} data - Excel数据
+     * @param {Array} data - Excel数据
+     * @param {String} batchInfo - 批次信息(可选)
      * @returns {Promise<File>} Excel文件对象
      */
-    async convertToExcelFile(data) {
+    async convertToExcelFile(data, batchInfo = '') {
         try {
-            // 直接使用导入的XLSX
+            console.log('开始转换数据为Excel文件...')
+
             // 生成工作表
             const ws = XLSX.utils.aoa_to_sheet(data)
 
+            // 设置列宽
+            const colWidths = [
+                { wch: 20 }, // 事业部编码列宽
+                { wch: 20 }, // 商家商品标识列宽
+                { wch: 30 }  // 商品名称列宽
+            ]
+            ws['!cols'] = colWidths
+
             // 创建工作簿
             const wb = XLSX.utils.book_new()
-            XLSX.utils.book_append_sheet(wb, ws, 'GoodsStockConfig')
+            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
 
-            // 生成二进制数据 - 使用xlsx格式而不是xls
+            // 添加一些元数据
+            wb.Props = {
+                Title: '商品批量修改自定义模板',
+                Subject: '商品简称导入',
+                Author: 'JDL系统',
+                CreatedDate: new Date()
+            }
+
+            // 生成二进制数据
+            console.log('生成Excel二进制数据...')
             const excelBinaryData = XLSX.write(wb, {
-                bookType: 'xlsx',
+                bookType: 'xls',
                 type: 'binary',
                 compression: true,
                 bookSST: false
@@ -380,29 +362,141 @@ export default {
                 view[i] = excelBinaryData.charCodeAt(i) & 0xff
             }
 
-            // 临时保存Excel文件到excel_gen文件夹中进行测试
-            const timestamp = new Date().getTime()
-            const fileName = `goodsStockConfigTemplate_${timestamp}.xlsx`
-            const filePath = `excel_gen/${fileName}`
+            // 创建文件对象，根据是否有批次信息添加批次标记
+            const fileName = batchInfo ?
+                `商品批量修改自定义模板_${batchInfo}.xls` :
+                '商品批量修改自定义模板.xls'
 
-            try {
-                // 通过主进程API保存文件
-                await window.api.saveFile({
-                    filePath: filePath,
-                    data: Array.from(new Uint8Array(buf))
-                })
-                console.log(`已将Excel文件临时保存到: ${filePath}`)
-            } catch (saveError) {
-                console.error('临时保存Excel文件失败:', saveError)
-            }
-
-            // 创建文件对象 - 使用标准化的文件名和MIME类型
-            return new File([buf], 'goodsStockConfigTemplate.xlsx', {
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            console.log('创建Excel文件对象完成:', fileName)
+            return new File([buf], fileName, {
+                type: 'application/vnd.ms-excel'
             })
         } catch (error) {
             console.error('生成Excel文件失败:', error)
             throw new Error(`生成Excel文件失败: ${error.message}`)
+        }
+    },
+
+    /**
+     * 上传商品简称数据到服务器
+     * @param {File} file - Excel文件
+     * @returns {Promise<Object>} 上传结果
+     */
+    async uploadProductNamesData(file) {
+        try {
+            console.log('准备上传商品简称数据，文件大小:', file.size, '字节')
+
+            // 获取所有cookies并构建cookie字符串
+            const cookies = await getAllCookies()
+            const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+
+            console.log('获取到cookies:', cookieString ? '已获取' : '未获取')
+
+            // 创建FormData
+            const formData = new FormData()
+            formData.append('importFile', file)
+
+            // 打印FormData条目
+            console.log('FormData条目:')
+            for (const pair of formData.entries()) {
+                console.log(`  ${pair[0]}: ${pair[1] instanceof File ? pair[1].name + ' (' + pair[1].size + '字节)' : pair[1]}`)
+            }
+
+            // 序列化FormData
+            const serializedFormData = await this.serializeFormData(formData)
+            console.log('FormData序列化完成')
+
+            // 发送请求
+            const url = 'https://o.jdl.com/goods/doUpdateCustomImportGoods.do?_r=' + Math.random()
+
+            console.log('开始上传商品简称数据', url)
+            const response = await window.api.sendRequest(url, {
+                method: 'POST',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+                    'cache-control': 'max-age=0',
+                    'origin': 'https://o.jdl.com',
+                    'priority': 'u=0, i',
+                    'referer': 'https://o.jdl.com/goToMainIframe.do',
+                    'sec-ch-ua': '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"macOS"',
+                    'sec-fetch-dest': 'iframe',
+                    'sec-fetch-mode': 'navigate',
+                    'sec-fetch-site': 'same-origin',
+                    'sec-fetch-user': '?1',
+                    'upgrade-insecure-requests': '1',
+                    'Content-Type': 'multipart/form-data',
+                    'Cookie': cookieString
+                },
+                body: serializedFormData
+            })
+
+            console.log('上传商品简称响应:', response)
+            console.log('完整响应对象:', JSON.stringify(response, null, 2))
+
+
+            // 解析响应结果
+            if (response && response.resultCode === "1") {
+                // 处理成功响应，但需要区分是否有成功导入的记录
+                const totalCount = parseInt(response.totalNum) || 0;
+                const successCount = parseInt(response.successNum) || 0;
+                const failCount = parseInt(response.failNum) || 0;
+
+                console.log(`导入统计 - 总数: ${totalCount}, 成功: ${successCount}, 失败: ${failCount}`);
+
+                // 格式化结果消息，提取错误信息
+                let formattedMsg = '';
+                if (response.resultMsg) {
+                    // 保留原始消息
+                    formattedMsg = response.resultMsg;
+
+                    // 提取并格式化错误信息
+                    const lines = response.resultMsg.split('\n');
+                    if (lines.length > 2) {
+                        // 去掉开头和结尾的固定文本，只保留错误信息
+                        const errorLines = lines.slice(1, -1);
+                        if (errorLines.length > 0) {
+                            console.log(`检测到${errorLines.length}个错误信息`);
+                        }
+                    }
+                }
+
+                if (successCount > 0) {
+                    // 部分或全部成功
+                    const successRatio = Math.round((successCount / totalCount) * 100);
+                    console.log(`商品简称导入部分成功 (${successRatio}%)`);
+
+                    return {
+                        success: true,
+                        message: `导入完成: 共${totalCount}条，成功${successCount}条，失败${failCount}条`,
+                        data: response
+                    };
+                } else {
+                    // 全部失败
+                    console.log('商品简称导入失败: 所有记录均导入失败');
+
+                    return {
+                        success: false,
+                        message: formattedMsg || `导入失败: 共${totalCount}条，全部导入失败`,
+                        data: response
+                    };
+                }
+            } else {
+                // 解析失败或服务器错误
+                console.error('商品简称导入失败:', response);
+
+                return {
+                    success: false,
+                    message: response ? response.resultMsg || '导入商品简称失败' : '导入失败，无响应数据',
+                    data: response
+                };
+            }
+        } catch (error) {
+            console.error('上传商品简称数据失败:', error)
+            throw new Error(`上传商品简称数据失败: ${error.message}`)
         }
     },
 
@@ -453,25 +547,10 @@ export default {
             }
         }
 
-        // 记录序列化后的条目数
-        console.log(`序列化后的FormData条目数: ${entries.length}`)
-        entries.forEach(entry => {
-            console.log(`  序列化条目: ${entry[0]}, 类型: ${entry[1]._isFile ? '文件' : '普通值'}`)
-        })
-
         // 返回可序列化的对象
         return {
             _isFormData: true,
             entries
         }
-    },
-
-    /**
-     * 处理导入结果
-     * @returns {Promise<Object>} 处理结果
-     */
-    async handleResult() {
-        // 启用库存商品分配功能结果已经在execute方法中完成，不需要额外处理
-        return null
     }
 } 
