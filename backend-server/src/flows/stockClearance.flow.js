@@ -46,7 +46,7 @@ async function execute(context, session, log) {
         log(`步骤 [${step.name}] 执行成功。`)
       } catch (error) {
         log(`步骤 [${step.name}] 执行失败: ${error.message}`, 'error')
-        throw new Error(`工作流在步骤 [${step.name}] 失败: ${error.message}`)
+        throw new Error(`在步骤 [${step.name}] 失败: ${error.message}`)
       }
     }
   }
