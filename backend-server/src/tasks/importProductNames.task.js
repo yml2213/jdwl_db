@@ -2,7 +2,6 @@ import * as XLSX from 'xlsx'
 import { uploadProductNames } from '../services/jdApiService.js'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 
 async function readExcelFile(filePath) {
     try {
