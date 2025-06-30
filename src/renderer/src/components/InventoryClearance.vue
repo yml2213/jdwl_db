@@ -130,7 +130,5 @@ onMounted(() => {
   display: flex;
   height: 100%;
   background-color: #ffffff;
-  padding: 20px;
-  gap: 20px;
 }
 </style>

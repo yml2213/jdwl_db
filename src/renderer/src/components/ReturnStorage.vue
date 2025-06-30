@@ -127,13 +127,13 @@ onMounted(() => {
   height: 100%;
 }
 .operation-panel {
-  flex: 0 0 400px;
+  flex: 0 0 380px;
   padding: 20px;
   border-right: 1px solid #e0e0e0;
   display: flex;
   flex-direction: column;
   gap: 15px;
-  background: #fff;
+  background: #f7f8fa;
   overflow-y: auto;
 }
 .form-item {
