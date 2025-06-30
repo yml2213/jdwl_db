@@ -20,10 +20,7 @@
       </select>
       <div v-if="loading" class="loading-indicator">加载中...</div>
       <div v-if="error" class="error-message">{{ error }}</div>
-      <div v-if="currentShopInfo" class="shop-info">
-        <small>店铺编号: {{ currentShopInfo.shopNo }}</small>
-        <small>类型: {{ currentShopInfo.typeName }} - {{ currentShopInfo.bizTypeName }}</small>
-      </div>
+      <slot name="info" :shop="currentShopInfo"></slot>
     </div>
   </div>
 </template>
@@ -185,13 +182,5 @@ const onStoreChange = (event) => {
   font-size: 12px;
   color: #f56c6c;
   margin-top: 5px;
-}
-
-.shop-info {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 5px;
-  display: flex;
-  flex-direction: column;
 }
 </style>

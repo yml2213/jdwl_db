@@ -11,7 +11,10 @@
     </div>
 
     <div class="form-group sku-input-container">
-      <label class="form-label">输入SKU</label>
+      <div class="sku-header">
+        <label class="form-label">输入SKU</label>
+        <FileUploader @file-change="handleFileChange" />
+      </div>
       <textarea
         v-model="form.sku"
         placeholder="请输入SKU (多个SKU请每行一个)"
@@ -20,10 +23,6 @@
       <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
         >清空</el-button
       >
-    </div>
-
-    <div class="form-group">
-      <FileUploader @file-change="handleFileChange" />
     </div>
 
     <!-- Manual Options Section -->
@@ -92,22 +91,38 @@
       />
     </div>
 
-    <div class="form-group">
+    <div class="form-group selector-group">
       <StoreSelector
         v-model="storeVModel"
         :shops="shopsList"
         :loading="isLoadingShops"
         :error="shopLoadError"
-      />
+        class="selector-control"
+      >
+        <template #info="{ shop }">
+          <div v-if="shop" class="selector-info">
+            <small>编号: {{ shop.shopNo }}</small>
+            <small>类型: {{ shop.typeName }}</small>
+          </div>
+        </template>
+      </StoreSelector>
     </div>
 
-    <div class="form-group">
+    <div class="form-group selector-group">
       <WarehouseSelector
         v-model="warehouseVModel"
         :warehouses="warehousesList"
         :loading="isLoadingWarehouses"
         :error="warehouseLoadError"
-      />
+        class="selector-control"
+      >
+        <template #info="{ warehouse }">
+          <div v-if="warehouse" class="selector-info">
+            <small>编号: {{ warehouse.warehouseNo }}</small>
+            <small>类型: {{ warehouse.warehouseTypeStr }}</small>
+          </div>
+        </template>
+      </WarehouseSelector>
     </div>
 
     <div class="form-actions">
@@ -239,17 +254,22 @@ const handleFileChange = (file) => {
 
 .manual-options-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
 }
 
 .option-item {
   display: flex;
   align-items: center;
+  font-size: 13px;
 }
 
 .option-item input[type='checkbox'] {
-  margin-right: 8px;
+  margin-right: 4px;
+}
+
+.option-item label {
+  white-space: nowrap;
 }
 
 .logistics-options,
@@ -327,5 +347,47 @@ const handleFileChange = (file) => {
   right: 8px;
   padding: 0;
   height: auto;
+}
+
+.sku-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sku-header .form-label {
+  margin-bottom: 0;
+}
+
+.selector-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.selector-control {
+  flex: 1;
+}
+
+.selector-info {
+  font-size: 12px;
+  color: #666;
+  background-color: #fff;
+  padding: 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px; /* 保证信息区域有最小宽度 */
+}
+
+/* Sub-options like logistics and inventory */
+.logistics-options,
+.inventory-container {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px dashed #e8e8e8;
 }
 </style>

@@ -19,10 +19,7 @@
       </select>
       <div v-if="loading" class="loading-indicator">加载中...</div>
       <div v-if="error" class="error-message">{{ error }}</div>
-      <div v-if="currentWarehouseInfo" class="warehouse-info">
-        <small>仓库编号: {{ currentWarehouseInfo.warehouseNo }}</small>
-        <small>类型: {{ currentWarehouseInfo.warehouseTypeStr }}</small>
-      </div>
+      <slot name="info" :warehouse="currentWarehouseInfo"></slot>
     </div>
   </div>
 </template>
@@ -104,13 +101,5 @@ const onWarehouseChange = (event) => {
   font-size: 12px;
   color: #f56c6c;
   margin-top: 5px;
-}
-
-.warehouse-info {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 5px;
-  display: flex;
-  flex-direction: column;
 }
 </style>
