@@ -111,6 +111,16 @@ const handleFileChange = (file) => {
 </script>
 
 <style scoped>
+.operation-area {
+  flex: 0 0 380px;
+  background: #f7f8fa;
+  padding: 20px 20px 60px 20px;
+  overflow-y: auto;
+  border-right: 1px solid #e8e8e8;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+}
 .form-group {
   margin-bottom: 1.5rem;
 }

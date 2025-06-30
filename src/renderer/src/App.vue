@@ -259,7 +259,7 @@ const selectJsonContent = (event) => {
   </div>
 </template>
 
-<style>
+<style scoped>
 * {
   margin: 0;
   padding: 0;
@@ -278,7 +278,9 @@ body {
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  background-color: #f0f2f5;
+  color: var(--color-text-dark);
 }
 
 /* 顶部导航栏 */
@@ -305,27 +307,25 @@ body {
 /* 主内容区 */
 .main-content {
   flex: 1;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 防止子元素溢出时出现滚动条 */
 }
 
 .login-prompt {
-  background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  text-align: center;
-  max-width: 800px;
-  margin: 30px auto;
-}
-
-.login-prompt p {
-  color: #666;
-  font-size: 16px;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.2rem;
+  color: #888;
 }
 
 .logged-in-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  background-color: #fff;
 }
 
 /* 标签页 */
@@ -486,10 +486,11 @@ body {
 
 /* 添加标签内容样式 */
 .tab-contents {
-  position: relative;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .tab-content {
-  width: 100%;
+  height: 100%;
 }
 </style>
