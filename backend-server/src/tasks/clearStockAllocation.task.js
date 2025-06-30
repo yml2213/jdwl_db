@@ -23,7 +23,7 @@ function createExcelFile(skuList, department, store) {
   XLSX.utils.book_append_sheet(workbook, worksheet, 'GoodsStockConfig')
   return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' })
 }
-
+// https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do?_r=0.160993972942871
 async function execute(context, sessionData) {
   const { skus, store, department } = context
 
@@ -39,26 +39,29 @@ async function execute(context, sessionData) {
 
   const url = 'https://o.jdl.com/goodsStockConfig/importGoodsStockConfig.do'
   const formData = new FormData()
-  formData.append('file', fileBuffer, 'GoodsStockConfig.xlsx')
-  formData.append('token', csrfToken)
+  formData.append('goodsStockConfigExcelFile', fileBuffer, 'GoodsStockConfig.xlsx')
 
   const headers = {
     ...formData.getHeaders(),
     Cookie: cookieString,
-    Referer: 'https://o.jdl.com/goodsStockConfig/showImport.do'
+    Referer: 'https://o.jdl.com/goToMainIframe.do'
   }
 
-  const responseText = await requestJdApi({
+  const response = await requestJdApi({
     method: 'POST',
     url: url,
     data: formData,
     headers: headers
   })
 
-  if (responseText && responseText.includes('导入成功')) {
+  // The response is expected to be a JSON object.
+  // Check for a success flag in the returned object.
+  if (response && response.success === true) {
     return { success: true, message: '库存清零任务上传成功' }
   } else {
-    throw new Error(responseText || '库存清零任务上传失败')
+    // If the check fails, throw an error with the detailed response.
+    const errorMessage = response ? JSON.stringify(response) : '库存清零任务上传失败'
+    throw new Error(errorMessage)
   }
 }
 
