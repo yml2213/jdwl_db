@@ -30,39 +30,54 @@ async function execute(context, sessionData) {
   console.log(`[Task: returnStorage] 步骤2: 查询订单详情...`)
   const orderDetails = await queryOrderDetailsByClsNo(clsNo, sessionData)
 
-  console.log('查询订单详情 ===>', orderDetails)
-  if (!orderDetails || !orderDetails.rtwItems || orderDetails.rtwItems.length === 0) {
+  if (!orderDetails || !orderDetails.deptNo || orderDetails.aaData.length == 0) {
     throw new Error('未能获取订单详情或订单中没有商品。')
   }
-  console.log(
-    `[Task: returnStorage] 成功获取订单详情，包含 ${orderDetails.rtwItems.length} 个商品。`
-  )
 
   // Step 3: Submit the return order
+  // {
+  //   resultCode: 2,
+  //     resultMessage: '退货单已存在',
+  //   resultData: 'CSR4418078906881'
+  // }
+
+
   console.log(`[Task: returnStorage] 步骤3: 提交退货入库...`)
   const submissionPayload = {
     soNo: clsNo,
     deptNo: orderDetails.deptNo,
     reason: returnReason || '',
-    waybill: '', // Assuming waybill is not provided from the frontend
-    rtwItems: orderDetails.rtwItems.map((item) => ({
-      goodsNo: item.goodsNo,
-      applyInstoreQty: item.shouldInstoreQty, // Use shouldInstoreQty for full return
-      remark: ''
-    }))
+    waybill: '',
+    rtwItems: [
+      {
+        goodsNo: orderDetails.aaData[0].goodsNo,
+        applyInstoreQty: 1,
+        remark: ''
+      }
+    ]
   }
 
   const result = await submitReturnOrder(submissionPayload, sessionData)
   console.log(`[Task: returnStorage] 退货入库提交成功。`)
 
-  return {
-    success: true,
-    message: result.message || '退货入库成功提交。'
+  console.log('提交退货入库 ===>', result)
+  if (result.resultCode == 2) {
+    return {
+      success: false,
+      message: result.resultMessage || '退货入库失败。'
+    }
+  }
+  if (result.resultCode == 0) {
+    return {
+      success: true,
+      message: result.message || '退货入库成功提交。'
+    }
   }
 }
+
 
 export default {
   name: 'returnStorage',
   description: '退货入库',
   execute: execute
-} 
+}

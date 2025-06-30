@@ -859,12 +859,11 @@ export async function queryOrderDetailsByClsNo(clsNo, sessionData) {
     csrfToken,
     orderId: clsNo
   }
-  console.log('查询订单详情 ===>', data)
   return await requestJdApi({
     method: 'POST',
     url: `/rtw/getOrder.do?rand=${Math.random()}`,
     headers: {
-      'Content-Type': 'application/x-w-form-urlencoded; charset=UTF-8',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       Cookie: cookieString,
       Referer: 'https://o.jdl.com/goToMainIframe.do'
     },

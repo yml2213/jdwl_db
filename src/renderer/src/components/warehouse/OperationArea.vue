@@ -12,19 +12,19 @@
 
     <div class="form-group sku-input-container">
       <div class="sku-header">
-        <label class="form-label">输入SKU</label>
+      <label class="form-label">输入SKU</label>
         <FileUploader @file-change="handleFileChange" />
       </div>
       <div class="textarea-wrapper">
-        <textarea
-          v-model="form.sku"
-          placeholder="请输入SKU (多个SKU请每行一个)"
-          class="sku-textarea"
-        ></textarea>
-        <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
-          >清空</el-button
-        >
-      </div>
+      <textarea
+        v-model="form.sku"
+        placeholder="请输入SKU (多个SKU请每行一个)"
+        class="sku-textarea"
+      ></textarea>
+      <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
+        >清空</el-button
+      >
+    </div>
     </div>
 
     <!-- Manual Options Section -->
@@ -94,22 +94,22 @@
     </div>
 
     <div class="form-content">
-      <div class="form-group">
-        <StoreSelector
-          v-model="storeVModel"
-          :shops="shopsList"
-          :loading="isLoadingShops"
-          :error="shopLoadError"
+    <div class="form-group">
+      <StoreSelector
+        v-model="storeVModel"
+        :shops="shopsList"
+        :loading="isLoadingShops"
+        :error="shopLoadError"
         >
         </StoreSelector>
-      </div>
+    </div>
 
-      <div class="form-group">
-        <WarehouseSelector
-          v-model="warehouseVModel"
-          :warehouses="warehousesList"
-          :loading="isLoadingWarehouses"
-          :error="warehouseLoadError"
+    <div class="form-group">
+      <WarehouseSelector
+        v-model="warehouseVModel"
+        :warehouses="warehousesList"
+        :loading="isLoadingWarehouses"
+        :error="warehouseLoadError"
         >
         </WarehouseSelector>
       </div>
