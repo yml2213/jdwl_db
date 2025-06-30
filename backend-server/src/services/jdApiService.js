@@ -923,23 +923,9 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData) {
  * @returns {Promise<string[]>} 返回已开启商品的CSG编号(shopGoodsNo)列表
  */
 export async function getJpEnabledCsgsForStore(sessionData) {
-  const { store, department, vendor, cookie, csrfToken } = sessionData;
-  const { shopId, shopNo } = store;
-  const { sellerId, sellerNo } = vendor;
-  const { deptId, deptNo } = department;
-
-  console.log('sessionData ===>', sessionData)
-  console.log('store ===>', store)
-  console.log('department ===>', department)
-  console.log('vendor ===>', vendor)
-
-  console.log('shopId ===>', shopId)
-  console.log('shopNo ===>', shopNo)
-  console.log('sellerId ===>', sellerId)
-  console.log('sellerNo ===>', sellerNo)
-  console.log('deptId ===>', deptId)
-  console.log('deptNo ===>', deptNo)
-
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { store, department, departmentInfo } = sessionData;
+  console.log(`==============111==============`);
 
   const allCsgs = [];
   let page = 0;
@@ -989,23 +975,23 @@ export async function getJpEnabledCsgsForStore(sessionData) {
     ];
     const form = new URLSearchParams();
     form.append('csrfToken', csrfToken);
-    form.append('shopId', shopId);
-    form.append('sellerId', sellerId);
-    form.append('deptId', deptId);
-    form.append('sellerNo', sellerNo);
-    form.append('deptNo', deptNo);
-    form.append('shopNo', shopNo);
+    form.append('shopId', department.id);
+    form.append('sellerId', departmentInfo.sellerId);
+    form.append('deptId', departmentInfo.id);
+    form.append('sellerNo', departmentInfo.sellerNo);
+    form.append('deptNo', departmentInfo.deptNo);
+    form.append('shopNo', store.shopNo);
     form.append('jdDeliver', '1'); // 1 for JP search enabled
     form.append('status', '1');
     form.append('aoData', JSON.stringify(aoData));
-
+    //  https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=0.19411635434208996
     try {
       const data = await requestJdApi({
         method: 'POST',
         url: `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`,
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          Cookie: cookie,
+          Cookie: cookieString,
           'X-Requested-With': 'XMLHttpRequest',
           Referer: 'https://o.jdl.com/goToMainIframe.do',
           Origin: 'https://o.jdl.com'
@@ -1013,6 +999,9 @@ export async function getJpEnabledCsgsForStore(sessionData) {
         data: form.toString(),
         responseType: 'json'
       });
+
+      console.log(data);
+
 
       if (data && data.aaData && data.aaData.length > 0) {
         const csgs = data.aaData.map((item) => item.shopGoodsNo);

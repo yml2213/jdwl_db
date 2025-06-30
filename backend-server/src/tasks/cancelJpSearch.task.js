@@ -36,7 +36,8 @@ async function execute(context, sessionData) {
     const { skus, csgList, store, options } = context
     const isWholeStore = options?.cancelJpSearchScope === 'all'
 
-    if (!sessionData || !sessionData.cookie) {
+
+    if (!sessionData || !sessionData.cookies) {
         throw new Error('缺少会话信息')
     }
 

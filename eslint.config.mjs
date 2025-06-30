@@ -22,6 +22,7 @@ export default [
   {
     files: ['**/*.{js,jsx,vue}'],
     rules: {
+      indent: ['error', 4],
       'vue/require-default-prop': 'off',
       'vue/multi-word-component-names': 'off'
     }

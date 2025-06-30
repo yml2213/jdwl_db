@@ -49,6 +49,7 @@ const handleAddTask = () => {
 
   // 构造要传递给执行器的数据
   const executionData = {
+    scope: form.value.mode, // 'sku' or 'whole_store'
     skus: isWholeStore ? ['WHOLE_STORE'] : skus,
     store: currentShopInfo.value,
     options: { ...form.value.options }

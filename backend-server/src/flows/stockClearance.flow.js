@@ -26,12 +26,20 @@ const workflowSteps = [
     shouldExecute: (context) => context.options.cancelJpSearch,
     execute: (context, session) => {
       // The task will handle the logic for 'all' vs 'selected'
-      return executeTask('cancelJpSearch', context, session)
+      const taskContext = {
+        ...context,
+        options: {
+          ...context.options,
+          cancelJpSearchScope: context.scope === 'whole_store' ? 'all' : 'selected'
+        }
+      }
+      return executeTask('cancelJpSearch', taskContext, session)
     }
   }
 ]
 
 async function execute(context, session, log) {
+
   let currentContext = { ...context }
   let executedSomething = false
   const stepResults = []
