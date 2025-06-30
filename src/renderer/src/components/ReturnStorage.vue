@@ -18,8 +18,16 @@ const form = ref({
 })
 
 // --- 组合式函数 ---
-const { shopsList, isLoadingShops, shopLoadError, selectedStore, loadShops, persistSelectedShop } =
-  useShopAndWarehouse()
+const {
+  shopsList,
+  isLoadingShops,
+  shopLoadError,
+  selectedStore,
+  loadShops,
+  persistSelectedShop,
+  selectedVendor,
+  selectedDepartment
+} = useShopAndWarehouse()
 
 const { taskList, addTask, executeTask, runAllTasks, clearAllTasks } = useTaskList()
 
@@ -47,7 +55,9 @@ const handleAddTask = () => {
         orderNumber: orderNum,
         year: form.value.year,
         returnReason: form.value.returnReason,
-        store: currentShopInfo.value
+        store: currentShopInfo.value,
+        vendor: selectedVendor.value,
+        department: selectedDepartment.value
       }
     })
   }

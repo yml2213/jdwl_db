@@ -168,7 +168,7 @@ export async function uploadJpSearchFile(fileBuffer, sessionData) {
 }
 
 /**
- * 从京东分页查询CSG编号  
+ * 从京东分页查询CSG编号
  * @param {string[]} skuBatch - 一批SKU编号
  * @param {object} sessionData - 完整的会话对象
  * @returns {Promise<string[]>} - CSG编号列表
@@ -766,4 +766,126 @@ export async function uploadProductNames(fileBuffer, fileName, sessionData) {
       data: responseData
     }
   }
+}
+
+/**
+ * Step 1: Query CLS number by order number.
+ */
+export async function queryClsNoByOrderNo(orderNo, year, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { departmentInfo } = sessionData
+
+  const aoData = [
+    { "name": "sEcho", "value": 4 },
+    { "name": "iColumns", "value": 19 },
+    { "name": "sColumns", "value": ",,,,,,,,,,,,,,,,,," },
+    { "name": "iDisplayStart", "value": 0 },
+    { "name": "iDisplayLength", "value": 10 },
+    { "name": "mDataProp_0", "value": 0 },
+    { "name": "bSortable_0", "value": false },
+    { "name": "mDataProp_1", "value": 1 },
+    { "name": "bSortable_1", "value": false },
+    { "name": "mDataProp_2", "value": "soNo" },
+    { "name": "bSortable_2", "value": true },
+    { "name": "mDataProp_3", "value": "spSoNo" },
+    { "name": "bSortable_3", "value": true },
+    { "name": "mDataProp_4", "value": "parentId" },
+    { "name": "bSortable_4", "value": true },
+    { "name": "mDataProp_5", "value": "soType" },
+    { "name": "bSortable_5", "value": true },
+    { "name": "mDataProp_6", "value": "soStatus" },
+    { "name": "bSortable_6", "value": true },
+    { "name": "mDataProp_7", "value": "consignee" },
+    { "name": "bSortable_7", "value": true },
+    { "name": "mDataProp_8", "value": "consigneeAddr" },
+    { "name": "bSortable_8", "value": true },
+    { "name": "mDataProp_9", "value": "shopName" },
+    { "name": "bSortable_9", "value": true },
+    { "name": "mDataProp_10", "value": "shipperName" },
+    { "name": "bSortable_10", "value": true },
+    { "name": "mDataProp_11", "value": "wayBill" },
+    { "name": "bSortable_11", "value": true },
+    { "name": "mDataProp_12", "value": "spCreateTime" },
+    { "name": "bSortable_12", "value": true },
+    { "name": "mDataProp_13", "value": "createTime" },
+    { "name": "bSortable_13", "value": true },
+    { "name": "mDataProp_14", "value": "stationName" },
+    { "name": "bSortable_14", "value": true },
+    { "name": "mDataProp_15", "value": "chronergyStr" },
+    { "name": "bSortable_15", "value": true },
+    { "name": "mDataProp_16", "value": "expectDeliveryDate" },
+    { "name": "bSortable_16", "value": true },
+    { "name": "mDataProp_17", "value": "orderAmount" },
+    { "name": "bSortable_17", "value": true },
+    { "name": "mDataProp_18", "value": "soMark" },
+    { "name": "bSortable_18", "value": true },
+    { "name": "iSortCol_0", "value": 11 },
+    { "name": "sSortDir_0", "value": "desc" },
+    { "name": "iSortingCols", "value": 1 }
+  ]
+
+  const data = {
+    csrfToken,
+    sellerId: departmentInfo.sellerId,
+    spSoNo: orderNo,
+    soYear: year,
+    aoData: JSON.stringify(aoData)
+  }
+
+  const response = await requestJdApi({
+    method: 'POST',
+    url: `/so/querySoMainList.do?rand=${Math.random()}`,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do'
+    },
+    data: qs.stringify(data)
+  })
+
+  if (response && response.aaData && response.aaData.length > 0) {
+    return response.aaData[0].soNo
+  }
+  return null
+}
+
+/**
+ * Step 2: Query order details by CLS number.
+ * https://o.jdl.com/rtw/getOrder.do?rand=0.25937037832834453
+ */
+export async function queryOrderDetailsByClsNo(clsNo, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const data = {
+    csrfToken,
+    orderId: clsNo
+  }
+  console.log('查询订单详情 ===>', data)
+  return await requestJdApi({
+    method: 'POST',
+    url: `/rtw/getOrder.do?rand=${Math.random()}`,
+    headers: {
+      'Content-Type': 'application/x-w-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do'
+    },
+    data: qs.stringify(data)
+  })
+}
+
+/**
+ * Step 3: Submit the return order.
+ */
+export async function submitReturnOrder(payload, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  return await requestJdApi({
+    method: 'POST',
+    url: '/rtw/addRtwOrder.do',
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do',
+      'X-CSRF-TOKEN': csrfToken
+    },
+    data: payload
+  })
 }
