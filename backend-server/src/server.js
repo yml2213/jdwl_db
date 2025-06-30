@@ -115,7 +115,8 @@ app.post('/api/execute-flow', async (req, res) => {
     const sessionData = {
       ...req.session.context,
       store: payload.store,
-      department: payload.store // department 信息通常和 store 绑定在一起
+      department: payload.store, // department 信息通常和 store 绑定在一起
+      vendor: payload.vendor
     }
 
     const result = await flowModule.default.execute(payload, sessionData, log)

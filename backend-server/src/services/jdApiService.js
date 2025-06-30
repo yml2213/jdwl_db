@@ -136,6 +136,38 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
 }
 
 /**
+ * 上传用于京配打标生效的文件  启用京配打标生效
+ * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function uploadJpSearchFile(fileBuffer, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const url = `/shopGoods/importUpdateShopGoodsJpSearch.do?_r=${Math.random()}`
+  const formData = new FormData()
+  formData.append(
+    'updateShopGoodsJpSearchListFile',
+    fileBuffer,
+    'updateShopGoodsJpSearchImportTemplate.xls'
+  )
+  formData.append('csrfToken', csrfToken)
+
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: `https://o.jdl.com/goToMainIframe.do`
+  }
+
+  return requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
+}
+
+/**
  * 从京东分页查询CSG编号
  * @param {string[]} skuBatch - 一批SKU编号
  * @param {object} sessionData - 完整的会话对象

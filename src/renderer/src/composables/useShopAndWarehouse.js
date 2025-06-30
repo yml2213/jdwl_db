@@ -30,6 +30,7 @@ export function useShopAndWarehouse() {
   const selectedStore = ref('') // 当前选中的店铺编号
   const selectedWarehouse = ref('') // 当前选中的仓库编号
   const selectedDepartment = ref(getSelectedDepartment()) // 当前选中的事业部
+  const selectedVendor = ref(getSelectedVendor()) // 当前选中的供应商
 
   /**
    * @description 异步加载店铺列表。
@@ -123,6 +124,7 @@ export function useShopAndWarehouse() {
     selectedStore,
     selectedWarehouse,
     selectedDepartment,
+    selectedVendor,
 
     // Actions
     loadShops,

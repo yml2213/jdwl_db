@@ -75,13 +75,12 @@ const workflowSteps = [
     name: '启用库存商品分配',
     shouldExecute: (context) => context.options.useMainData,
     execute: (context, session) => executeTask('enableInventoryAllocation', context, session)
+  },
+  {
+    name: '启用京配打标生效',
+    shouldExecute: (context) => context.options.useJPEffect,
+    execute: (context, session) => executeTask('enableJpSearch', context, session)
   }
-  // TODO: `enableJpSearch` 任务尚不存在，暂时注释
-  // {
-  //   name: '启用京配打标生效',
-  //   shouldExecute: (context) => context.options.useJPEffect,
-  //   execute: (context, session) => executeTask('enableJpSearch', context, session),
-  // },
 ]
 
 /**
@@ -120,9 +119,10 @@ async function execute(context, session, log) {
         log(`步骤 [${step.name}] 执行成功${successDetails}`, 'success')
 
       } catch (error) {
+        const flowOrTask = currentContext.quickSelect === 'manual' ? '任务' : '工作流'
         log(`步骤 [${step.name}] 执行失败: ${error.message}`, 'error')
         // 抛出错误以终止整个工作流，并将失败信息传递给前端
-        throw new Error(`工作流在步骤 [${step.name}] 失败: ${error.message}`)
+        throw new Error(`${flowOrTask}在步骤 [${step.name}] 失败: ${error.message}`)
       }
     }
   }

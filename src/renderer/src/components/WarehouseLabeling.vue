@@ -72,6 +72,7 @@ const {
   selectedStore,
   selectedWarehouse,
   selectedDepartment,
+  selectedVendor,
   loadShops,
   loadWarehouses,
   persistSelectedShop,
@@ -154,6 +155,7 @@ const handleAddTask = () => {
       },
       store: { ...currentShopInfo.value, ...selectedDepartment.value },
       warehouse: currentWarehouseInfo.value,
+      vendor: selectedVendor.value,
       quickSelect: form.quickSelect
     }
   })
