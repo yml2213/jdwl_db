@@ -29,7 +29,7 @@ const {
   selectedDepartment
 } = useShopAndWarehouse()
 
-const { taskList, addTask, executeTask, runAllTasks, clearAllTasks } = useTaskList()
+const { taskList, addTask, executeTask, runAllTasks, clearAllTasks, deleteTask } = useTaskList()
 
 // --- 计算属性 ---
 const currentShopInfo = computed(() =>
@@ -146,6 +146,7 @@ onMounted(() => {
       @execute-tasks="runAllTasks"
       @clear-tasks="clearAllTasks"
       @execute-one="executeTask"
+      @delete-task="deleteTask"
     />
   </div>
 </template>

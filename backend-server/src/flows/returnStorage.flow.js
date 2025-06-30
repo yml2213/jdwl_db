@@ -15,6 +15,9 @@ async function execute(context, session, log) {
   log('--- 开始执行步骤: 退货入库 ---')
   try {
     const result = await executeTask('returnStorage', context, session)
+    if (result && result.success === false) {
+      throw new Error(result.message || '退货入库任务返回失败状态。')
+    }
     log('步骤 [退货入库] 执行成功。')
     return { success: true, message: result.message || '工作流执行完毕。' }
   } catch (error) {
