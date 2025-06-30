@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { uploadProductNames } from '../services/jdApiService.js'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 
 async function readExcelFile(filePath) {
     try {
@@ -10,8 +11,11 @@ async function readExcelFile(filePath) {
             throw new Error(`文件不存在: ${filePath}`)
         }
 
-        // 从文件路径读取
-        const workbook = XLSX.readFile(filePath)
+        // 从文件路径读取二进制数据
+        const fileData = fs.readFileSync(filePath)
+
+        // 使用 XLSX.read 而不是 XLSX.readFile
+        const workbook = XLSX.read(fileData, { type: 'buffer' })
         const firstSheetName = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[firstSheetName]
         return XLSX.utils.sheet_to_json(worksheet, { header: 1 })
@@ -22,6 +26,8 @@ async function readExcelFile(filePath) {
 }
 
 function createNewExcelData(originalData, department) {
+    console.log('originalData--->', originalData)
+    console.log('department--->', department)
     const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
     const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
     const rows = originalData
@@ -41,6 +47,35 @@ function createNewExcelData(originalData, department) {
     return [chineseHeaders, englishHeaders, ...rows]
 }
 
+/**
+ * 将生成的Excel文件保存到临时目录，用于测试
+ * @param {Buffer} buffer - Excel文件的Buffer
+ * @param {string} fileName - 文件名
+ * @returns {string} 保存的文件路径
+ */
+async function saveExcelForTesting(buffer, fileName) {
+    try {
+        // 创建临时目录（如果不存在）
+        const tempDir = path.join(process.cwd(), 'temp')
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true })
+        }
+
+        // 生成唯一文件名，避免冲突
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const filePath = path.join(tempDir, `${timestamp}_${fileName}`)
+
+        // 写入文件
+        fs.writeFileSync(filePath, buffer)
+        console.log(`测试文件已保存到: ${filePath}`)
+
+        return filePath
+    } catch (error) {
+        console.error('保存测试文件失败:', error)
+        return null // 失败时返回null，但不中断主流程
+    }
+}
+
 async function convertToExcelFile(data, fileName) {
     try {
         const ws = XLSX.utils.aoa_to_sheet(data)
@@ -48,6 +83,10 @@ async function convertToExcelFile(data, fileName) {
         const wb = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
         const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xls' })
+
+        // 保存文件用于测试
+        await saveExcelForTesting(buffer, fileName)
+
         return { buffer, fileName }
     } catch (error) {
         console.error('生成Excel文件失败:', error)
@@ -59,8 +98,9 @@ async function execute(payload, updateFn, sessionData) {
     const { filePath } = payload
     if (!filePath) throw new Error('未提供文件路径')
 
+
     // 从会话中获取事业部信息
-    const department = sessionData?.department || { deptNo: '10' }  // 默认值
+    const department = sessionData.departmentInfo || { deptNo: '10' }  // 默认值
 
     try {
         updateFn({ status: 'processing', message: '正在读取Excel文件...' })
