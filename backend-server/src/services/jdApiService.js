@@ -168,7 +168,7 @@ export async function uploadJpSearchFile(fileBuffer, sessionData) {
 }
 
 /**
- * 从京东分页查询CSG编号
+ * 从京东分页查询CSG编号  
  * @param {string[]} skuBatch - 一批SKU编号
  * @param {object} sessionData - 完整的会话对象
  * @returns {Promise<string[]>} - CSG编号列表
@@ -202,9 +202,54 @@ async function fetchCSGPage(skuBatch, sessionData, start, length) {
   })
 
   if (response && response.aaData) {
-    return response.aaData.map((item) => item.shopGoodsNo).filter(Boolean)
+    // 返回完整对象，而不仅仅是shopGoodsNo
+    return response.aaData
   }
   return []
+}
+
+/**
+ * 根据SKU列表获取完整的商品详情列表 (处理分页)
+ * @param {string[]} skus - 全部SKU列表
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<{success: boolean, products: object[], message?: string}>}
+ */
+export async function fetchProductDetails(skus, sessionData) {
+  const BATCH_SIZE = 50 // 根据旧代码经验，每次查询50个SKU
+  const allProducts = []
+
+  // 在循环外注入store和department信息，避免重复操作
+  const enrichedSessionData = {
+    ...sessionData,
+    vendor: sessionData.vendor,
+    department: sessionData.department,
+    store: sessionData.store
+  }
+
+  for (let i = 0; i < skus.length; i += BATCH_SIZE) {
+    const skuBatch = skus.slice(i, i + BATCH_SIZE)
+    try {
+      console.log(`[jdApiService] 正在查询商品详情，批次 ${Math.floor(i / BATCH_SIZE) + 1}`)
+      const productBatch = await fetchProductDetailsPage(
+        skuBatch,
+        enrichedSessionData,
+        0,
+        BATCH_SIZE
+      )
+      allProducts.push(...productBatch)
+    } catch (error) {
+      console.error(`[jdApiService] 处理批次查询时出错: ${error.message}`)
+      // 选择性地决定是否因为一个批次的失败而终止整个流程
+      // 这里我们选择继续，以尽可能多地获取数据
+    }
+  }
+
+  if (allProducts.length > 0) {
+    console.log(`[jdApiService] 总共获取了 ${allProducts.length} 个商品的详情。`)
+    return { success: true, products: allProducts }
+  } else {
+    return { success: false, message: '未能从任何批次中获取到商品详情。' }
+  }
 }
 
 /**
@@ -241,7 +286,7 @@ export async function fetchCSGList(skus, sessionData) {
 
   if (allCsgs.length > 0) {
     console.log(`[jdApiService] 总共获取了 ${allCsgs.length} 个CSG。`)
-    return { success: true, csgList: allCsgs }
+    return { success: true, csgList: allCsgs.map((p) => p.shopGoodsNo).filter(Boolean) }
   } else {
     return { success: false, message: '未能从任何批次中获取到CSG编号。' }
   }
@@ -459,4 +504,199 @@ export async function uploadLogisticsAttributesFile(fileBuffer, sessionData) {
   })
   console.log('[jdApiService] 物流属性文件上传成功，响应:', responseData)
   return responseData
+}
+
+/**
+ * 上传用于添加库存的文件  https://o.jdl.com/poMain/batchImportPo.do
+ * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function uploadAddInventoryFile(fileBuffer, sessionData) {
+  const { cookieString } = getAuthInfo(sessionData)
+
+  const url = `/poMain/batchImportPo.do`
+  const formData = new FormData()
+  formData.append('batchImportPoFiles', fileBuffer, '采购单导入模板.xls')
+
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: `https://o.jdl.com/goToMainIframe.do`
+  }
+
+  return requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
+}
+
+/**
+ * 根据SKU列表获取完整的商品详情列表 (处理分页)
+ * @param {string[]} skus - 全部SKU列表
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object[]>} - 包含商品对象的数组
+ */
+async function fetchProductDetailsPage(skuBatch, sessionData, start, length) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { departmentInfo, store } = sessionData
+
+
+  const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+
+  // 构建 aoData 对象
+  const aoDataArray = [
+    { name: 'sEcho', value: 3 },
+    { name: 'iColumns', value: 14 },
+    { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+    { name: 'iDisplayStart', value: start },
+    { name: 'iDisplayLength', value: length },
+    { name: 'mDataProp_0', value: 0 },
+    { name: 'bSortable_0', value: false },
+    { name: 'mDataProp_1', value: 1 },
+    { name: 'bSortable_1', value: false },
+    { name: 'mDataProp_2', value: 'shopGoodsName' },
+    { name: 'bSortable_2', value: false },
+    { name: 'mDataProp_3', value: 'goodsNo' },
+    { name: 'bSortable_3', value: false },
+    { name: 'mDataProp_4', value: 'spGoodsNo' },
+    { name: 'bSortable_4', value: false },
+    { name: 'mDataProp_5', value: 'isvGoodsNo' },
+    { name: 'bSortable_5', value: false },
+    { name: 'mDataProp_6', value: 'shopGoodsNo' },
+    { name: 'bSortable_6', value: false },
+    { name: 'mDataProp_7', value: 'barcode' },
+    { name: 'bSortable_7', value: false },
+    { name: 'mDataProp_8', value: 'shopName' },
+    { name: 'bSortable_8', value: false },
+    { name: 'mDataProp_9', value: 'createTime' },
+    { name: 'bSortable_9', value: false },
+    { name: 'mDataProp_10', value: 10 },
+    { name: 'bSortable_10', value: false },
+    { name: 'mDataProp_11', value: 'isCombination' },
+    { name: 'bSortable_11', value: false },
+    { name: 'mDataProp_12', value: 'status' },
+    { name: 'bSortable_12', value: false },
+    { name: 'mDataProp_13', value: 13 },
+    { name: 'bSortable_13', value: false },
+    { name: 'iSortCol_0', value: 9 },
+    { name: 'sSortDir_0', value: 'desc' },
+    { name: 'iSortingCols', value: 1 }
+  ]
+
+  // 构建 POST 请求的数据
+  const data_obj = {
+    csrfToken: csrfToken,
+    ids: '',
+    shopId: '',
+    sellerId: departmentInfo?.sellerId || '',
+    deptId: '',
+    sellerNo: departmentInfo?.sellerNo || '',
+    deptNo: '',
+    shopNo: '',
+    spSource: '',
+    shopGoodsName: '',
+    isCombination: '',
+    barcode: '',
+    jdDeliver: '',
+    createTimeRange: '',
+    sellerGoodsSigns: skuBatch.join(','),
+    spGoodsNos: '',
+    goodsNos: '',
+    isvGoodsNos: '',
+    status: '1', // 代表"启用"状态
+    originSend: '',
+    aoData: JSON.stringify(aoDataArray)
+  }
+  const data = qs.stringify(data_obj)
+
+  const headers = {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    Accept: 'application/json, text/javascript, */*; q=0.01',
+    Origin: 'https://o.jdl.com',
+    Referer: 'https://o.jdl.com/goToMainIframe.do',
+    Cookie: cookieString
+  }
+
+  const response = await requestJdApi({
+    method: 'POST',
+    url,
+    data,
+    headers
+  })
+
+
+  if (response && response.aaData) {
+    return response.aaData
+  }
+  return []
+}
+
+/**
+ * 通过API直接创建采购单
+ * @param {Array<Object>} products - 包含完整商品信息的对象列表
+ * @param {Object} context - 包含仓库、供应商、库存数量等信息的上下文
+ * @param {Object} sessionData - 会话数据
+ * @returns {Promise<Object>}
+ */
+export async function createPurchaseOrder(products, context, sessionData) {
+  const { warehouse, vendor, department, options } = context
+  const { cookieString } = getAuthInfo(sessionData)
+
+  const goodsArray = products.map((p) => ({
+    poNo: undefined,
+    goodsNo: p.goodsNo, // CMG
+    goodsName: p.shopGoodsName,
+    applyInstoreQty: options.inventoryAmount || 1000,
+    customRecord: '',
+    sellerRecord: '',
+    goodsPrice: '0',
+    barCodeType: 2,
+    sellerGoodsSign: p.sellerGoodsSign, // SKU
+    sidCheckout: 0,
+    outPackNo: '',
+    goodsUom: ''
+  }))
+
+
+  const formData = new FormData()
+  formData.append('id', '')
+  formData.append('poNo', '')
+  formData.append('goods', JSON.stringify(goodsArray))
+  formData.append('deptId', department.id)
+  formData.append('deptName', department.name)
+  formData.append('supplierId', vendor.id.replace('CMS', ''))  //  id: 'CMS4418047117122',
+  formData.append('warehouseId', warehouse.id)
+  formData.append('billOfLading', '')
+  formData.append('qualityCheckFlag', '')
+  formData.append('sidChange', '0')
+  formData.append('poType', '1')
+  formData.append('pickUpFlag', '0')
+  formData.append('outPoNo', '')
+  formData.append('crossDockingFlag', '0')
+  formData.append('crossDockingSoNos', '')
+  formData.append('isPorterTeam', '0')
+  formData.append('orderType', 'CGRK')
+  formData.append('poReturnMode', '1')
+  formData.append('importFiles', '')
+
+
+  const url = `/poMain/downPoMain.do`
+  const headers = {
+    ...formData.getHeaders(),
+    Cookie: cookieString,
+    Referer: 'https://o.jdl.com/goToMainIframe.do',
+    Origin: 'https://o.jdl.com'
+  }
+
+  return requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
 }

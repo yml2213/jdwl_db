@@ -65,12 +65,11 @@ const workflowSteps = [
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
   },
-  // TODO: `addInventory` 任务尚不存在，暂时注释
-  // {
-  //   name: '添加库存',
-  //   shouldExecute: (context) => context.options.useAddInventory,
-  //   execute: (context, session) => executeTask('addInventory', context, session),
-  // },
+  {
+    name: '添加库存',
+    shouldExecute: (context) => context.options.useAddInventory,
+    execute: (context, session) => executeTask('addInventory', context, session)
+  },
   {
     name: '启用库存商品分配',
     shouldExecute: (context) => context.options.useMainData,
