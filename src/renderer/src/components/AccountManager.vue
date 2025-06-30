@@ -1,7 +1,11 @@
 <template>
-  <div class="account-manager">
+  <div class="account-manager" :class="`display-mode-${displayMode}`">
     <div v-if="!isLoggedIn" class="login-section">
-      <button @click="openLoginWindow" class="login-btn">账号登录</button>
+      <button @click="openLoginWindow" class="login-btn">
+        <span class="icon">🔑</span>
+        账号登录
+        <span class="arrow-icon" v-if="displayMode === 'central'">→</span>
+      </button>
     </div>
     <div v-else class="user-info">
       <span class="user-text">当前账号：{{ username }}</span>
@@ -63,9 +67,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
 import { isLoggedIn as checkLogin, getAllCookies } from '../utils/cookieHelper'
-import { createSession } from '../services/apiService'
+import { createSession, getSessionStatus } from '../services/apiService'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
@@ -78,10 +82,17 @@ import {
 import VendorSelector from './VendorSelector.vue'
 import DepartmentSelector from './DepartmentSelector.vue'
 
-const emit = defineEmits(['session-created', 'logout'])
+const props = defineProps({
+  displayMode: {
+    type: String,
+    default: 'header', // 'header' or 'central'
+    validator: (value) => ['header', 'central'].includes(value)
+  }
+})
 
-// 登录状态
-const isLoggedIn = ref(false)
+const emit = defineEmits(['session-created', 'logout'])
+const sessionContext = inject('sessionContext')
+const isLoggedIn = computed(() => !!sessionContext.value)
 // 用户名
 const username = ref('')
 // 选择弹窗显示状态
@@ -125,10 +136,11 @@ const openLoginWindow = () => {
 }
 
 // 退出登录
-const logout = () => {
+const logout = async () => {
   if (window.electron && window.electron.ipcRenderer) {
     window.electron.ipcRenderer.send('logout')
   }
+  
   // 触发logout事件，通知App.vue更新状态
   emit('logout')
 }
@@ -282,6 +294,7 @@ onUnmounted(() => {
 .user-info {
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .user-info {
@@ -303,6 +316,9 @@ onUnmounted(() => {
   font-size: 14px;
   padding: 6px 16px;
   transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .login-btn {
@@ -485,5 +501,40 @@ onUnmounted(() => {
   color: #e53935;
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Central display mode styles */
+.display-mode-central .login-btn {
+  padding: 15px 30px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #4b91f7 0%, #367af6 100%);
+  box-shadow: 0 8px 15px rgba(54, 122, 246, 0.3);
+  transition: all 0.3s ease;
+  border: none;
+  letter-spacing: 1px;
+  width: 100%;
+  color: #fff;
+}
+
+.display-mode-central .login-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(54, 122, 246, 0.4);
+  background: linear-gradient(135deg, #5a9cf8 0%, #478af6 100%);
+}
+
+.display-mode-central .icon {
+  font-size: 1.3rem;
+}
+
+.display-mode-central .arrow-icon {
+  margin-left: 10px;
+  font-size: 1.3rem;
+  transition: transform 0.3s ease;
+}
+
+.display-mode-central .login-btn:hover .arrow-icon {
+  transform: translateX(5px);
 }
 </style>

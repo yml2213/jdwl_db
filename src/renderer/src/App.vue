@@ -5,6 +5,7 @@ import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
 import { getSessionStatus } from './services/apiService'
+import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
   getSelectedDepartment,
@@ -140,7 +141,12 @@ const selectJsonContent = (event) => {
       </div>
 
       <div class="header-right">
-        <AccountManager @session-created="handleSessionRestored" @logout="handleLogout" />
+        <!-- 登录后才在header显示 -->
+        <AccountManager
+          v-if="isLoggedIn"
+          @session-created="handleSessionRestored"
+          @logout="handleLogout"
+        />
         <!-- 开发模式下的调试按钮 -->
         <button v-if="isDev" @click="toggleDebugPanel" class="debug-toggle">
           {{ showDebugPanel ? '隐藏调试' : '显示调试' }}
@@ -225,7 +231,21 @@ const selectJsonContent = (event) => {
     <main class="main-content">
       <!-- 登录提示 -->
       <div v-if="!isLoggedIn" class="login-prompt">
-        <p>请先登录京东账号</p>
+        <div class="login-card">
+          <div class="card-header">
+            <img :src="electronLogo" alt="应用图标" class="logo-image" />
+            <h2>欢迎使用云打标工具</h2>
+            <p>请登录您的京东账号以开始使用所有功能</p>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-footer">
+            <AccountManager
+              class="login-button-container"
+              display-mode="central"
+              @session-created="handleSessionRestored"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- 已登录内容 -->
