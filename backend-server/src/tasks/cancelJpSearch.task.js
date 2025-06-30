@@ -9,6 +9,7 @@ import {
     uploadJpSearchFile,
     getJpEnabledCsgsForStore
 } from '../services/jdApiService.js'
+import getCSGTask from './getCSG.task.js'
 
 /**
  * 创建用于取消京配查询的Excel文件Buffer
@@ -33,7 +34,8 @@ function createJpSearchExcelBuffer(items) {
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, sessionData) {
-    const { skus, csgList, store, options } = context
+    const { skus, store, options } = context
+    let { csgList } = context
     const isWholeStore = options?.cancelJpSearchScope === 'all'
 
 
@@ -52,7 +54,18 @@ async function execute(context, sessionData) {
             console.log('[Task: cancelJpSearch] 正在查询整店已开启京配的商品...')
             itemsToProcess = await getJpEnabledCsgsForStore(sessionData)
         } else {
-            itemsToProcess = csgList || skus
+            if (!csgList && skus && skus.length > 0) {
+                console.log(
+                    `[Task: cancelJpSearch] 未提供CSG列表，将通过SKU查询CSG...`
+                )
+                const csgContext = { ...context }
+                const csgResult = await getCSGTask.execute(csgContext, sessionData)
+                if (!csgResult.success) {
+                    throw new Error(`获取CSG失败: ${csgResult.message}`)
+                }
+                csgList = csgResult.csgList
+            }
+            itemsToProcess = csgList
         }
 
         if (!itemsToProcess || itemsToProcess.length === 0) {

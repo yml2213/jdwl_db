@@ -168,47 +168,6 @@ export async function uploadJpSearchFile(fileBuffer, sessionData) {
 }
 
 /**
- * 从京东分页查询CSG编号
- * @param {string[]} skuBatch - 一批SKU编号
- * @param {object} sessionData - 完整的会话对象
- * @returns {Promise<string[]>} - CSG编号列表
- */
-async function fetchCSGPage(skuBatch, sessionData, start, length) {
-  const { cookieString, sessionData: authData } = getAuthInfo(sessionData)
-  const { vendor, department, store } = authData
-
-  const params = {
-    sEcho: 3, // 这个值似乎是固定的，或者可以递增
-    iColumns: 13,
-    sColumns: '',
-    iDisplayStart: start,
-    iDisplayLength: length,
-    _: Date.now(),
-    venderId: vendor.venderId,
-    deptId: department.deptId,
-    shopId: store.shopId,
-    goodsNo: skuBatch.join(',') // 京东API接受逗号分隔的SKU列表
-  }
-
-  const url = '/shopGoods/queryPopSgForJp.do'
-  console.log(
-    `[jdApiService] 查询CSG，SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
-  )
-  const response = await requestJdApi({
-    method: 'GET',
-    url,
-    params,
-    headers: { Cookie: cookieString, Referer: 'https://o.jdl.com/shopGoods/queryPopSgForJp.do' }
-  })
-
-  if (response && response.aaData) {
-    // 返回完整对象，而不仅仅是shopGoodsNo
-    return response.aaData
-  }
-  return []
-}
-
-/**
  * 根据SKU列表获取完整的商品详情列表 (处理分页)
  * @param {string[]} skus - 全部SKU列表
  * @param {object} sessionData - 完整的会话对象
@@ -259,28 +218,125 @@ export async function fetchProductDetails(skus, sessionData) {
  * @returns {Promise<{success: boolean, csgList: string[], message?: string}>}
  */
 export async function fetchCSGList(skus, sessionData) {
-  const BATCH_SIZE = 50 // 根据旧代码经验，每次查询50个SKU
+  const BATCH_SIZE = 1000 // 根据旧代码经验，每次查询1000个SKU
   const allCsgs = []
 
-  // 在循环外注入store和department信息，避免重复操作
-  const enrichedSessionData = {
-    ...sessionData,
-    vendor: sessionData.vendor,
-    department: sessionData.department,
-    store: sessionData.store
-  }
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { department, store } = sessionData
 
   for (let i = 0; i < skus.length; i += BATCH_SIZE) {
     const skuBatch = skus.slice(i, i + BATCH_SIZE)
-    try {
-      console.log(`[jdApiService] 正在处理批次 ${Math.floor(i / BATCH_SIZE) + 1}`)
-      // 京东这个接口自身也支持分页返回，但我们按SKU批次调用，每次都从头获取
-      const csgBatch = await fetchCSGPage(skuBatch, enrichedSessionData, 0, 200) // 假设单批SKU的结果不会超过200条
-      allCsgs.push(...csgBatch)
-    } catch (error) {
-      console.error(`[jdApiService] 处理批次查询时出错: ${error.message}`)
-      // 选择性地决定是否因为一个批次的失败而终止整个流程
-      // 这里我们选择继续，以尽可能多地获取数据
+    console.log(`[jdApiService] 正在处理CSG查询批次 ${Math.floor(i / BATCH_SIZE) + 1}`)
+
+    let hasMore = true
+    let start = 0
+    const PAGE_SIZE = 100
+    let totalRecords = null
+
+    while (hasMore) {
+      try {
+        const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+        const aoDataArray = [
+          { name: 'sEcho', value: 22 },
+          { name: 'iColumns', value: 14 },
+          { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+          { name: 'iDisplayStart', value: start },
+          { name: 'iDisplayLength', value: PAGE_SIZE },
+          { name: 'mDataProp_0', value: 0 },
+          { name: 'bSortable_0', value: false },
+          { name: 'mDataProp_1', value: 1 },
+          { name: 'bSortable_1', value: false },
+          { name: 'mDataProp_2', value: 'shopGoodsName' },
+          { name: 'bSortable_2', value: false },
+          { name: 'mDataProp_3', value: 'goodsNo' },
+          { name: 'bSortable_3', value: false },
+          { name: 'mDataProp_4', value: 'spGoodsNo' },
+          { name: 'bSortable_4', value: false },
+          { name: 'mDataProp_5', value: 'isvGoodsNo' },
+          { name: 'bSortable_5', value: false },
+          { name: 'mDataProp_6', value: 'shopGoodsNo' },
+          { name: 'bSortable_6', value: false },
+          { name: 'mDataProp_7', value: 'barcode' },
+          { name: 'bSortable_7', value: false },
+          { name: 'mDataProp_8', value: 'shopName' },
+          { name: 'bSortable_8', value: false },
+          { name: 'mDataProp_9', value: 'createTime' },
+          { name: 'bSortable_9', value: false },
+          { name: 'mDataProp_10', value: 10 },
+          { name: 'bSortable_10', value: false },
+          { name: 'mDataProp_11', value: 'isCombination' },
+          { name: 'bSortable_11', value: false },
+          { name: 'mDataProp_12', value: 'status' },
+          { name: 'bSortable_12', value: false },
+          { name: 'mDataProp_13', value: 13 },
+          { name: 'bSortable_13', value: false },
+          { name: 'iSortCol_0', value: 9 },
+          { name: 'sSortDir_0', value: 'desc' },
+          { name: 'iSortingCols', value: 1 }
+        ]
+
+        const data_obj = {
+          csrfToken: csrfToken,
+          ids: '',
+          shopId: store?.shopNo?.replace(/^CSP00/, '') || '',
+          sellerId: department?.sellerId || '',
+          deptId: department?.id || '',
+          sellerNo: department?.sellerNo || '',
+          deptNo: department?.deptNo || '',
+          shopNo: store?.shopNo || '',
+          spSource: '',
+          shopGoodsName: '',
+          isCombination: '',
+          barcode: '',
+          jdDeliver: '',
+          createTimeRange: '',
+          sellerGoodsSigns: skuBatch.join(','),
+          spGoodsNos: '',
+          goodsNos: '',
+          isvGoodsNos: '',
+          status: '', //  查询所有状态
+          originSend: '',
+          aoData: JSON.stringify(aoDataArray)
+        }
+
+        const data = qs.stringify(data_obj)
+        console.log(
+          `[jdApiService] 查询CSG, SKUs: ${skuBatch.length}, Start: ${start}, Length: ${PAGE_SIZE}`
+        )
+
+        const response = await requestJdApi({
+          method: 'POST',
+          url,
+          data,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            Accept: 'application/json, text/javascript, */*; q=0.01',
+            Origin: 'https://o.jdl.com',
+            Referer: 'https://o.jdl.com/goToMainIframe.do',
+            Cookie: cookieString
+          }
+        })
+
+        if (response && response.aaData) {
+          if (totalRecords === null) {
+            totalRecords = response.iTotalRecords || 0
+          }
+          allCsgs.push(...response.aaData)
+          const receivedCount = start + response.aaData.length
+          if (receivedCount >= totalRecords || response.aaData.length === 0) {
+            hasMore = false
+          } else {
+            start = receivedCount
+          }
+        } else {
+          hasMore = false
+        }
+      } catch (error) {
+        console.error(`[jdApiService] 处理CSG批次查询时出错: ${error.message}`)
+        hasMore = false // 出错时停止当前批次的循环
+      }
     }
   }
 
@@ -311,8 +367,8 @@ async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
     { name: 'sEcho', value: 22 },
     { name: 'iColumns', value: 14 },
     { name: 'sColumns', value: ',,,,,,,,,,,,,' },
-    { name: 'iDisplayStart', value: 0 },
-    { name: 'iDisplayLength', value: 100 },
+    { name: 'iDisplayStart', value: start },
+    { name: 'iDisplayLength', value: length },
     { name: 'mDataProp_0', value: 0 },
     { name: 'bSortable_0', value: false },
     { name: 'mDataProp_1', value: 1 },
@@ -349,7 +405,7 @@ async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
   const data_obj = {
     csrfToken: csrfToken,
     ids: '',
-    shopId: store?.shopNo?.replace(/^CSP00/, '') || '', // 从CSP0020000352400格式中提取店铺ID
+    shopId: store?.shopNo?.replace(/^CSP00/, '') || '',
     sellerId: departmentInfo?.sellerId || '',
     deptId: departmentInfo?.id || '',
     sellerNo: departmentInfo?.sellerNo || '',
