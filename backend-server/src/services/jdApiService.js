@@ -113,7 +113,7 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
  * @returns {Promise<object>} - 操作结果
  */
 export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
-  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { cookieString } = getAuthInfo(sessionData)
 
   const url = '/goodsStockConfig/importGoodsStockConfig.do'
   const formData = new FormData()
@@ -136,7 +136,7 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
 }
 
 /**
- * 上传用于京配打标生效的文件  启用京配打标生效
+ * 上传用于京配打标生效的文件  启用京配打标生效  京配打标失效  取消京配打标也是这个接口
  * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
  * @param {object} sessionData - 完整的会话对象
  * @returns {Promise<object>} - 操作结果
@@ -541,7 +541,7 @@ export async function uploadAddInventoryFile(fileBuffer, sessionData) {
  */
 async function fetchProductDetailsPage(skuBatch, sessionData, start, length) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
-  const { departmentInfo, store } = sessionData
+  const { departmentInfo } = sessionData
 
 
   const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`

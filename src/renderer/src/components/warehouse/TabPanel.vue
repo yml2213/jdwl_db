@@ -31,6 +31,7 @@
           :tasks="tasks"
           @delete-task="$emit('delete-task', $event)"
           @execute-one="$emit('execute-one', $event)"
+          @update:selected="$emit('update:selected', $event)"
         />
       </div>
       <div :class="['tab-pane', { active: activeTab === 'logs' }]">
@@ -49,15 +50,9 @@ import TaskListTable from './TaskListTable.vue'
 import LogsTable from './LogsTable.vue'
 import DisabledProducts from './feature/DisabledProducts.vue'
 
-const props = defineProps({
-  tasks: {
-    type: Array,
-    default: () => []
-  },
-  logs: {
-    type: Array,
-    default: () => []
-  },
+defineProps({
+  tasks: Array,
+  logs: Array,
   disabledProducts: {
     type: Object,
     default: () => ({
@@ -71,13 +66,10 @@ const props = defineProps({
       progress: '初始化...'
     })
   },
-  activeTab: {
-    type: String,
-    default: 'tasks'
-  }
+  activeTab: String
 })
 
-const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-one', 'enable-products'])
+const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-one', 'enable-products', 'update:selected'])
 
 const onEnableProducts = (products) => {
   emit('enable-products', products)

@@ -24,16 +24,14 @@ const workflowSteps = [
   {
     name: '取消京配',
     shouldExecute: (context) => context.options.cancelJpSearch,
-    execute: (context, session, log) => {
-      log('注意：[取消京配] 功能暂未实现。', 'warn')
-      // return Promise.resolve() // 简单返回，不执行任何操作
-    }
+    execute: (context, session) => executeTask('cancelJpSearch', context, session)
   }
 ]
 
 async function execute(context, session, log) {
   let currentContext = { ...context }
   let executedSomething = false
+  const stepResults = []
 
   for (const step of workflowSteps) {
     if (step.shouldExecute(currentContext)) {
@@ -43,6 +41,7 @@ async function execute(context, session, log) {
         const result = await step.execute(currentContext, session, log)
         if (result) {
           currentContext = { ...currentContext, ...result }
+          stepResults.push({ name: step.name, message: result.message })
         }
         log(`步骤 [${step.name}] 执行成功。`)
       } catch (error) {
@@ -57,7 +56,10 @@ async function execute(context, session, log) {
   }
 
   log('--- 清库下标工作流执行完毕 ---', 'success')
-  return { success: true, message: '工作流成功执行完毕。' }
+  // Return a combined message from all successful steps
+  const finalMessage =
+    stepResults.map((r) => `${r.name}: ${r.message}`).join('; ') || '工作流成功执行完毕。'
+  return { success: true, message: finalMessage, results: stepResults }
 }
 
 export default {

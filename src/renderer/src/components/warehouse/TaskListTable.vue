@@ -3,7 +3,9 @@
     <table class="task-table">
       <thead>
         <tr>
-          <th class="task-header-cell checkbox-cell"><input type="checkbox" /></th>
+          <th class="task-header-cell checkbox-cell">
+            <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" />
+          </th>
           <th class="task-header-cell">SKU</th>
           <th class="task-header-cell">功能名称</th>
           <th class="task-header-cell">店铺</th>
@@ -19,7 +21,9 @@
           <td colspan="9" class="no-tasks-row">暂无任务</td>
         </tr>
         <tr v-for="task in tasks" :key="task.id" class="task-row">
-          <td class="task-cell checkbox-cell"><input type="checkbox" /></td>
+          <td class="task-cell checkbox-cell">
+            <input type="checkbox" v-model="selectedTasks" :value="task.id" />
+          </td>
           <td class="task-cell">{{ task.displaySku }}</td>
           <td class="task-cell">{{ task.featureName }}</td>
           <td class="task-cell">{{ task.storeName }}</td>
@@ -48,16 +52,43 @@
 </template>
 
 <script setup>
+import { ref, computed, watch } from 'vue'
 import StatusTag from './StatusTag.vue'
 
-defineProps({
+const props = defineProps({
   tasks: {
     type: Array,
     required: true
   }
 })
 
-defineEmits(['delete-task', 'execute-one'])
+const emit = defineEmits(['delete-task', 'execute-one', 'update:selected'])
+
+const selectedTasks = ref([])
+
+const isAllSelected = computed(() => {
+  return props.tasks.length > 0 && selectedTasks.value.length === props.tasks.length
+})
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedTasks.value = []
+  } else {
+    selectedTasks.value = props.tasks.map((task) => task.id)
+  }
+}
+
+watch(selectedTasks, (newSelection) => {
+  emit('update:selected', newSelection)
+})
+
+watch(
+  () => props.tasks,
+  () => {
+    // When tasks list changes (e.g., cleared), reset selection
+    selectedTasks.value = []
+  }
+)
 </script>
 
 <style scoped>
