@@ -888,3 +888,30 @@ export async function submitReturnOrder(payload, sessionData) {
     data: payload
   })
 }
+
+/**
+ * 通过直接调用API清空整个店铺的库存分配   库存分配清零 --整店库存清零
+ * @param {string} shopId - 店铺ID
+ * @param {string} deptId - 部门ID
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function clearStockForWholeStore(shopId, deptId, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const params = {
+    csrfToken,
+    shopId,
+    deptId
+  }
+  console.log('清空整个店铺的库存分配 ===>', params)
+  return await requestJdApi({
+    method: 'GET',
+    url: '/goodsStockConfig/resetGoodsStockRatio.do',
+    params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do'
+    }
+  })
+}
