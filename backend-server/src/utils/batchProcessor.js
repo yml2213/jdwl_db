@@ -28,7 +28,11 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
     let result = await batchFn(batch)
 
     // If the batch fails with a rate-limiting error, wait and retry once.
-    if (result.success === false && result.message && result.message.includes('1分钟内不要频繁操作!')) {
+    if (
+      result.success === false &&
+      result.message &&
+      (result.message.includes('频繁操作') || result.message.includes('只能导入一次'))
+    ) {
       log(`Batch ${batchNumber} failed due to rate limiting. Retrying in ${delay / 1000}s...`, 'warn')
       await new Promise((resolve) => setTimeout(resolve, delay))
       log(`--- Retrying batch ${batchNumber}/${totalBatches} ---`, 'info')

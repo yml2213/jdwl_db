@@ -1,7 +1,8 @@
 import XLSX from 'xlsx'
-import FormData from 'form-data'
 import { uploadInventoryAllocationFile } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
+import fs from 'fs'
+import path from 'path'
 
 const BATCH_SIZE = 2000
 const BATCH_DELAY = 5 * 60 * 1000 // 5 minutes
@@ -19,12 +20,12 @@ function createExcelFile(skuList, department, store) {
   ]
   const introRow = [
     'CBU开头的事业部编码',
-    'CMG开头的商品编码...',
-    '...',
-    '...',
-    '...',
-    '...',
-    '...'
+    'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
+    '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
+    'CSP开头的店铺编码',
+    '纯数值，1-独占，2-共享，3-固定值',
+    '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100库存方为固定值时，填写正整数，不能大于当前商品的库存总数',
+    '可空，只有在库存管理方式为3-固定值时，读取仓库编码，若为空则按全部仓库执行'
   ]
   const rows = skuList.map((sku) => [department.deptNo, '', sku, store.shopNo, 1, 100, ''])
   const excelData = [headers, introRow, ...rows]
@@ -36,71 +37,83 @@ function createExcelFile(skuList, department, store) {
 
 /**
  * 启用商品库存分配的任务
- * 该任务作为一个简单的编排器，调用apiService来完成主要工作
- * @param {object} payload - 来自前端的数据
- * @param {string[]} payload.skus - SKU列表
- * @param {string[]} [payload.csgList] - 可选的CSG编号列表
+ * @param {object} context - 来自前端的数据
+ * @param {string[]} context.skus - SKU列表
+ * @param {string[]} [context.csgList] - 可选的CSG编号列表
  * @param {object} sessionData - 会话数据
  */
-async function execute(payload, sessionData) {
-  // 临时log和isRunning, 兼容executeInBatches
-  const log = (message, type = 'info') => {
-    console.log(`[enableInventoryAllocation] [${type.toUpperCase()}] ${message}`)
-  }
-  const isRunning = { value: true }
+async function execute(context, sessionData) {
+  const { skus, csgList, store, department } = context
+  console.log('[Task: enableInventoryAllocation] "启用库存商品分配" 开始...')
 
-  const { skus, csgList } = payload
-  log('Starting inventory allocation task...', 'info')
-
-  if (!sessionData) {
-    throw new Error('Session data is missing.')
+  if (!sessionData || !sessionData.cookies) {
+    throw new Error('缺少会话信息')
   }
 
-  const { cookies, department, store } = sessionData
-  const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-  const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
-
-  if (!store || !department || !csrfToken) {
-    throw new Error('Session is missing store, department, or token info.')
+  if (!store || !store.shopNo) {
+    throw new Error('缺少有效的店铺信息')
+  }
+  if (!department || !department.deptNo) {
+    throw new Error('缺少有效的事业部信息')
   }
 
   const itemsToProcess = csgList || skus
   if (!itemsToProcess || itemsToProcess.length === 0) {
-    throw new Error('No items to process.')
+    return { success: true, message: '商品列表为空，无需操作。' }
   }
+  console.log(`[Task: enableInventoryAllocation] 将为 ${itemsToProcess.length} 个商品启用库存分配。`)
 
   const batchFn = async (batchItems) => {
     try {
-      log(`Creating Excel file for ${batchItems.length} items...`, 'info')
+      console.log(`[Task: enableInventoryAllocation] 正在为 ${batchItems.length} 个商品创建Excel文件...`)
       const fileBuffer = createExcelFile(batchItems, department, store)
 
-      log('Uploading file for batch...', 'info')
+      // 保存文件到本地
+      try {
+        const tempDir = path.resolve(process.cwd(), 'temp', '启用库存商品分配')
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true })
+        }
+        const timestamp = new Date().toISOString().replace(/:/g, '-')
+        const shopNameForFile = store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+        const filename = `${timestamp}_${shopNameForFile}.xlsx`
+        const filePath = path.join(tempDir, filename)
+        fs.writeFileSync(filePath, fileBuffer)
+        console.log(`[Task: enableInventoryAllocation] Excel文件已保存到: ${filePath}`)
+      } catch (saveError) {
+        console.error(`[Task: enableInventoryAllocation] 保存Excel文件失败:`, saveError)
+        // 不中断流程
+      }
+
+      console.log('[Task: enableInventoryAllocation] 正在上传文件...')
       const response = await uploadInventoryAllocationFile(fileBuffer, sessionData)
 
-      // Case 1: JSON response for success
-      if (response && typeof response === 'object' && response.resultCode === '1') {
+      console.log('[Task: enableInventoryAllocation] 上传文件响应:====>', response)
+      if (response && typeof response === 'object' && response.resultCode === '2') {
         const message = `导入成功，报告文件: ${response.resultData}`
-        log(message, 'info')
-        return { success: true, message: message }
+        return { success: true, message }
       }
-
-      // Case 2: String response for success (older format)
       if (typeof response === 'string' && response.includes('导入成功')) {
         const match = response.match(/导入成功，总共通告(\d+)条，成功(\d+)条，失败(\d+)条/)
-        const message = match
-          ? `处理成功: 总计 ${match[1]}, 成功 ${match[2]}, 失败 ${match[3]}`
-          : '文件上传成功。'
-        log(message, 'info')
-        return { success: true, message: message }
+        const message = match ? `处理成功: 总计 ${match[1]}, 成功 ${match[2]}, 失败 ${match[3]}` : '文件上传成功。'
+        return { success: true, message }
       }
 
-      // If neither success case matched, it's a failure.
+      // 检查JSON和字符串格式的频率限制错误
+      if (
+        (response &&
+          typeof response === 'object' &&
+          response.resultMessage &&
+          response.resultMessage.includes('频繁操作')) ||
+        (typeof response === 'string' && response.includes('只能导入一次'))
+      ) {
+        return { success: false, message: response.resultMessage || response }
+      }
+
       const message = `文件上传失败或响应异常: ${JSON.stringify(response)}`
-      log(message, 'error')
       return { success: false, message }
     } catch (error) {
       const errorMessage = `批次处理异常: ${error.message}`
-      log(errorMessage, 'error')
       return { success: false, message: errorMessage }
     }
   }
@@ -110,15 +123,17 @@ async function execute(payload, sessionData) {
     batchSize: BATCH_SIZE,
     delay: BATCH_DELAY,
     batchFn,
-    log,
-    isRunning
+    log: (message, type = 'info') => {
+      console.log(`[batchProcessor] [${type.toUpperCase()}] ${message}`)
+    },
+    isRunning: { value: true }
   })
 
   if (!result.success) {
-    throw new Error(result.message)
+    throw new Error(`启用库存商品分配失败: ${result.message}`)
   }
 
-  log('Inventory allocation task completed.', 'success')
+  console.log('[Task: enableInventoryAllocation] 任务完成。')
   return { success: true, message: result.message }
 }
 
