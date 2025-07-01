@@ -4,28 +4,28 @@
       <label class="form-label">快捷选择</label>
       <div class="radio-group">
         <label class="radio-label">
-          <input type="radio" v-model="form.mode" value="sku" />
+          <input type="radio" v-model="mode" value="sku" />
           输入SKU
         </label>
         <label class="radio-label">
-          <input type="radio" v-model="form.mode" value="whole_store" />
-          整店SKU
+          <input type="radio" v-model="mode" value="whole_store" />
+          整店
         </label>
       </div>
     </div>
 
-    <div v-if="form.mode === 'sku'" class="form-group sku-input-container">
+    <div v-if="mode === 'sku'" class="form-group sku-input-container">
       <div class="sku-header">
         <label class="form-label">输入SKU</label>
         <FileUploader @file-change="handleFileChange" />
       </div>
       <div class="textarea-wrapper">
         <textarea
-          v-model="form.sku"
+          v-model="sku"
           placeholder="请输入SKU (多个SKU请每行一个)"
           class="sku-textarea"
         ></textarea>
-        <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
+        <el-button v-if="sku" class="clear-sku-btn" type="danger" link @click="sku = ''"
           >清空</el-button
         >
       </div>
@@ -35,11 +35,11 @@
       <label class="form-label">功能选项 <span class="required-tip">(必选至少一项)</span></label>
       <div class="checkbox-group">
         <label class="checkbox-label">
-          <input type="checkbox" v-model="form.options.clearStockAllocation" />
+          <input type="checkbox" v-model="clearStockAllocation" />
           库存分配清零
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" v-model="form.options.cancelJpSearch" />
+          <input type="checkbox" v-model="cancelJpSearch" />
           取消京配打标
         </label>
       </div>
@@ -76,11 +76,34 @@ const props = defineProps({
 
 const emit = defineEmits(['update:form', 'update:selectedStore', 'addTask'])
 
-// 使用Proxy来简化v-model在深层对象上的使用
-const form = new Proxy(props.form, {
-  set(target, key, value) {
-    emit('update:form', { ...target, [key]: value })
-    return true
+// 使用 computed 来处理与父组件的双向绑定，避免直接修改 props
+const mode = computed({
+  get: () => props.form.mode,
+  set: (value) => emit('update:form', { ...props.form, mode: value })
+})
+
+const sku = computed({
+  get: () => props.form.sku,
+  set: (value) => emit('update:form', { ...props.form, sku: value })
+})
+
+const clearStockAllocation = computed({
+  get: () => props.form.options.clearStockAllocation,
+  set: (value) => {
+    emit('update:form', {
+      ...props.form,
+      options: { ...props.form.options, clearStockAllocation: value }
+    })
+  }
+})
+
+const cancelJpSearch = computed({
+  get: () => props.form.options.cancelJpSearch,
+  set: (value) => {
+    emit('update:form', {
+      ...props.form,
+      options: { ...props.form.options, cancelJpSearch: value }
+    })
   }
 })
 
@@ -94,8 +117,7 @@ const handleFileChange = (file) => {
   if (file && file.name.endsWith('.txt')) {
     const reader = new FileReader()
     reader.onload = (e) => {
-      // 通过代理直接修改sku
-      form.sku = e.target.result
+      sku.value = e.target.result
     }
     reader.readAsText(file)
   }
