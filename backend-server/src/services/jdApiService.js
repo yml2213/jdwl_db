@@ -218,7 +218,7 @@ export async function fetchProductDetails(skus, sessionData) {
  * @returns {Promise<{success: boolean, csgList: string[], message?: string}>}
  */
 export async function fetchCSGList(skus, sessionData) {
-  const BATCH_SIZE = 1000 // 根据旧代码经验，每次查询1000个SKU
+  const BATCH_SIZE = 500 // 根据旧代码经验，每次查询1000个SKU
   const allCsgs = []
 
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
@@ -359,6 +359,15 @@ export async function fetchCSGList(skus, sessionData) {
 async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
   const { departmentInfo, store } = sessionData
+  const infos = {}
+  infos.shopId = store?.shopNo?.replace(/^CSP00/, '') || ''
+  infos.sellerId = departmentInfo?.sellerId || ''
+  infos.deptId = departmentInfo?.id || ''
+  infos.sellerNo = departmentInfo?.sellerNo || ''
+  infos.deptNo = departmentInfo?.deptNo || ''
+  infos.shopNo = store?.shopNo || ''
+
+  // console.log('自定义的 infos', infos)
 
   const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
 
@@ -405,11 +414,11 @@ async function fetchProductStatusPage(skuBatch, sessionData, start, length) {
   const data_obj = {
     csrfToken: csrfToken,
     ids: '',
-    shopId: store?.shopNo?.replace(/^CSP00/, '') || '',
-    sellerId: departmentInfo?.sellerId || '',
-    deptId: departmentInfo?.id || '',
-    sellerNo: departmentInfo?.sellerNo || '',
-    deptNo: departmentInfo?.deptNo || '',
+    shopId: infos.shopId || '',
+    sellerId: infos.sellerId || '',
+    deptId: infos.deptId || '',
+    sellerNo: infos.sellerNo || '',
+    deptNo: infos.deptNo || '',
     shopNo: store?.shopNo || '',
     spSource: '',
     shopGoodsName: '',
@@ -471,6 +480,7 @@ export async function getDisabledProducts(skus, sessionData) {
     while (hasMore) {
       const response = await fetchProductStatusPage(skuBatch, sessionData, start, PAGE_SIZE)
 
+      // console.log('查询已停用的商品=====>response', response)
       if (response && response.aaData) {
         if (totalRecords === null) {
           totalRecords = response.iTotalRecords || 0
