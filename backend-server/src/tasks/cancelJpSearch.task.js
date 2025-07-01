@@ -77,8 +77,17 @@ async function execute(context, sessionData) {
             return { success: true, message }
         }
 
+        // 对CSG列表去重，避免"重复sku"错误
+        const uniqueItems = [...new Set(itemsToProcess)]
+        const duplicatesCount = itemsToProcess.length - uniqueItems.length
+        if (duplicatesCount > 0) {
+            console.log(
+                `[Task: cancelJpSearch] 已移除${duplicatesCount}个重复的CSG编码，去重后还剩${uniqueItems.length}个商品。`
+            )
+        }
+
         console.log(
-            `[Task: cancelJpSearch] 查询到 ${itemsToProcess.length} 个商品，将为它们取消京配打标。`
+            `[Task: cancelJpSearch] 查询到 ${uniqueItems.length} 个商品，将为它们取消京配打标。`
         )
 
         const batchFn = async (batchItems) => {
@@ -125,7 +134,7 @@ async function execute(context, sessionData) {
         const DELAY_MS = 1 * 60 * 1000
 
         const batchResults = await executeInBatches({
-            items: itemsToProcess,
+            items: uniqueItems,
             batchSize: BATCH_SIZE,
             delay: DELAY_MS,
             batchFn,
