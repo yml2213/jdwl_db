@@ -213,7 +213,7 @@ export async function uploadJpSearchFile(fileBuffer, sessionData) {
  * @param {string} status - 商品状态: '1' for enabled, '2' for disabled, '' for all.
  * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
  * @param {number} start - 分页起始位置
- * @param {number} length - 分页大小
+ * @param {number} length - 分页大小`
  * @returns {Promise<{aaData: object[], iTotalRecords: number}>}
  */
 async function fetchShopGoodsPage(skuBatch, status, sessionData, start, length) {
@@ -285,6 +285,8 @@ async function fetchShopGoodsPage(skuBatch, status, sessionData, start, length) 
     originSend: '',
     aoData: JSON.stringify(aoDataArray)
   }
+
+  console.log('fetchShopGoodsPage---1  data_obj===>', data_obj)
 
   const data = qs.stringify(data_obj)
 
@@ -460,6 +462,156 @@ export async function uploadAddInventoryFile(fileBuffer, sessionData) {
   })
 }
 
+
+
+/**
+ * 根据SKU列表获取完整的商品详情列表 (处理分页)
+ * @param {string[]} skus - 全部SKU列表
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<{success: boolean, products: object[], message?: string}>}
+ */
+export async function getCsgBySkus(skus, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  // 注意：此处从 context 中获取 department 和 store，确保与调用者（如 getProductDetails）一致
+  const { department, store } = sessionData
+
+  const SKU_BATCH_SIZE = 500
+  const PAGE_SIZE = 100
+  const allProducts = []
+
+  const fetchForBatch = async (skuBatch) => {
+    let hasMore = true
+    let start = 0
+    let totalRecords = null
+    const productsInBatch = []
+
+    while (hasMore) {
+      try {
+
+        const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+        const aoDataArray = [
+          { name: 'sEcho', value: 3 },
+          { name: 'iColumns', value: 14 },
+          { name: 'sColumns', value: ',,,,,,,,,,,,,' },
+          { name: 'iDisplayStart', value: start },
+          { name: 'iDisplayLength', value: PAGE_SIZE },
+          { name: 'mDataProp_0', value: 0 },
+          { name: 'bSortable_0', value: false },
+          { name: 'mDataProp_1', value: 1 },
+          { name: 'bSortable_1', value: false },
+          { name: 'mDataProp_2', value: 'shopGoodsName' },
+          { name: 'bSortable_2', value: false },
+          { name: 'mDataProp_3', value: 'goodsNo' },
+          { name: 'bSortable_3', value: false },
+          { name: 'mDataProp_4', value: 'spGoodsNo' },
+          { name: 'bSortable_4', value: false },
+          { name: 'mDataProp_5', value: 'isvGoodsNo' },
+          { name: 'bSortable_5', value: false },
+          { name: 'mDataProp_6', value: 'shopGoodsNo' },
+          { name: 'bSortable_6', value: false },
+          { name: 'mDataProp_7', value: 'barcode' },
+          { name: 'bSortable_7', value: false },
+          { name: 'mDataProp_8', value: 'shopName' },
+          { name: 'bSortable_8', value: false },
+          { name: 'mDataProp_9', value: 'createTime' },
+          { name: 'bSortable_9', value: false },
+          { name: 'mDataProp_10', value: 10 },
+          { name: 'bSortable_10', value: false },
+          { name: 'mDataProp_11', value: 'isCombination' },
+          { name: 'bSortable_11', value: false },
+          { name: 'mDataProp_12', value: 'status' },
+          { name: 'bSortable_12', value: false },
+          { name: 'mDataProp_13', value: 13 },
+          { name: 'bSortable_13', value: false },
+          { name: 'iSortCol_0', value: 9 },
+          { name: 'sSortDir_0', value: 'desc' },
+          { name: 'iSortingCols', value: 1 }
+        ]
+
+        const data_obj = {
+          csrfToken: csrfToken,
+          ids: '',
+          shopId: store?.shopNo?.replace(/^CSP00/, '') || '',
+          sellerId: department?.sellerId || '',
+          deptId: department?.id || '',
+          sellerNo: department?.sellerNo || '',
+          deptNo: department?.deptNo || '',
+          shopNo: store?.shopNo || '',
+          spSource: '',
+          shopGoodsName: '',
+          isCombination: '',
+          barcode: '',
+          jdDeliver: '',
+          createTimeRange: '',
+          sellerGoodsSigns: skuBatch.join(','),
+          spGoodsNos: '',
+          goodsNos: '',
+          isvGoodsNos: '',
+          status: 1, // 使用传入的状态
+          originSend: '',
+          aoData: JSON.stringify(aoDataArray)
+        }
+
+        console.log('fetchShopGoodsPage---1  data_obj===>', data_obj)
+
+        const data = qs.stringify(data_obj)
+
+        console.log(
+          `[jdApiService] 查询商品, Status: '${status}', SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
+        )
+
+        return await requestJdApi({
+          method: 'POST',
+          url,
+          data,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            Accept: 'application/json, text/javascript, */*; q=0.01',
+            Origin: 'https://o.jdl.com',
+            Referer: 'https://o.jdl.com/goToMainIframe.do',
+            Cookie: cookieString
+          }
+        })
+
+        console.log('getCsgBySkus---1  response===>', response)
+
+        if (response && response.aaData) {
+          if (totalRecords === null) {
+            totalRecords = response.iTotalRecords || 0
+          }
+          productsInBatch.push(...response.aaData)
+
+          const receivedCount = start + response.aaData.length
+          if (receivedCount >= totalRecords || response.aaData.length === 0) {
+            hasMore = false
+          } else {
+            start = receivedCount
+          }
+        } else {
+          hasMore = false
+        }
+      } catch (error) {
+        console.error(`[jdApiService] 获取商品详情页面时出错: ${error.message}`)
+        hasMore = false // Stop this batch on error
+      }
+    }
+    return productsInBatch
+  }
+
+  // 改为串行处理，避免并发问题
+  for (let i = 0; i < skus.length; i += SKU_BATCH_SIZE) {
+    const skuBatch = skus.slice(i, i + SKU_BATCH_SIZE)
+    console.log(`[jdApiService] 正在处理商品详情查询批次 ${i / SKU_BATCH_SIZE + 1}`)
+    const batchResult = await fetchForBatch(skuBatch)
+    allProducts.push(...batchResult)
+  }
+
+  console.log(`[jdApiService] 总共获取了 ${allProducts.length} 个启用的商品详情。`)
+  return { success: true, products: allProducts }
+}
+
 /**
  * 根据SKU列表获取完整的商品详情列表 (处理分页)
  * @param {string[]} skus - 全部SKU列表
@@ -480,6 +632,8 @@ export async function fetchProductDetails(skus, sessionData) {
     while (hasMore) {
       try {
         const response = await fetchShopGoodsPage(skuBatch, '1', sessionData, start, PAGE_SIZE)
+
+        console.log('fetchProductDetails---1  response===>', response)
 
         if (response && response.aaData) {
           if (totalRecords === null) {
@@ -831,7 +985,7 @@ export async function getJpEnabledCsgsForStore(sessionData) {
   while (hasMore) {
     const iDisplayStart = page * pageSize
     const aoData = [
-      { name: 'sEcho', value: sEcho++ },
+      { name: 'sEcho', value: 3 },
       { name: 'iColumns', value: 14 },
       { name: 'sColumns', value: ',,,,,,,,,,,,,' },
       { name: 'iDisplayStart', value: iDisplayStart },
@@ -870,6 +1024,7 @@ export async function getJpEnabledCsgsForStore(sessionData) {
     ]
     const form = new URLSearchParams()
     form.append('csrfToken', csrfToken)
+    form.append('ids', '')
     form.append('shopId', department.id)
     form.append('sellerId', departmentInfo.sellerId)
     form.append('deptId', departmentInfo.id)

@@ -30,7 +30,7 @@ const tasks = {
     name: '等待店铺商品导入后台处理',
     shouldExecute: (context) => context.options.importStore,
     execute: async (context, session, log) => {
-      const waitSeconds = 3
+      const waitSeconds = 5
       const logPrefix = '[初始化][等待商品导入]'
       await delayWithCountdown(
         waitSeconds,
@@ -126,6 +126,33 @@ async function delayWithCountdown(seconds, log, messagePrefix) {
  * @param {Function} log - 用于发送日志回前端的函数
  */
 async function execute(context, session, log) {
+  // --- 标准化上下文 ---
+  // 强制净化并统一上下文，确保所有任务都使用源自同一个店铺实体的信息。
+  if (context.store) {
+    const { store } = context
+    if (store.shopName && store.name !== store.shopName) {
+      console.log(`[Workflow Normalization] 标准化店铺名称: 从 "${store.name}" 改为 "${store.shopName}"`)
+      store.name = store.shopName
+    }
+
+    // 基于 store 对象，重建纯净的 department 和 vendor 对象，防止上下文污染
+    context.department = {
+      id: store.deptId,
+      name: store.deptName,
+      deptNo: store.deptNo,
+      sellerId: store.sellerId,
+      sellerName: store.sellerName,
+      sellerNo: store.sellerNo
+    }
+    context.vendor = {
+      id: store.supplierNo, // 假设供应商编号在 store.supplierNo
+      name: store.deptName, // 通常供应商名称与事业部名称相同
+      supplierNo: store.supplierNo
+    }
+
+    console.log('[Workflow Normalization] 上下文已净化，确保数据一致性。')
+  }
+
   let currentContext = { ...context }
   const isWorkflow = context.quickSelect === 'warehouseLabeling'
 
@@ -143,6 +170,24 @@ async function execute(context, session, log) {
     for (const taskKey of setupTaskKeys) {
       const task = tasks[taskKey]
       if (isWorkflow || task.shouldExecute(currentContext)) {
+        // 在执行 getCSGList 任务前，添加详细的上下文日志
+        if (taskKey === 'getCSGList') {
+          const contextToLog = {
+            skus: currentContext.skus,
+            store: currentContext.store,
+            department: currentContext.department,
+            vendor: currentContext.vendor
+          }
+          enhancedLog(
+            `[Debug] 即将执行 getCSGList，传入的上下文关键内容: \n${JSON.stringify(
+              contextToLog,
+              null,
+              2
+            )}`,
+            'info'
+          )
+        }
+
         enhancedLog(`[初始化] 开始执行: ${task.name}`)
         const result = await task.execute(currentContext, session, enhancedLog)
         if (result && result.success === false) {
@@ -220,7 +265,8 @@ async function execute(context, session, log) {
             const subBatchId = `子批次 ${j + 1}/${subBatches.length}`
 
             enhancedLog(`${logPrefix}[${batchId}][${subBatchId}] --> 开始处理...`)
-            await dependentTask.execute({ ...currentContext, csgList: subBatch, skus: subBatch }, session, enhancedLog)
+            const dependentContext = { ...currentContext, csgList: subBatch, skus: subBatch, products: subBatch }
+            await dependentTask.execute(dependentContext, session, enhancedLog)
             enhancedLog(`${logPrefix}[${batchId}][${subBatchId}] <-- [${dependentTask.name}] 执行完毕`, 'success')
 
             if (j < subBatches.length - 1) {
