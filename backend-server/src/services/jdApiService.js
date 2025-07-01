@@ -574,7 +574,8 @@ export async function uploadProductNames(fileBuffer, fileName, sessionData) {
     method: 'POST',
     url,
     data: formData,
-    headers
+    headers,
+    timeout: 240000 // 4分钟超时
   })
 
   console.log('[jdApiService] 商品简称文件上传成功，响应:', responseData)
@@ -587,6 +588,7 @@ export async function uploadProductNames(fileBuffer, fileName, sessionData) {
   ) {
     return {
       success: false,
+      status: 'pending',
       message: '一个导入任务正在处理中，请5分钟后再试。',
       data: responseData
     }
