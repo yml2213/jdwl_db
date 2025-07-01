@@ -821,7 +821,6 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData) {
 export async function getJpEnabledCsgsForStore(sessionData) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
   const { store, department, departmentInfo } = sessionData
-  console.log(`==============111==============`)
 
   const allCsgs = []
   let page = 0
@@ -896,7 +895,7 @@ export async function getJpEnabledCsgsForStore(sessionData) {
         responseType: 'json'
       })
 
-      console.log(data)
+      // console.log(data)
 
 
       if (data && data.aaData && data.aaData.length > 0) {

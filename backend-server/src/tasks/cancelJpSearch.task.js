@@ -104,6 +104,7 @@ async function execute(context, sessionData) {
                 }
 
                 const response = await uploadJpSearchFile(fileBuffer, sessionData)
+                console.log('取消京配打标=======> response', response)
                 if (response && response.resultCode === 1) {
                     return {
                         success: true,
