@@ -43,7 +43,7 @@ async function execute(context, sessionData) {
   // 会话验证已由server.js中间件处理，不再需要检查sessionId
   if (!sessionData || !sessionData.cookies) throw new Error('缺少会话信息')
 
-  console.log(`[Task: importStoreProducts] "导入店铺商品" 开始，店铺 [${store.shopName}]...`)
+  console.log(`[Task: importStoreProducts] "导入店铺商品" 开始，店铺 [${store.name}]...`)
   console.log(`[Task: importStoreProducts] 总共需要处理 ${skus.length} 个SKU.`)
 
   const batchFn = async (skuBatch) => {
@@ -61,7 +61,7 @@ async function execute(context, sessionData) {
           fs.mkdirSync(tempDir, { recursive: true })
         }
         const timestamp = new Date().toISOString().replace(/:/g, '-')
-        const shopNameForFile = store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+        const shopNameForFile = store?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
         const filename = `${timestamp}_${shopNameForFile}.xls`
         const filePath = path.join(tempDir, filename)
         fs.writeFileSync(filePath, fileBuffer)

@@ -69,7 +69,7 @@ async function execute(context, sessionData) {
     }
 
     const BATCH_SIZE = 500
-    const BATCH_DELAY = 1000 // 1 second delay between batches
+    const BATCH_DELAY = 1000 // 1 
 
     const result = await executeInBatches({
         items: products,
