@@ -26,15 +26,15 @@ async function readExcelFile(filePath) {
 
 function createNewExcelData(originalData, department) {
     // console.log('originalData--->', originalData)
-    // console.log('department--->', department)
+    console.log('department--->', department)
     const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
     const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
     const rows = originalData
-        .slice(2) // 跳过2行表头
+        .slice(1) // 跳过1行表头
         .map((row) => {
-            if (row && row.length >= 3) {
-                const sku = String(row[1] || '').trim() // 商家商品标识在第2列
-                const name = String(row[2] || '').trim() // 商品名称在第3列
+            if (row && row.length >= 2) {
+                const sku = String(row[0] || '').trim() // SKU在第1列
+                const name = String(row[1] || '').trim() // 商品名称在第2列
                 if (sku && name) {
                     return [department.deptNo, sku, name]
                 }
@@ -52,16 +52,23 @@ function createNewExcelData(originalData, department) {
  * @param {string} fileName - 文件名
  * @returns {string} 保存的文件路径
  */
-async function saveExcelForTesting(buffer, fileName) {
+async function saveExcelForTesting(buffer, fileName, sessionData) {
     try {
+        // 从会话数据中获取店铺名称，如果没有则使用 'unknown-shop'
+        const shopName = sessionData?.shop?.shopName || 'unknown-shop'
+
         // 创建临时目录（如果不存在）
         const tempDir = path.resolve(process.cwd(), 'temp', '导入商品简称')
         if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true })
         }
+
         // 生成唯一文件名，避免冲突
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-        const filePath = path.join(tempDir, `${timestamp}_${fileName}`)
+        // 清理店铺名称，移除可能导致路径问题的字符
+        const safeShopName = shopName.replace(/[\\/:"*?<>|]/g, '_')
+        const uniqueFileName = `${timestamp}_${safeShopName}_${fileName}`
+        const filePath = path.join(tempDir, uniqueFileName)
 
         // 写入文件
         fs.writeFileSync(filePath, buffer)
@@ -74,7 +81,7 @@ async function saveExcelForTesting(buffer, fileName) {
     }
 }
 
-async function convertToExcelFile(data, fileName) {
+async function convertToExcelFile(data, fileName, sessionData) {
     try {
         const ws = XLSX.utils.aoa_to_sheet(data)
         ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 30 }]
@@ -83,7 +90,7 @@ async function convertToExcelFile(data, fileName) {
         const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xls' })
 
         // 保存文件用于测试
-        await saveExcelForTesting(buffer, fileName)
+        await saveExcelForTesting(buffer, fileName, sessionData)
 
         return { buffer, fileName }
     } catch (error) {
@@ -107,17 +114,21 @@ async function execute(payload, updateFn, sessionData) {
         if (!excelData || excelData.length < 2) {
             throw new Error('Excel文件内容为空或格式不正确')
         }
-        updateFn({ message: `成功读取 ${excelData.length - 2} 行数据。` })
+        updateFn({ message: `成功读取 ${excelData.length - 1} 行数据。` })
 
         const newExcelData = createNewExcelData(excelData, department)
-        const rowCount = newExcelData.length - 2 // 减去表头
+        const rowCount = newExcelData.length - 2 // 减去我们自己加的两行表头
 
         const BATCH_SIZE = 2000
         // 不再使用 JdService 类，直接使用导出的函数
 
         if (rowCount <= BATCH_SIZE) {
             updateFn({ message: '数据量较小，开始直接上传...' })
-            const excelFile = await convertToExcelFile(newExcelData, '商品批量修改自定义模板.xls')
+            const excelFile = await convertToExcelFile(
+                newExcelData,
+                '商品批量修改自定义模板.xls',
+                sessionData
+            )
             const result = await uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
 
             // 检查是否是任务进行中的特殊情况
@@ -154,7 +165,7 @@ async function execute(payload, updateFn, sessionData) {
                     message: `正在处理批次 ${i + 1}/${totalBatches} (${currentBatchRows.length}行)...`
                 })
 
-                const excelFile = await convertToExcelFile(batchData, batchFileName)
+                const excelFile = await convertToExcelFile(batchData, batchFileName, sessionData)
                 const result = await uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
 
                 // 检查是否是任务进行中的特殊情况

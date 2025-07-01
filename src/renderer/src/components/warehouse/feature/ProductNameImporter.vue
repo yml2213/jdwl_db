@@ -93,13 +93,7 @@ const startImport = async () => {
     const result = await importProductNamesFeature.execute(selectedFile.value)
     addLog(`导入完成: ${result.message}`, result.success ? 'success' : 'error')
 
-    if (result.success) {
-      ElNotification({
-        title: '成功',
-        message: result.message,
-        type: 'success'
-      })
-    } else {
+    if (!result.success) {
       ElNotification({
         title: '导入失败',
         message: result.message,
