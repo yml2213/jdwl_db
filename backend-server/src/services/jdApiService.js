@@ -179,13 +179,32 @@ export async function uploadJpSearchFile(fileBuffer, sessionData) {
     Cookie: cookieString,
     Referer: `https://o.jdl.com/goToMainIframe.do`
   }
+  const MAX_RETRIES = 3
+  const RETRY_DELAY = 5 * 60 * 1000 + 5000 // 5 minutes and 5 seconds
 
-  return requestJdApi({
-    method: 'POST',
-    url,
-    data: formData,
-    headers
-  })
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    console.log(`[jdApiService] 尝试上传京配打标文件... (第 ${attempt} 次)`)
+    const result = await requestJdApi({
+      method: 'POST',
+      url,
+      data: formData,
+      headers
+    })
+
+    // 检查业务层面的频率限制错误
+    if (result && result.resultMessage && result.resultMessage.includes('频繁操作')) {
+      if (attempt < MAX_RETRIES) {
+        console.log(
+          `[jdApiService] 触发频率限制，将在约5分钟后重试... (响应: ${result.resultMessage})`
+        )
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY))
+        continue // 继续下一次尝试
+      } else {
+        throw new Error(`达到最大重试次数后仍然失败: ${result.resultMessage}`)
+      }
+    }
+    return result
+  }
 }
 
 /**

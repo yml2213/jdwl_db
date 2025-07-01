@@ -5,11 +5,14 @@
  * 2. 部分取消京配打标
  */
 import XLSX from 'xlsx'
+import fs from 'fs'
+import path from 'path'
 import {
     uploadJpSearchFile,
     getJpEnabledCsgsForStore
 } from '../services/jdApiService.js'
 import getCSGTask from './getCSG.task.js'
+import { executeInBatches } from '../utils/batchProcessor.js'
 
 /**
  * 创建用于取消京配查询的Excel文件Buffer
@@ -38,7 +41,6 @@ async function execute(context, sessionData) {
     let { csgList } = context
     const isWholeStore = options?.cancelJpSearchScope === 'all'
 
-
     if (!sessionData || !sessionData.cookies) {
         throw new Error('缺少会话信息')
     }
@@ -65,7 +67,7 @@ async function execute(context, sessionData) {
                 }
                 csgList = csgResult.csgList
             }
-            itemsToProcess = csgList
+            itemsToProcess = csgList || []
         }
 
         if (!itemsToProcess || itemsToProcess.length === 0) {
@@ -79,21 +81,63 @@ async function execute(context, sessionData) {
             `[Task: cancelJpSearch] 查询到 ${itemsToProcess.length} 个商品，将为它们取消京配打标。`
         )
 
-        // 2. Create Excel and upload
-        const fileBuffer = createJpSearchExcelBuffer(itemsToProcess)
-        const response = await uploadJpSearchFile(fileBuffer, sessionData)
+        const batchFn = async (batchItems) => {
+            try {
+                console.log(`[Task: cancelJpSearch] 正在为 ${batchItems.length} 个商品创建批处理文件...`)
+                const fileBuffer = createJpSearchExcelBuffer(batchItems)
 
-        console.log('取消京配打标=======> response', response)
+                // 保存文件到本地
+                try {
+                    const tempDir = path.resolve(process.cwd(), 'temp', '取消京配打标')
+                    if (!fs.existsSync(tempDir)) {
+                        fs.mkdirSync(tempDir, { recursive: true })
+                    }
+                    const timestamp = new Date().toISOString().replace(/:/g, '-')
+                    const shopNameForFile =
+                        store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+                    const filename = `${timestamp}_${shopNameForFile}.xls`
+                    const filePath = path.join(tempDir, filename)
+                    fs.writeFileSync(filePath, fileBuffer)
+                    console.log(`[Task: cancelJpSearch] 批处理文件已保存: ${filePath}`)
+                } catch (saveError) {
+                    console.error('[Task: cancelJpSearch] 保存Excel文件失败:', saveError)
+                }
 
-        if (response && response.resultCode === 1) {
-            return {
-                success: true,
-                message: `${response.resultData || '取消京配打标任务提交成功。'} (共 ${itemsToProcess.length} 个商品)`
+                const response = await uploadJpSearchFile(fileBuffer, sessionData)
+                if (response && response.resultCode === 1) {
+                    return {
+                        success: true,
+                        message: `${response.resultData || '取消京配打标任务提交成功。'} (处理了 ${batchItems.length
+                            } 个商品)`
+                    }
+                } else {
+                    const errorMessage = response?.message || '取消京配打标时发生未知错误'
+                    return { success: false, message: errorMessage }
+                }
+            } catch (error) {
+                console.error('[Task: cancelJpSearch] 批处理执行时发生严重错误:', error)
+                return { success: false, message: `批处理失败: ${error.message}` }
             }
-        } else {
-            const errorMessage = response.message || '取消京配打标时发生未知错误'
-            throw new Error(errorMessage)
         }
+
+        const BATCH_SIZE = 5000
+        const DELAY_MS = 1 * 60 * 1000
+
+        const batchResults = await executeInBatches({
+            items: itemsToProcess,
+            batchSize: BATCH_SIZE,
+            delay: DELAY_MS,
+            batchFn,
+            log: (message, level = 'info') =>
+                console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
+            isRunning: { value: true }
+        })
+
+        if (!batchResults.success) {
+            throw new Error(`取消京配打标任务有失败的批次: ${batchResults.message}`)
+        }
+
+        return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
     } catch (error) {
         console.error('[Task: cancelJpSearch] 任务执行失败:', error)
         throw new Error(`取消京配打标失败: ${error.message}`)
