@@ -1,5 +1,5 @@
 <template>
-  <div v-if="modelValue" class="importer-container">
+  <div class="importer-container">
     <div class="importer-header">
       <h4>导入商品简称</h4>
       <p class="subtitle">通过Excel文件批量导入商品简称信息。</p>
@@ -21,6 +21,7 @@
       </span>
       <span v-else>开始导入</span>
     </button>
+    <button @click="$emit('cancel')" class="cancel-button">取消</button>
 
     <div v-if="logs.length > 0" class="log-area">
       <div class="log-header">
@@ -47,7 +48,7 @@ const props = defineProps({
   payload: Object // v-model:payload
 })
 
-const emit = defineEmits(['update:payload'])
+const emit = defineEmits(['update:payload', 'cancel'])
 
 const selectedFile = ref(null)
 const isProcessing = ref(false)
@@ -142,18 +143,20 @@ const clearLogs = () => {
 
 <style scoped>
 .importer-container {
-  border: 1px solid #dcdfe6;
+  border: none;
   border-radius: 8px;
-  padding: 20px;
-  margin-top: 15px;
-  background-color: #fafafa;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  padding: 0px;
+  margin-top: 0px;
+  background-color: #fff;
+  box-shadow: none;
 }
 
 .importer-header h4 {
   margin: 0 0 5px 0;
   font-size: 16px;
   color: #303133;
+  justify-content: center;
+  gap: 8px;
 }
 
 .subtitle {
@@ -173,7 +176,7 @@ const clearLogs = () => {
   font-size: 14px;
   transition: background-color 0.3s;
   width: 100%;
-  margin-top: 15px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -274,5 +277,22 @@ const clearLogs = () => {
   border-radius: 4px;
   margin-top: 10px;
   background-color: #f8f9fa;
+}
+
+.cancel-button {
+  background-color: #f56c6c;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.cancel-button:hover {
+  background-color: #f78989;
 }
 </style>

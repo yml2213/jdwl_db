@@ -88,10 +88,10 @@
           <input type="number" v-model="form.options.inventoryAmount" class="inventory-input" />
         </div>
         <!-- Product Name Importer Sub-options -->
-        <ProductNameImporter
+        <!-- <ProductNameImporter
           v-model="form.options.importProductNames"
           v-model:payload="form.payloads.importProductNames"
-        />
+        /> -->
       </div>
 
       <div class="form-group">
@@ -119,12 +119,27 @@
       <button class="btn btn-primary">添加至快捷</button>
       <button class="btn btn-success" @click="$emit('addTask')">添加任务</button>
     </div>
+
+    <el-dialog
+      v-model="form.options.importProductNames"
+      title="导入商品简称"
+      width="600px"
+      :modal="false"
+      draggable
+      @close="form.options.importProductNames = false"
+    >
+      <ProductNameImporter
+        v-if="form.options.importProductNames"
+        v-model:payload="form.payloads.importProductNames"
+        @cancel="form.options.importProductNames = false"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { ElButton } from 'element-plus'
+import { ElButton, ElDialog } from 'element-plus'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
 import FileUploader from './FileUploader.vue'
