@@ -11,6 +11,7 @@ import {
   clearStockForWholeStore,
   uploadInventoryAllocationFile
 } from '../services/jdApiService.js'
+import { executeInBatches } from '../utils/batchProcessor.js'
 
 function createExcelFile(skuList, department, store) {
   const headers = [
@@ -66,51 +67,72 @@ async function execute(context, sessionData) {
       throw new Error(errorMessage)
     }
   } else {
-    // Specific SKUs mode (original logic)
+    // Specific SKUs mode with batching
     console.log(
-      `[Task: clearStockAllocation] 指定SKU库存清零模式，SKU数量: ${skus.length}`
+      `[Task: clearStockAllocation] 指定SKU库存清零模式，总SKU数量: ${skus.length}`
     )
-    const { cookies } = sessionData
-    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-    const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
-    if (!csrfToken) throw new Error('无法获取csrfToken')
 
-    const fileBuffer = createExcelFile(skus, department, store)
+    const batchFn = async (skuBatch) => {
+      console.log(
+        `[Task: clearStockAllocation] 正在为 ${skuBatch.length} 个SKU创建批处理文件...`
+      )
+      const fileBuffer = createExcelFile(skuBatch, department, store)
 
-    // 临时文件保存到本地
-    try {
-      const tempDir = path.resolve(process.cwd(), 'temp', '清零库存分配')
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true })
+      // 临时文件保存到本地
+      try {
+        const tempDir = path.resolve(process.cwd(), 'temp', '清零库存分配')
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true })
+        }
+        const timestamp = new Date().toISOString().replace(/:/g, '-')
+        const shopNameForFile =
+          store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+        const fileName = `${timestamp}_${shopNameForFile}.xlsx`
+        const filePath = path.join(tempDir, fileName)
+        fs.writeFileSync(filePath, fileBuffer)
+        console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${filePath}`)
+      } catch (saveError) {
+        console.error('[Task: clearStockAllocation] 保存Excel文件失败:', saveError)
+        // 保存失败不应中断整个任务
       }
-      const timestamp = new Date().toISOString().replace(/:/g, '-')
-      const shopNameForFile =
-        store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
-      const fileName = `${timestamp}_${shopNameForFile}.xlsx`
-      const filePath = path.join(tempDir, fileName)
-      fs.writeFileSync(filePath, fileBuffer)
-      console.log(`[Task: clearStockAllocation] 临时文件已保存: ${filePath}`)
-    } catch (saveError) {
-      console.error('[Task: clearStockAllocation] 保存Excel文件失败:', saveError)
-      // Saving the file is for logging/debugging, should not interrupt the main task.
-    }
 
-    // 调用封装在 jdApiService 中的函数来上传文件
-    const responseText = await uploadInventoryAllocationFile(fileBuffer, sessionData)
+      // 调用封装在 jdApiService 中的函数来上传文件
+      const result = await uploadInventoryAllocationFile(fileBuffer, sessionData)
 
-    // The response is expected to be a string that looks like JSON.
-    try {
-      const result = JSON.parse(responseText)
-      if (result && result.success === true) {
-        return { success: true, message: '库存清零任务上传成功' }
+
+      // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360515796.csv","resultCode":"1"}
+
+      // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360063858.csv","resultCode":"2"}
+      // uploadInventoryAllocationFile 已经处理了重试逻辑，这里只需检查最终结果
+      if (result && result.resultCode == 1) {
+        return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
+      } else if (result && result.resultCode == 2) {
+        return { success: false, message: `批处理失败处理 ${skuBatch.length} 个SKU。` }
       } else {
-        const errorMessage = result ? result.message || JSON.stringify(result) : '上传失败但未返回有效错误信息'
-        throw new Error(errorMessage)
+        const errorMessage =
+          result?.resultMessage || JSON.stringify(result) || '上传失败但未返回有效错误信息'
+        return { success: false, message: errorMessage }
       }
-    } catch (e) {
-      console.error('[Task: clearStockAllocation] Failed to parse JSON response:', responseText)
-      throw new Error('上传失败，无法解析服务器响应。')
     }
+
+    const BATCH_SIZE = 2000
+    const DELAY_MS = 5 * 60 * 1000 // 5 minutes
+
+    const batchResults = await executeInBatches({
+      items: skus,
+      batchSize: BATCH_SIZE,
+      delay: DELAY_MS,
+      batchFn,
+      log: (message, level = 'info') =>
+        console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
+      isRunning: { value: true } // 假设任务总是在运行
+    })
+
+    if (!batchResults.success) {
+      throw new Error(`库存清零任务有失败的批次: ${batchResults.message}`)
+    }
+
+    return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
   }
 }
 

@@ -107,7 +107,7 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
 }
 
 /**
- * 上传 启用库存商品分配  的文件  --- 启用库存商品分配
+ * 上传 启用库存商品分配  的文件  --- 启用库存商品分配    库存清零也是这个接口
  * @param {Buffer} fileBuffer - 包含Excel数据的文件Buffer
  * @param {object} sessionData - 完整的会话对象
  * @returns {Promise<object>} - 操作结果
@@ -118,8 +118,6 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
   const url = '/goodsStockConfig/importGoodsStockConfig.do'
   const formData = new FormData()
   formData.append('goodsStockConfigExcelFile', fileBuffer, 'goodsStockConfigTemplate.xlsx')
-  // formData.append('token', csrfToken)
-  // formData.append('query.maxCount', 50000)
 
   const headers = {
     ...formData.getHeaders(),
@@ -127,12 +125,35 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
     Referer: 'https://o.jdl.com/goodsStockConfig/showImport.do'
   }
 
-  return requestJdApi({
-    method: 'POST',
-    url: url,
-    data: formData,
-    headers: headers
-  })
+  const MAX_RETRIES = 3
+  const RETRY_DELAY = 5 * 60 * 1000 + 5000 // 5 minutes and 5 seconds
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    console.log(`[jdApiService] 尝试上传库存分配文件... (第 ${attempt} 次)`)
+    // requestJdApi 已经包含了 try-catch，会抛出网络或HTTP层面的错误
+    const result = await requestJdApi({
+      method: 'POST',
+      url: url,
+      data: formData,
+      headers: headers
+    })
+
+    // 检查业务层面的频率限制错误
+    if (result && result.resultMessage && result.resultMessage.includes('频繁操作')) {
+      if (attempt < MAX_RETRIES) {
+        console.log(
+          `[jdApiService] 触发频率限制，将在约5分钟后重试... (响应: ${result.resultMessage})`
+        )
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY))
+        continue // 继续下一次尝试
+      } else {
+        // 最后一次尝试仍然失败，则抛出错误
+        throw new Error(`达到最大重试次数后仍然失败: ${result.resultMessage}`)
+      }
+    }
+    // 如果没有频率限制错误，则直接返回结果
+    return result
+  }
 }
 
 /**

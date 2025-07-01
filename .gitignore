@@ -6,3 +6,5 @@ out
 *.log*
 .idea
 excel_gen
+backend-server/temp
+
