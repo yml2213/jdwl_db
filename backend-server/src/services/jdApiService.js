@@ -579,9 +579,21 @@ export async function uploadProductNames(fileBuffer, fileName, sessionData) {
 
   console.log('[jdApiService] 商品简称文件上传成功，响应:', responseData)
 
-  // 后端返回的是HTML，需要自行解析判断
-  // 这里我们简化处理，认为只要请求不抛异常就是成功，具体结果需要从 message 中看
-  if (responseData && typeof responseData === 'object' && responseData.resultCode === '1') {
+  // 1. 检查是否正在处理中 (最高优先级)
+  if (
+    responseData &&
+    responseData.resultMsg &&
+    responseData.resultMsg.includes('无需重复执行,请耐心等待')
+  ) {
+    return {
+      success: false,
+      message: '一个导入任务正在处理中，请5分钟后再试。',
+      data: responseData
+    }
+  }
+
+  // 2. 检查明确的成功响应
+  if (responseData && responseData.resultCode === '1') {
     const totalCount = parseInt(responseData.totalNum) || 0
     const successCount = parseInt(responseData.successNum) || 0
     const failCount = parseInt(responseData.failNum) || 0
@@ -592,19 +604,21 @@ export async function uploadProductNames(fileBuffer, fileName, sessionData) {
         `导入完成: 共${totalCount}条, 成功${successCount}条, 失败${failCount}条`,
       data: responseData
     }
-  } else if (typeof responseData === 'string' && responseData.includes('导入结果')) {
-    // 处理HTML响应
+  }
+
+  // 3. 处理HTML响应（作为一种可能的成功形式）
+  if (typeof responseData === 'string' && responseData.includes('导入结果')) {
     return {
       success: true, // 假设只要看到导入结果页面就是成功提交
       message: '文件已上传，请在页面查看具体导入结果。'
     }
   }
-  else {
-    return {
-      success: false,
-      message: responseData ? responseData.resultMsg || '导入商品简称失败' : '导入失败，无响应数据',
-      data: responseData
-    }
+
+  // 4. 其他所有情况都视为失败
+  return {
+    success: false,
+    message: responseData ? responseData.resultMsg || '导入商品简称失败' : '导入失败，无响应数据',
+    data: responseData
   }
 }
 

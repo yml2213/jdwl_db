@@ -25,8 +25,8 @@ async function readExcelFile(filePath) {
 }
 
 function createNewExcelData(originalData, department) {
-    console.log('originalData--->', originalData)
-    console.log('department--->', department)
+    // console.log('originalData--->', originalData)
+    // console.log('department--->', department)
     const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
     const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
     const rows = originalData
