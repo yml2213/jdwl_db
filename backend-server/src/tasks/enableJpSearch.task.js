@@ -4,9 +4,9 @@
 import XLSX from 'xlsx'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { uploadJpSearchFile } from '../services/jdApiService.js'
 import getCSGTask from './getCSG.task.js'
+import { executeInBatches } from '../utils/batchProcessor.js'
 
 /**
  * 创建用于京配查询的Excel文件Buffer
@@ -61,39 +61,65 @@ async function execute(context, sessionData) {
     `[Task: enableJpSearch] 将为 ${itemsToProcess.length} 个商品启用京配打标。`
   )
 
-  try {
-    const fileBuffer = createJpSearchExcelBuffer(itemsToProcess)
+  const batchFn = async (batchItems) => {
+    try {
+      const fileBuffer = createJpSearchExcelBuffer(batchItems)
 
-    // 保存文件用于测试
-    const __filename = fileURLToPath(import.meta.url)
-    const __dirname = path.dirname(__filename)
-    const tempDir = path.resolve(__dirname, '../../temp')
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true })
-    }
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/:/g, '-')
-      .replace(/\..+/, '')
-    const filename = `${timestamp}-jp-search-upload.xls`
-    const filePath = path.join(tempDir, filename)
-    fs.writeFileSync(filePath, fileBuffer)
-    console.log(`[Task: enableJpSearch] 临时文件已保存: ${filePath}`)
+      // 保存文件到本地
+      try {
+        const tempDir = path.resolve(process.cwd(), 'temp', '启用京配打标生效')
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true })
+        }
+        const timestamp = new Date().toISOString().replace(/:/g, '-')
+        const shopNameForFile = store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+        const filename = `${timestamp}_${shopNameForFile}.xls`
+        const filePath = path.join(tempDir, filename)
+        fs.writeFileSync(filePath, fileBuffer)
+        console.log(`[Task: enableJpSearch] Excel文件已保存到: ${filePath}`)
+      } catch (saveError) {
+        console.error(`[Task: enableJpSearch] 保存Excel文件失败:`, saveError)
+        // 不中断流程
+      }
 
-    const response = await uploadJpSearchFile(fileBuffer, sessionData)
+      const response = await uploadJpSearchFile(fileBuffer, sessionData)
 
-    console.log('启用京配打标生效=======> response', response)
+      if (response && response.resultCode === 1) {
+        return { success: true, message: response.resultData || '京配打标任务提交成功。' }
+      }
 
-    if (response && response.resultCode === 1) {
-      return { success: true, message: response.resultData || '京配打标任务提交成功。' }
-    } else {
+      // 检查频率限制错误
+      if (response && response.message && response.message.includes('频繁操作')) {
+        return { success: false, message: response.message }
+      }
+
       const errorMessage = response.message || '启用京配打标时发生未知错误'
-      throw new Error(errorMessage)
+      return { success: false, message: errorMessage }
+    } catch (error) {
+      console.error('[Task: enableJpSearch] 批处理异常:', error)
+      return { success: false, message: `批处理异常: ${error.message}` }
     }
-  } catch (error) {
-    console.error('[Task: enableJpSearch] 任务执行失败:', error)
-    throw new Error(`启用京配打标生效失败: ${error.message}`)
   }
+
+  const BATCH_SIZE = 5000
+  const BATCH_DELAY = 1 * 60 * 1000 // 1 minute
+
+  const result = await executeInBatches({
+    items: itemsToProcess,
+    batchSize: BATCH_SIZE,
+    delay: BATCH_DELAY,
+    batchFn,
+    log: (message, type = 'info') => {
+      console.log(`[batchProcessor] [${type.toUpperCase()}] ${message}`)
+    },
+    isRunning: { value: true }
+  })
+
+  if (!result.success) {
+    throw new Error(`启用京配打标生效失败: ${result.message}`)
+  }
+
+  return { success: true, message: result.message }
 }
 
 export default {
