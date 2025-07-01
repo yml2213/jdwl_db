@@ -3,6 +3,9 @@
  */
 import XLSX from 'xlsx'
 import { uploadLogisticsAttributesFile } from '../services/jdApiService.js'
+import { executeInBatches } from '../utils/batchProcessor.js'
+import fs from 'fs'
+import path from 'path'
 
 /**
  * 主执行函数 - 由任务调度器调用
@@ -33,34 +36,66 @@ async function execute(context, sessionData) {
   )
   console.log('[Task: importLogisticsAttributes] 使用的物流参数:', logisticsOptions)
 
-  try {
-    // 2. 创建物流属性Excel文件Buffer
-    const fileBuffer = createLogisticsExcelBuffer(itemsToProcess, store, logisticsOptions)
+  const batchFn = async (batchItems) => {
+    try {
+      const fileBuffer = createLogisticsExcelBuffer(batchItems, store, logisticsOptions)
 
-    // 3. 上传文件
-    const dataForApi = { ...sessionData, store }
-    const result = await uploadLogisticsAttributesFile(fileBuffer, dataForApi)
+      // 将生成的Excel文件保存到本地
+      try {
+        const tempDir = path.resolve(process.cwd(), 'temp', '导入物流属性')
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true })
+        }
+        const timestamp = new Date().toISOString().replace(/:/g, '-')
+        const deptNameForFile = store?.deptName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-dept'
+        const filename = `${timestamp}_${deptNameForFile}.xls`
+        const filePath = path.join(tempDir, filename)
+        fs.writeFileSync(filePath, fileBuffer)
+        console.log(`[Task: importLogisticsAttributes] Excel文件已保存到: ${filePath}`)
+      } catch (saveError) {
+        console.error(`[Task: importLogisticsAttributes] 保存Excel文件失败:`, saveError)
+        // 保存失败不应中断整个任务，仅记录错误
+      }
 
-    // 4. 处理API响应
-    //   { success: false, tipMsg: '', data: '5分钟内只能导入一次,请稍后再试!!' }
-    // {success: true,tipMsg: '',data: '导入成功,任务编号:WLSX20250629052602,请于10分钟之后查看导入日志!'}
-    if (result.success) {
-      console.log('[Task: importLogisticsAttributes] "导入物流属性" 任务成功完成。')
-      return { success: true, message: result.data || '物流属性导入成功' }
-    } else if (result.data.includes('5分钟内只能导入一次')) {
-      console.log(
-        '[Task: importLogisticsAttributes] "导入物流属性" 5分钟内只能导入一次,请稍后再试!!'
-      )
-      return { success: false, message: result.data || '5分钟内只能导入一次,请稍后再试!!' }
-    } else {
-      const errorMessage = result.data || '导入物流属性时发生未知错误'
-      console.error(`[Task: importLogisticsAttributes] 导入失败: ${errorMessage}`)
-      throw new Error(errorMessage)
+      const dataForApi = { ...sessionData, store }
+      const result = await uploadLogisticsAttributesFile(fileBuffer, dataForApi)
+
+      if (result.success) {
+        return { success: true, message: result.data || '物流属性导入成功' }
+      } else if (result.data && result.data.includes('5分钟内只能导入一次')) {
+        // 让 batch processor 知道这是一个可重试的错误
+        return { success: false, message: result.data }
+      } else {
+        // 对于其他错误，认为是决定性的失败
+        const errorMessage = result.data || '导入物流属性时发生未知错误'
+        console.error(`[Task: importLogisticsAttributes] 导入失败: ${errorMessage}`)
+        // 抛出错误以在 batch processor 中被捕获为失败
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      console.error('[Task: importLogisticsAttributes] 批处理失败:', error)
+      return { success: false, message: `批处理失败: ${error.message}` }
     }
-  } catch (error) {
-    console.error('[Task: importLogisticsAttributes] 任务执行失败:', error)
-    throw new Error(`导入物流属性失败: ${error.message}`)
   }
+
+  const BATCH_SIZE = 2000
+  const DELAY_MS = 5 * 60 * 1000 // 京东限制5分钟一次
+
+  const batchResults = await executeInBatches({
+    items: itemsToProcess,
+    batchSize: BATCH_SIZE,
+    delay: DELAY_MS,
+    batchFn,
+    log: (message, level = 'info') =>
+      console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
+    isRunning: { value: true }
+  })
+
+  if (!batchResults.success) {
+    throw new Error(`导入物流属性任务处理完成，但有失败的批次: ${batchResults.message}`)
+  }
+
+  return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
 }
 
 /**

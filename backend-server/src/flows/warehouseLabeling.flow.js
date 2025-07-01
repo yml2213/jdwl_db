@@ -54,7 +54,13 @@ const workflowSteps = [
   {
     name: '导入物流属性',
     shouldExecute: (context) => context.options.importProps,
-    execute: (context, session) => executeTask('importLogisticsAttributes', context, session)
+    execute: (context, session) => {
+      const taskPayload = {
+        ...context,
+        logisticsOptions: context.options.logistics
+      }
+      return executeTask('importLogisticsAttributes', taskPayload, session)
+    }
   },
   {
     name: '等待物流属性后台任务处理',
@@ -112,7 +118,7 @@ async function execute(context, session, log) {
           // 将步骤的执行结果合并到上下文中，供后续步骤使用
           currentContext = { ...currentContext, ...result }
         }
-        
+
         // 使用步骤返回的msg字段，提供更详细的成功日志
         const successDetails = result?.message ? `: ${result.message}` : ''
         log(`步骤 [${step.name}] 执行成功${successDetails}`, 'success')
