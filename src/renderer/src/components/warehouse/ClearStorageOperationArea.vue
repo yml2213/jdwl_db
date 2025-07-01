@@ -2,13 +2,13 @@
   <div class="operation-area">
     <div class="form-group">
       <label class="form-label">快捷选择</label>
-      <div class="radio-group">
-        <label class="radio-label">
-          <input type="radio" v-model="mode" value="sku" />
+      <div class="segmented-control">
+        <label class="segmented-control-option" :class="{ 'is-active': mode === 'sku' }">
+          <input type="radio" v-model="mode" value="sku" class="segmented-control-input" />
           输入SKU
         </label>
-        <label class="radio-label">
-          <input type="radio" v-model="mode" value="whole_store" />
+        <label class="segmented-control-option" :class="{ 'is-active': mode === 'whole_store' }">
+          <input type="radio" v-model="mode" value="whole_store" class="segmented-control-input" />
           整店
         </label>
       </div>
@@ -145,6 +145,49 @@ const handleFileChange = (file) => {
   margin-bottom: 8px;
   color: #333;
   font-size: 14px;
+}
+
+/* Updated styles for a modern segmented control */
+.segmented-control {
+  display: flex;
+  background-color: #f0f2f5; /* Light grey background for the container */
+  border-radius: 6px; /* More rounded corners */
+  padding: 4px;
+  width: 100%;
+  gap: 4px; /* Add space between options */
+}
+
+.segmented-control-option {
+  flex: 1;
+  padding: 8px 12px;
+  text-align: center;
+  cursor: pointer;
+  color: #606266; /* Muted text color for inactive options */
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  font-size: 14px;
+  border-radius: 4px; /* Rounded corners for the option itself */
+  background-color: transparent;
+  border: none;
+}
+
+.segmented-control-option:not(:last-child) {
+  border-right: none;
+}
+
+.segmented-control-option.is-active {
+  background-color: #409eff; /* White background for the active "pill" */
+  color: #ffffff; /* Darker text for active */
+  font-weight: 500;
+  box-shadow: none; /* Subtle shadow to lift it up */
+}
+
+.segmented-control-input {
+  /* Hide the actual radio button */
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
 .radio-group,

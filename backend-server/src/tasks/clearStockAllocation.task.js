@@ -31,9 +31,9 @@ async function execute(context, sessionData) {
 
   // console.log('清空整个店铺的库存分配 ===>', context)
   // console.log('清空整个店铺的库存分配 ===>', sessionData)
-  console.log('清空整个店铺的库存分配 skus===>', skus)
-  console.log('清空整个店铺的库存分配 store===>', store)
-  console.log('清空整个店铺的库存分配 department===>', department)
+  console.log('库存分配清零 输入的 skus===>', skus)
+  console.log('库存分配清零  store===>', store)
+  console.log('库存分配清零  department===>', department)
 
   if (!skus || skus.length === 0) throw new Error('SKU列表为空')
   if (!store || !department) throw new Error('缺少店铺或事业部信息')
@@ -80,6 +80,8 @@ async function execute(context, sessionData) {
       data: formData,
       headers: headers
     })
+
+    console.log('库存分配清零 上传的文件 responseText===>', responseText)
 
     // The response is expected to be a JSON object.
     // Check for a success flag in the returned object.

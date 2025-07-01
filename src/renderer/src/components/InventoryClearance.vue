@@ -2,10 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
-import {
-  saveInventoryClearanceForm,
-  getInventoryClearanceForm
-} from '@/utils/storageHelper'
+import { saveInventoryClearanceForm, getInventoryClearanceForm } from '@/utils/storageHelper'
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
@@ -42,15 +39,22 @@ const handleAddTask = () => {
   if (!form.value.options.clearStockAllocation && !form.value.options.cancelJpSearch)
     return alert('请至少选择一个功能选项')
 
-  const skus = form.value.sku.split(/[\n,，\\s]+/).filter((s) => s.trim())
   const isWholeStore = form.value.mode === 'whole_store'
+  let skus = []
 
-  if (!isWholeStore && skus.length === 0) return alert('请输入至少一个SKU')
+  if (isWholeStore) {
+    skus = ['WHOLE_STORE'] // 整店模式使用特殊标识
+  } else {
+    skus = form.value.sku.split(/[\n,，\\s]+/).filter((s) => s.trim())
+    if (skus.length === 0) {
+      return alert('请输入至少一个SKU')
+    }
+  }
 
   // 构造要传递给执行器的数据
   const executionData = {
     scope: form.value.mode, // 'sku' or 'whole_store'
-    skus: isWholeStore ? ['WHOLE_STORE'] : skus,
+    skus, // 使用处理后的skus
     store: currentShopInfo.value,
     options: { ...form.value.options }
   }
@@ -77,9 +81,13 @@ const handleAddTask = () => {
 }
 
 // --- 侦听器和生命周期 ---
-watch(form, (newForm) => {
-  saveInventoryClearanceForm(newForm)
-}, { deep: true })
+watch(
+  form,
+  (newForm) => {
+    saveInventoryClearanceForm(newForm)
+  },
+  { deep: true }
+)
 
 watch(
   () => props.isLoggedIn,
