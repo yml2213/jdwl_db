@@ -2,19 +2,8 @@
  * 后端任务：添加库存（通过api）
  */
 import { createPurchaseOrder } from '../services/jdApiService.js'
-import { fileURLToPath } from 'url'
-import path from 'path'
-
-// 动态加载并执行任务的辅助函数
-async function executeTask(taskName, payload, session) {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url))
-    const taskPath = path.join(__dirname, `${taskName}.task.js`)
-    const taskModule = await import(taskPath)
-    if (!taskModule.default || typeof taskModule.default.execute !== 'function') {
-        throw new Error(`任务 ${taskName} 或其 execute 方法未找到`)
-    }
-    return taskModule.default.execute(payload, session)
-}
+import getProductDetailsTask from './getProductDetails.task.js'
+import { executeInBatches } from '../utils/batchProcessor.js'
 
 /**
  * 主执行函数 - 由工作流调用
@@ -32,7 +21,7 @@ async function execute(context, sessionData) {
     // 如果没有预先获取商品详情，则立即获取
     if (!products || products.length === 0) {
         console.log('[Task: addInventory] 未在上下文中找到商品详情，将自动执行查询...')
-        const detailsResult = await executeTask('getProductDetails', context, sessionData)
+        const detailsResult = await getProductDetailsTask.execute(context, sessionData)
         if (!detailsResult.success || !detailsResult.products) {
             throw new Error(`自动获取商品详情失败: ${detailsResult.message || '未知错误'}`)
         }
@@ -46,34 +35,58 @@ async function execute(context, sessionData) {
         )
     }
 
+    if (products.length === 0) {
+        return { success: true, message: '没有可处理的商品，任务结束。' }
+    }
+
     if (!warehouse || !warehouse.id) {
         throw new Error('未选择仓库，无法添加库存。')
     }
-    console.log('vendor', vendor)
+    // console.log('vendor', vendor)
     if (!vendor || !vendor.id) {
         throw new Error('供应商信息不完整，无法创建采购单。')
     }
 
     console.log(`[Task: addInventory] "添加库存" 开始，仓库 [${warehouse.warehouseName}]...`)
-    console.log(`[Task: addInventory] 将为 ${products.length} 个商品创建采购单。`)
+    console.log(`[Task: addInventory] 总共将为 ${products.length} 个商品创建采购单。`)
 
-    try {
-        const response = await createPurchaseOrder(products, context, sessionData)
+    const batchFn = async (productBatch) => {
+        try {
+            console.log(`[Task: addInventory] 正在为 ${productBatch.length} 个商品创建采购单...`)
+            const response = await createPurchaseOrder(productBatch, context, sessionData)
+            console.log('[Task: addInventory] 创建采购单响应:', response)
 
-        console.log('[Task: addInventory] 创建采购单响应:', response)
-
-        if (response.resultCode === 1) {
-            return {
-                success: true,
-                message: response.resultMessage || '采购单创建成功'
+            if (response.resultCode === 1) {
+                return { success: true, message: response.resultMessage || `成功创建采购单。` }
+            } else {
+                // 返回可识别的失败信息
+                return { success: false, message: response.resultMessage || '创建采购单失败' }
             }
-        } else {
-            throw new Error(response.resultMessage || '创建采购单失败')
+        } catch (error) {
+            console.error('[Task: addInventory] 批处理异常:', error)
+            return { success: false, message: `批处理异常: ${error.message}` }
         }
-    } catch (error) {
-        console.error('[Task: addInventory] 任务执行失败:', error)
-        throw new Error(`添加库存失败: ${error.message}`)
     }
+
+    const BATCH_SIZE = 500
+    const BATCH_DELAY = 1000 // 1 second delay between batches
+
+    const result = await executeInBatches({
+        items: products,
+        batchSize: BATCH_SIZE,
+        delay: BATCH_DELAY,
+        batchFn,
+        log: (message, type = 'info') => {
+            console.log(`[batchProcessor] [${type.toUpperCase()}] ${message}`)
+        },
+        isRunning: { value: true }
+    })
+
+    if (!result.success) {
+        throw new Error(`添加库存失败: ${result.message}`)
+    }
+
+    return { success: true, message: `所有采购单创建成功: ${result.message}` }
 }
 
 export default {
