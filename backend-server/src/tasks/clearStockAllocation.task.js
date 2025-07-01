@@ -45,9 +45,9 @@ async function execute(context, sessionData) {
 
   // console.log('清空整个店铺的库存分配 ===>', context)
   // console.log('清空整个店铺的库存分配 ===>', sessionData)
-  console.log('库存分配清零 输入的 skus===>', skus)
-  console.log('库存分配清零  store===>', store)
-  console.log('库存分配清零  department===>', department)
+  // console.log('库存分配清零 输入的 skus===>', skus)
+  // console.log('库存分配清零  store===>', store)
+  // console.log('库存分配清零  department===>', department)
 
   if (!skus || skus.length === 0) throw new Error('SKU列表为空')
   if (!store || !department) throw new Error('缺少店铺或事业部信息')
@@ -73,45 +73,48 @@ async function execute(context, sessionData) {
     )
 
     const batchFn = async (skuBatch) => {
-      console.log(
-        `[Task: clearStockAllocation] 正在为 ${skuBatch.length} 个SKU创建批处理文件...`
-      )
-      const fileBuffer = createExcelFile(skuBatch, department, store)
-
-      // 临时文件保存到本地
       try {
-        const tempDir = path.resolve(process.cwd(), 'temp', '清零库存分配')
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true })
+        console.log(
+          `[Task: clearStockAllocation] 正在为 ${skuBatch.length} 个SKU创建批处理文件...`
+        )
+        const fileBuffer = createExcelFile(skuBatch, department, store)
+
+        // 临时文件保存到本地
+        try {
+          const tempDir = path.resolve(process.cwd(), 'temp', '清零库存分配')
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true })
+          }
+          const timestamp = new Date().toISOString().replace(/:/g, '-')
+          const shopNameForFile =
+            store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+          const fileName = `${timestamp}_${shopNameForFile}.xlsx`
+          const filePath = path.join(tempDir, fileName)
+          fs.writeFileSync(filePath, fileBuffer)
+          console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${filePath}`)
+        } catch (saveError) {
+          console.error('[Task: clearStockAllocation] 保存Excel文件失败:', saveError)
+          // 保存失败不应中断整个任务
         }
-        const timestamp = new Date().toISOString().replace(/:/g, '-')
-        const shopNameForFile =
-          store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
-        const fileName = `${timestamp}_${shopNameForFile}.xlsx`
-        const filePath = path.join(tempDir, fileName)
-        fs.writeFileSync(filePath, fileBuffer)
-        console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${filePath}`)
-      } catch (saveError) {
-        console.error('[Task: clearStockAllocation] 保存Excel文件失败:', saveError)
-        // 保存失败不应中断整个任务
-      }
 
-      // 调用封装在 jdApiService 中的函数来上传文件
-      const result = await uploadInventoryAllocationFile(fileBuffer, sessionData)
+        // 调用封装在 jdApiService 中的函数来上传文件
+        const result = await uploadInventoryAllocationFile(fileBuffer, sessionData)
 
+        console.log('库存分配清零 响应 result===>', result)
 
-      // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360515796.csv","resultCode":"1"}
-
-      // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360063858.csv","resultCode":"2"}
-      // uploadInventoryAllocationFile 已经处理了重试逻辑，这里只需检查最终结果
-      if (result && result.resultCode == 1) {
-        return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
-      } else if (result && result.resultCode == 2) {
-        return { success: false, message: `批处理失败处理 ${skuBatch.length} 个SKU。` }
-      } else {
-        const errorMessage =
-          result?.resultMessage || JSON.stringify(result) || '上传失败但未返回有效错误信息'
-        return { success: false, message: errorMessage }
+        // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360515796.csv","resultCode":"1"}
+        // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360063858.csv","resultCode":"2"}
+        // uploadInventoryAllocationFile 已经处理了重试逻辑，这里只需检查最终结果
+        if (result && (result.resultCode == 1 || result.resultCode == 2)) {
+          return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
+        } else {
+          const errorMessage =
+            result?.resultMessage || JSON.stringify(result) || '上传失败但未返回有效错误信息'
+          return { success: false, message: errorMessage }
+        }
+      } catch (error) {
+        console.error('[Task: clearStockAllocation] 批处理执行时发生严重错误:', error)
+        return { success: false, message: `批处理失败: ${error.message}` }
       }
     }
 
