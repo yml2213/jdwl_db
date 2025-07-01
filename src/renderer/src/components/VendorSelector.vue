@@ -226,12 +226,20 @@ window.electron.ipcRenderer.on('cookies-cleared', () => {
   margin-bottom: 15px;
 }
 
-.search-input {
+.search-input,
+.vendor-select {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #e0e0e0;
+  padding: 12px 15px;
+  font-size: 16px;
+  border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.3s;
+}
+
+.search-input:focus,
+.vendor-select:focus {
+  border-color: #2196f3;
 }
 
 .select-wrapper {

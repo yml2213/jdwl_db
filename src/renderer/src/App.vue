@@ -336,12 +336,10 @@ body {
 }
 
 .login-prompt {
-  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 1.2rem;
-  color: #888;
+  height: 100%;
 }
 
 .logged-in-content {
@@ -515,5 +513,19 @@ body {
 
 .tab-content {
   height: 100%;
+}
+
+.login-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow:
+    0 15px 35px rgba(0, 0, 0, 0.1),
+    0 5px 15px rgba(0, 0, 0, 0.05);
+  width: 90%;
+  max-width: 500px;
+  animation: fadeIn 0.8s ease-out;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.3s;
 }
 </style>

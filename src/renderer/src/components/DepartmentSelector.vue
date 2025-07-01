@@ -196,24 +196,24 @@ watch(
 
 .department-select {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #e0e0e0;
+  padding: 12px 15px;
+  font-size: 16px;
+  border: 1px solid #ddd;
   border-radius: 4px;
-  background-color: #fff;
-  font-size: 14px;
-  color: #333;
+  box-sizing: border-box;
+  transition: border-color 0.3s;
+  -webkit-appearance: none;
   appearance: none;
-  cursor: pointer;
+  background-color: white;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 12px;
 }
 
-.select-wrapper::after {
-  content: '▼';
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  color: #999;
-  pointer-events: none;
-  font-size: 12px;
+.department-select:focus {
+  border-color: #2196f3;
+  outline: none;
 }
 
 .department-select:disabled {

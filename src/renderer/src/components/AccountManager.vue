@@ -466,7 +466,8 @@ onUnmounted(() => {
   background-color: white;
   border-radius: 8px;
   width: 90%;
-  max-width: 800px;
+  min-width: 700px;
+  max-width: 900px;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
