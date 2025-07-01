@@ -4,36 +4,30 @@
       <label class="form-label">快捷选择</label>
       <div class="radio-group">
         <label class="radio-label">
-          <input
-            type="radio"
-            :checked="props.form.mode === 'sku'"
-            @change="$emit('update:form', { ...props.form, mode: 'sku' })"
-          />
+          <input type="radio" v-model="form.mode" value="sku" />
           输入SKU
         </label>
         <label class="radio-label">
-          <input
-            type="radio"
-            :checked="props.form.mode === 'whole_store'"
-            @change="$emit('update:form', { ...props.form, mode: 'whole_store' })"
-          />
+          <input type="radio" v-model="form.mode" value="whole_store" />
           整店SKU
         </label>
       </div>
     </div>
 
-    <div v-if="props.form.mode === 'sku'">
-      <div class="form-group">
+    <div v-if="form.mode === 'sku'" class="form-group sku-input-container">
+      <div class="sku-header">
         <label class="form-label">输入SKU</label>
-        <textarea
-          :value="props.form.sku"
-          @input="$emit('update:form', { ...props.form, sku: $event.target.value })"
-          placeholder="请输入SKU (多个SKU请每行一个)"
-          class="form-input"
-        ></textarea>
-      </div>
-      <div class="form-group">
         <FileUploader @file-change="handleFileChange" />
+      </div>
+      <div class="textarea-wrapper">
+        <textarea
+          v-model="form.sku"
+          placeholder="请输入SKU (多个SKU请每行一个)"
+          class="sku-textarea"
+        ></textarea>
+        <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
+          >清空</el-button
+        >
       </div>
     </div>
 
@@ -41,29 +35,11 @@
       <label class="form-label">功能选项 <span class="required-tip">(必选至少一项)</span></label>
       <div class="checkbox-group">
         <label class="checkbox-label">
-          <input
-            type="checkbox"
-            :checked="props.form.options.clearStockAllocation"
-            @change="
-              $emit('update:form', {
-                ...props.form,
-                options: { ...props.form.options, clearStockAllocation: $event.target.checked }
-              })
-            "
-          />
+          <input type="checkbox" v-model="form.options.clearStockAllocation" />
           库存分配清零
         </label>
         <label class="checkbox-label">
-          <input
-            type="checkbox"
-            :checked="props.form.options.cancelJpSearch"
-            @change="
-              $emit('update:form', {
-                ...props.form,
-                options: { ...props.form.options, cancelJpSearch: $event.target.checked }
-              })
-            "
-          />
+          <input type="checkbox" v-model="form.options.cancelJpSearch" />
           取消京配打标
         </label>
       </div>
@@ -71,21 +47,22 @@
 
     <div class="form-group">
       <StoreSelector
-        :model-value="props.selectedStore"
+        v-model="storeVModel"
         :shops="props.shopsList"
         :loading="props.isLoadingShops"
         :error="props.shopLoadError"
-        @update:modelValue="$emit('update:selectedStore', $event)"
       />
     </div>
 
-    <div class="form-group">
+    <div class="form-actions">
       <button class="btn btn-primary" @click="$emit('addTask')">添加任务</button>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { ElButton } from 'element-plus'
 import StoreSelector from './StoreSelector.vue'
 import FileUploader from './FileUploader.vue'
 
@@ -99,11 +76,26 @@ const props = defineProps({
 
 const emit = defineEmits(['update:form', 'update:selectedStore', 'addTask'])
 
+// 使用Proxy来简化v-model在深层对象上的使用
+const form = new Proxy(props.form, {
+  set(target, key, value) {
+    emit('update:form', { ...target, [key]: value })
+    return true
+  }
+})
+
+// 为StoreSelector创建v-model
+const storeVModel = computed({
+  get: () => props.selectedStore,
+  set: (value) => emit('update:selectedStore', value)
+})
+
 const handleFileChange = (file) => {
   if (file && file.name.endsWith('.txt')) {
     const reader = new FileReader()
     reader.onload = (e) => {
-      emit('update:form', { ...props.form, sku: e.target.result })
+      // 通过代理直接修改sku
+      form.sku = e.target.result
     }
     reader.readAsText(file)
   }
@@ -114,54 +106,92 @@ const handleFileChange = (file) => {
 .operation-area {
   flex: 0 0 380px;
   background: #f7f8fa;
-  padding: 20px 20px 60px 20px;
-  overflow-y: auto;
+  padding: 20px;
   border-right: 1px solid #e8e8e8;
   color: #333;
   display: flex;
   flex-direction: column;
 }
+
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 15px;
 }
+
 .form-label {
   display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #333;
+  font-size: 14px;
 }
+
 .radio-group,
 .checkbox-group {
   display: flex;
   gap: 1rem;
 }
+
 .radio-label,
 .checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-weight: 400;
 }
-.form-input {
+
+.sku-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.textarea-wrapper {
+  position: relative;
+}
+
+.sku-textarea {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ced4da;
-  border-radius: 0.25rem;
-  min-height: 100px;
+  min-height: 120px;
+  padding: 8px 40px 8px 10px; /* 右侧留出清空按钮空间 */
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  resize: vertical;
+  line-height: 1.5;
+  font-size: 14px;
 }
+
+.clear-sku-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0;
+}
+
+.form-actions {
+  margin-top: auto; /* Push to the bottom */
+}
+
 .btn-primary {
   width: 100%;
-  padding: 0.75rem;
-  background-color: #007bff;
+  padding: 10px 15px;
+  background-color: #409eff;
   color: white;
   border: none;
-  border-radius: 0.25rem;
+  border-radius: 4px;
   cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
 }
+
 .btn-primary:hover {
-  background-color: #0056b3;
+  background-color: #66b1ff;
 }
+
 .required-tip {
-  color: #dc3545;
-  font-size: 0.8rem;
+  color: #f56c6c;
+  font-size: 12px;
   font-weight: normal;
+  margin-left: 4px;
 }
 </style>

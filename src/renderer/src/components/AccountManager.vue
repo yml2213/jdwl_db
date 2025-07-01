@@ -68,21 +68,20 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
-import { isLoggedIn as checkLogin, getAllCookies } from '../utils/cookieHelper'
-import { createSession, getSessionStatus } from '../services/apiService'
+import { getAllCookies } from '../utils/cookieHelper'
+import { createSession } from '../services/apiService'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
   getSelectedVendor,
   getSelectedDepartment,
   hasUserSelected,
-  markAsSelected,
-  setLocalStorage
+  markAsSelected
 } from '../utils/storageHelper'
 import VendorSelector from './VendorSelector.vue'
 import DepartmentSelector from './DepartmentSelector.vue'
 
-const props = defineProps({
+defineProps({
   displayMode: {
     type: String,
     default: 'header', // 'header' or 'central'
@@ -140,23 +139,9 @@ const logout = async () => {
   if (window.electron && window.electron.ipcRenderer) {
     window.electron.ipcRenderer.send('logout')
   }
-  
+
   // 触发logout事件，通知App.vue更新状态
   emit('logout')
-}
-
-// 更新登录状态
-const updateLoginStatus = async () => {
-  isLoggedIn.value = await checkLogin()
-  if (isLoggedIn.value) {
-    updateUsername()
-    loadSavedSelections()
-
-    // 如果登录成功但尚未选择供应商和事业部，自动显示选择弹窗
-    if (!hasSelected.value) {
-      showSelectionModal.value = true
-    }
-  }
 }
 
 // 加载保存的选择
@@ -232,8 +217,8 @@ const handleDepartmentSelected = async (department) => {
 
     if (response) {
       alert('供应商和事业部选择成功，后端会话已创建！')
-      // 关键改动：将完整的会话上下文传递给父组件
-      emit('session-created', sessionData)
+      // 关键改动：不再传递本地数据，只通知父组件会话已创建
+      emit('session-created')
     } else {
       throw new Error('创建后端会话失败，未收到有效响应。')
     }
@@ -244,42 +229,69 @@ const handleDepartmentSelected = async (department) => {
 
   // 关闭选择弹窗
   closeSelectionModal()
-
-  // 移除页面重载，让 App.vue 的 checkLoginStatus 生效
-  // window.location.reload()
 }
 
-// 事件监听器
-const setupEventListeners = () => {
-  // 登录成功后更新状态
-  window.electron.ipcRenderer.on('login-successful', () => {
-    updateLoginStatus()
-  })
-  // 清除cookies后更新状态
-  window.electron.ipcRenderer.on('cookies-cleared', () => {
-    isLoggedIn.value = false
-    username.value = ''
-    selectedVendor.value = null
-    selectedDepartment.value = null
-    hasSelected.value = false
-  })
+const handleLoginSuccess = async () => {
+  console.log('登录成功事件被触发！')
+  await updateUsername() // 更新用户名
+  loadSavedSelections() // 加载已保存的选择
+
+  // 如果用户已经选择过供应商和事业部
+  if (hasUserSelected()) {
+    console.log('用户已选择供应商和事业部，尝试直接创建会话。')
+    try {
+      const cookies = await getAllCookies()
+      const vendorInfo = getSelectedVendor()
+      const departmentInfo = getSelectedDepartment()
+      const pinCookie = cookies?.find((c) => c.name === 'pin')
+
+      if (!pinCookie || !cookies || !vendorInfo || !departmentInfo) {
+        throw new Error('无法从本地存储恢复关键信息，请重新登录并选择。')
+      }
+
+      const sessionData = {
+        uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
+        cookies,
+        supplierInfo: vendorInfo,
+        departmentInfo
+      }
+
+      // Re-create session on the backend
+      const response = await createSession(sessionData)
+      if (response) {
+        console.log('后端会话已成功重建。')
+        // Emit event to notify App.vue to fetch the new session state
+        emit('session-created')
+      } else {
+        throw new Error('后端会话重建失败。')
+      }
+    } catch (error) {
+      console.error('自动创建会话失败:', error)
+      alert(`自动恢复会话失败: ${error.message}`)
+      // Fallback to showing selection modal if session creation fails
+      showSelectionModal.value = true
+    }
+  } else {
+    // If user has not selected vendor/department, show the modal.
+    console.log('用户尚未选择供应商和事业部，显示选择弹窗。')
+    showSelectionModal.value = true
+  }
 }
 
-// 移除事件监听器
-const removeEventListeners = () => {
-  window.electron.ipcRenderer.removeAllListeners('login-successful')
-  window.electron.ipcRenderer.removeAllListeners('cookies-cleared')
-}
-
-// 组件挂载时检查登录状态和设置事件监听
 onMounted(() => {
-  updateLoginStatus()
-  setupEventListeners()
+  // This is for when the app is opened and user is already logged in.
+  loadSavedSelections()
+  if (isLoggedIn.value) {
+    updateUsername()
+  }
+
+  // Listen for the login-successful event from the main process
+  window.electron.ipcRenderer.on('login-successful', handleLoginSuccess)
 })
 
-// 组件卸载时移除事件监听
 onUnmounted(() => {
-  removeEventListeners()
+  // Clean up the listener when the component is unmounted
+  window.electron.ipcRenderer.removeAllListeners('login-successful')
 })
 </script>
 

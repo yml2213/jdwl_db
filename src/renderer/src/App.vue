@@ -11,9 +11,7 @@ import {
   getSelectedDepartment,
   getSelectedVendor,
   getSelectedShop,
-  getSelectedWarehouse,
-  getLocalStorage,
-  setLocalStorage
+  getSelectedWarehouse
 } from './utils/storageHelper'
 
 // 开发模式标志
@@ -45,13 +43,18 @@ const checkSessionStatus = async () => {
   }
 }
 
+const handleSessionCreated = async () => {
+  console.log('会话创建/重建成功，正在从服务器获取最新会话状态...')
+  await checkSessionStatus()
+}
+
 /**
- * @description 当会话被创建或恢复时调用
+ * @description 当会话被恢复时调用
  * @param {object} context - 从后端获取的会话上下文
  */
 const handleSessionRestored = (context) => {
   sessionContext.value = context
-  console.log('会话已恢复/创建:', context)
+  console.log('会话已恢复:', context)
 }
 
 // 处理退出登录
@@ -144,7 +147,7 @@ const selectJsonContent = (event) => {
         <!-- 登录后才在header显示 -->
         <AccountManager
           v-if="isLoggedIn"
-          @session-created="handleSessionRestored"
+          @session-created="handleSessionCreated"
           @logout="handleLogout"
         />
         <!-- 开发模式下的调试按钮 -->
@@ -242,7 +245,7 @@ const selectJsonContent = (event) => {
             <AccountManager
               class="login-button-container"
               display-mode="central"
-              @session-created="handleSessionRestored"
+              @session-created="handleSessionCreated"
             />
           </div>
         </div>

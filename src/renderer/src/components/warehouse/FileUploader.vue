@@ -1,6 +1,6 @@
 <template>
   <div class="file-upload-container">
-    <el-button @click="triggerFileInput">选择文件</el-button>
+    <el-button type="primary" @click="triggerFileInput">选择文件</el-button>
     <div v-if="selectedFile" class="selected-file-info">
       <span class="file-name">{{ selectedFile.name }}</span>
       <el-button type="danger" link @click="clearFile">清除</el-button>
@@ -48,7 +48,7 @@ const triggerFileInput = async () => {
     })
 
     if (filePath) {
-      const fileName = filePath.split(/[\/\\]/).pop()
+      const fileName = filePath.split(/[/\\]/).pop()
       const fileObject = {
         name: fileName,
         path: filePath
