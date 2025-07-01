@@ -91,30 +91,36 @@ const startImport = async () => {
 
   try {
     const result = await importProductNamesFeature.execute(selectedFile.value)
-    addLog(`导入完成: ${result.message}`, result.success ? 'success' : 'error')
 
-    if (!result.success) {
+    if (result.success && result.data) {
+      // Backend endpoint call was successful, and we have task data
+      const taskResult = result.data
+      addLog(`导入完成: ${taskResult.message}`, taskResult.success ? 'success' : 'error')
+
+      if (taskResult.success) {
+        ElNotification({
+          title: '成功',
+          message: '商品简称导入任务已成功完成。',
+          type: 'success'
+        })
+      } else {
+        ElNotification({
+          title: '导入失败',
+          message: taskResult.message,
+          type: 'error',
+          duration: 0
+        })
+      }
+    } else {
+      // Handle cases where the /task endpoint itself failed
+      const errorMessage = result.message || '与后端通信失败。'
+      addLog(`导入失败: ${errorMessage}`, 'error')
       ElNotification({
         title: '导入失败',
-        message: result.message,
+        message: errorMessage,
         type: 'error',
-        duration: 0 // 不自动关闭
+        duration: 0
       })
-    }
-
-    if (result.data) {
-      addLog('-----服务器返回详细信息-----', 'info')
-      // 后端返回的原始结果可能在 response.data.data 中
-      const serverResult = result.data || result
-      if (serverResult?.resultMsg) {
-        addLog(serverResult.resultMsg, result.success ? 'info' : 'error')
-      } else if (result.data.message) {
-        addLog(result.data.message, result.success ? 'info' : 'error')
-      } else if (!result.success) {
-        // 如果没有具体的 resultMsg，也显示一个通用消息
-        addLog(result.message || '未知服务端错误', 'error')
-      }
-      addLog('--------------------------', 'info')
     }
   } catch (error) {
     const errorMessage = `出现未预料的错误: ${error.message}`
@@ -248,29 +254,20 @@ const clearLogs = () => {
 .log-line {
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
-  padding: 1px 0;
+  color: #606266;
+  margin-bottom: 5px;
 }
 
-.log-info {
+.log-line.log-info {
   color: #909399;
 }
 
-.log-success {
+.log-line.log-success {
   color: #67c23a;
 }
 
-.log-error {
+.log-line.log-error {
   color: #f56c6c;
-}
-
-.feature-options-container {
-  padding: 10px;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  margin-top: 10px;
-  background-color: #f8f9fa;
 }
 
 .cancel-button {
