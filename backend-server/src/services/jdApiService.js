@@ -460,13 +460,13 @@ export async function getDisabledProducts(skus, sessionData) {
   const PAGE_SIZE = 100 // 与前端保持一致
 
   // 京东接口限制单次查询的SKU数量，所以也需要分批
-  const SKU_BATCH_SIZE = 50
-  for (let i = 0; i < skus.length; i += SKU_BATCH_SIZE) {
-    const skuBatch = skus.slice(i, i + SKU_BATCH_SIZE)
+  const SKU_BATCH_SIZE = 1000
+
+  const fetchForBatch = async (skuBatch) => {
     let hasMore = true
     let start = 0
     let totalRecords = null // 用于跟踪总记录数
-    console.log(`[jdApiService] 正在处理SKU批次: ${i / SKU_BATCH_SIZE + 1}`)
+    const disabledProductsInBatch = []
 
     while (hasMore) {
       const response = await fetchProductStatusPage(skuBatch, sessionData, start, PAGE_SIZE)
@@ -476,7 +476,7 @@ export async function getDisabledProducts(skus, sessionData) {
           totalRecords = response.iTotalRecords || 0
         }
 
-        allDisabledProducts.push(...response.aaData)
+        disabledProductsInBatch.push(...response.aaData)
 
         const receivedCount = start + response.aaData.length
         if (receivedCount >= totalRecords || response.aaData.length === 0) {
@@ -488,7 +488,21 @@ export async function getDisabledProducts(skus, sessionData) {
         hasMore = false
       }
     }
+    return disabledProductsInBatch
   }
+
+  const promises = []
+  for (let i = 0; i < skus.length; i += SKU_BATCH_SIZE) {
+    const skuBatch = skus.slice(i, i + SKU_BATCH_SIZE)
+    console.log(`[jdApiService] Preparing to process SKU batch starting at index ${i}`)
+    promises.push(fetchForBatch(skuBatch))
+  }
+
+  const results = await Promise.all(promises)
+  results.forEach((result) => {
+    allDisabledProducts.push(...result)
+  })
+
   return allDisabledProducts
 }
 

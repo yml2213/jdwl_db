@@ -1,13 +1,13 @@
 /**
- * Executes a given function over a list of items in batches.
- * @param {object} options - The options for batch execution.
- * @param {Array<any>} options.items - The array of items to process.
- * @param {number} options.batchSize - The number of items in each batch.
- * @param {number} options.delay - The delay in milliseconds between batches.
- * @param {Function} options.batchFn - The async function to execute for each batch. It receives the batch items as an argument.
- * @param {Function} options.log - A logging function.
- * @param {object} options.isRunning - An object with a 'value' property to check if the task should continue.
- * @returns {Promise<object>} A promise that resolves with the aggregated results.
+ * 批量执行给定函数处理项目列表。
+ * @param {object} options - 批处理执行的选项。
+ * @param {Array<any>} options.items - 要处理的项目数组。
+ * @param {number} options.batchSize - 每批处理的项目数量。
+ * @param {number} options.delay - 批次之间的延迟时间（毫秒）。
+ * @param {Function} options.batchFn - 对每批项目执行的异步函数。它接收批次项目作为参数。
+ * @param {Function} options.log - 日志记录函数。
+ * @param {object} options.isRunning - 包含'value'属性的对象，用于检查任务是否应继续执行。
+ * @returns {Promise<object>} 解析为聚合结果的Promise。
  */
 export async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunning }) {
   let successCount = 0
@@ -25,17 +25,29 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
     const batch = items.slice(i, i + batchSize)
     log(`--- Starting batch ${batchNumber}/${totalBatches} ---`, 'info')
 
-    const result = await batchFn(batch)
+    let result = await batchFn(batch)
+
+    // If the batch fails with a rate-limiting error, wait and retry once.
+    if (result.success === false && result.message && result.message.includes('1分钟内不要频繁操作!')) {
+      log(`Batch ${batchNumber} failed due to rate limiting. Retrying in ${delay / 1000}s...`, 'warn')
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      log(`--- Retrying batch ${batchNumber}/${totalBatches} ---`, 'info')
+      result = await batchFn(batch) // Retry the batch
+    }
+
     if (result.success) {
       successCount++
+      overallMessage += `Batch ${batchNumber}: ${result.message}\n`
+      // If successful and not the last batch, wait before proceeding to the next one.
+      if (i + batchSize < items.length) {
+        log(`--- Batch ${batchNumber} finished. Waiting for ${delay / 1000}s... ---`, 'info')
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
     } else {
       failureCount++
-    }
-    overallMessage += `Batch ${batchNumber}: ${result.message}\n`
-
-    if (i + batchSize < items.length) {
-      log(`--- Batch ${batchNumber} finished. Waiting for ${delay / 1000}s... ---`, 'info')
-      await new Promise((resolve) => setTimeout(resolve, delay))
+      overallMessage += `Batch ${batchNumber} failed: ${result.message}\n`
+      log(`Batch ${batchNumber} failed. Halting further processing.`, 'error')
+      break // Stop the entire process on a definitive failure.
     }
   }
 
