@@ -1,115 +1,115 @@
 <template>
   <div class="operation-area">
-    <div class="form-group">
-      <label class="form-label">快捷选择</label>
-      <div class="select-wrapper">
-        <select v-model="form.quickSelect" class="form-select">
-          <option value="manual">手动选择</option>
-          <option value="warehouseLabeling">任务流 -- 入仓打标</option>
-        </select>
+    <div class="scrollable-content">
+      <div class="form-group">
+        <label class="form-label">快捷选择</label>
+        <div class="select-wrapper">
+          <select v-model="form.quickSelect" class="form-select">
+            <option value="manual">手动选择</option>
+            <option value="warehouseLabeling">任务流 -- 入仓打标</option>
+          </select>
+        </div>
       </div>
-    </div>
 
-    <div class="form-group sku-input-container">
-      <div class="sku-header">
-      <label class="form-label">输入SKU</label>
-        <FileUploader @file-change="handleFileChange" />
+      <div class="form-group sku-input-container">
+        <div class="sku-header">
+          <label class="form-label">输入SKU</label>
+          <FileUploader @file-change="handleFileChange" />
+        </div>
+        <div class="textarea-wrapper">
+          <textarea
+            v-model="form.sku"
+            placeholder="请输入SKU (多个SKU请每行一个)"
+            class="sku-textarea"
+          ></textarea>
+          <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
+            >清空</el-button
+          >
+        </div>
       </div>
-      <div class="textarea-wrapper">
-      <textarea
-        v-model="form.sku"
-        placeholder="请输入SKU (多个SKU请每行一个)"
-        class="sku-textarea"
-      ></textarea>
-      <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
-        >清空</el-button
-      >
-    </div>
-    </div>
 
-    <!-- Manual Options Section -->
-    <div v-if="form.quickSelect === 'manual'" class="manual-options-container">
-      <div class="manual-options-grid">
-        <div class="option-item">
-          <input type="checkbox" id="importStore" v-model="form.options.importStore" />
-          <label for="importStore">导入店铺商品</label>
+      <!-- Manual Options Section -->
+      <div v-if="form.quickSelect === 'manual'" class="manual-options-container">
+        <div class="manual-options-grid">
+          <div class="option-item">
+            <input type="checkbox" id="importStore" v-model="form.options.importStore" />
+            <label for="importStore">导入店铺商品</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useStore" v-model="form.options.useStore" />
+            <label for="useStore">启用店铺商品</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="importProps" v-model="form.options.importProps" />
+            <label for="importProps">导入物流属性(参数)</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useMainData" v-model="form.options.useMainData" />
+            <label for="useMainData">启用库存商品分配</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useJPEffect" v-model="form.options.useJPEffect" />
+            <label for="useJPEffect">启用京配打标生效</label>
+          </div>
+          <div class="option-item">
+            <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
+            <label for="useAddInventory">添加库存</label>
+          </div>
+          <div class="option-item">
+            <input
+              type="checkbox"
+              id="importProductNames"
+              v-model="form.options.importProductNames"
+            />
+            <label for="importProductNames">导入商品简称</label>
+          </div>
         </div>
-        <div class="option-item">
-          <input type="checkbox" id="useStore" v-model="form.options.useStore" />
-          <label for="useStore">启用店铺商品</label>
+        <!-- Logistics & Inventory Sub-options -->
+        <div v-if="form.options.importProps" class="sub-options-container logistics-options">
+          <div class="logistics-input-group">
+            <label>长(mm):</label>
+            <input type="text" v-model="logisticsOptions.length" />
+          </div>
+          <div class="logistics-input-group">
+            <label>宽(mm):</label>
+            <input type="text" v-model="logisticsOptions.width" />
+          </div>
+          <div class="logistics-input-group">
+            <label>高(mm):</label>
+            <input type="text" v-model="logisticsOptions.height" />
+          </div>
+          <div class="logistics-input-group">
+            <label>毛重(kg):</label>
+            <input type="text" v-model="logisticsOptions.grossWeight" />
+          </div>
         </div>
-        <div class="option-item">
-          <input type="checkbox" id="importProps" v-model="form.options.importProps" />
-          <label for="importProps">导入物流属性(参数)</label>
+        <div v-if="form.options.useAddInventory" class="sub-options-container inventory-container">
+          <label class="inventory-label">库存数量：</label>
+          <input type="number" v-model="form.options.inventoryAmount" class="inventory-input" />
         </div>
-        <div class="option-item">
-          <input type="checkbox" id="useMainData" v-model="form.options.useMainData" />
-          <label for="useMainData">启用库存商品分配</label>
-        </div>
-        <div class="option-item">
-          <input type="checkbox" id="useJPEffect" v-model="form.options.useJPEffect" />
-          <label for="useJPEffect">启用京配打标生效</label>
-        </div>
-        <div class="option-item">
-          <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
-          <label for="useAddInventory">添加库存</label>
-        </div>
-        <div class="option-item">
-          <input
-            type="checkbox"
-            id="importProductNames"
-            v-model="form.options.importProductNames"
-          />
-          <label for="importProductNames">导入商品简称</label>
-        </div>
+        <!-- Product Name Importer Sub-options -->
+        <ProductNameImporter
+          v-model="form.options.importProductNames"
+          v-model:payload="form.payloads.importProductNames"
+        />
       </div>
-      <!-- Logistics & Inventory Sub-options -->
-      <div v-if="form.options.importProps" class="sub-options-container logistics-options">
-        <div class="logistics-input-group">
-          <label>长(mm):</label>
-          <input type="text" v-model="logisticsOptions.length" />
-        </div>
-        <div class="logistics-input-group">
-          <label>宽(mm):</label>
-          <input type="text" v-model="logisticsOptions.width" />
-        </div>
-        <div class="logistics-input-group">
-          <label>高(mm):</label>
-          <input type="text" v-model="logisticsOptions.height" />
-        </div>
-        <div class="logistics-input-group">
-          <label>毛重(kg):</label>
-          <input type="text" v-model="logisticsOptions.grossWeight" />
-        </div>
-      </div>
-      <div v-if="form.options.useAddInventory" class="sub-options-container inventory-container">
-        <label class="inventory-label">库存数量：</label>
-        <input type="number" v-model="form.options.inventoryAmount" class="inventory-input" />
-      </div>
-      <!-- Product Name Importer Sub-options -->
-      <ProductNameImporter
-        v-model="form.options.importProductNames"
-        v-model:payload="form.payloads.importProductNames"
-      />
-    </div>
 
-    <div class="form-content">
-    <div class="form-group">
-      <StoreSelector
-        v-model="storeVModel"
-        :shops="shopsList"
-        :loading="isLoadingShops"
-        :error="shopLoadError"
+      <div class="form-group">
+        <StoreSelector
+          v-model="storeVModel"
+          :shops="shopsList"
+          :loading="isLoadingShops"
+          :error="shopLoadError"
         >
         </StoreSelector>
-    </div>
+      </div>
 
-    <div class="form-group">
-      <WarehouseSelector
-        v-model="warehouseVModel"
-        :warehouses="warehousesList"
-        :loading="isLoadingWarehouses"
-        :error="warehouseLoadError"
+      <div class="form-group">
+        <WarehouseSelector
+          v-model="warehouseVModel"
+          :warehouses="warehousesList"
+          :loading="isLoadingWarehouses"
+          :error="warehouseLoadError"
         >
         </WarehouseSelector>
       </div>
@@ -190,16 +190,16 @@ const handleFileChange = (file) => {
 .operation-area {
   flex: 0 0 380px;
   background: #f7f8fa;
-  padding: 20px;
   border-right: 1px solid #e8e8e8;
   color: #333;
   display: flex;
   flex-direction: column;
 }
 
-.form-content {
+.scrollable-content {
+  flex: 1 1 auto;
   overflow-y: auto;
-  padding: 0 5px; /* Add some padding for the scrollbar */
+  padding: 20px;
 }
 
 .form-group {
@@ -318,10 +318,11 @@ const handleFileChange = (file) => {
 
 .form-actions {
   flex-shrink: 0;
-  padding-top: 20px;
+  padding: 20px;
   border-top: 1px solid #e8e8e8;
   display: flex;
   gap: 10px;
+  background: #f7f8fa;
 }
 
 .form-actions .btn {
