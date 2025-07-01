@@ -980,17 +980,17 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData) {
  */
 export async function getJpEnabledCsgsForStore(sessionData) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
-  const { store, department, departmentInfo } = sessionData;
-  console.log(`==============111==============`);
+  const { store, department, departmentInfo } = sessionData
+  console.log(`==============111==============`)
 
-  const allCsgs = [];
-  let page = 0;
-  const pageSize = 100; // Set a larger page size
-  let hasMore = true;
-  let sEcho = 1;
+  const allCsgs = []
+  let page = 0
+  const pageSize = 100 // Set a larger page size
+  let hasMore = true
+  let sEcho = 1
 
   while (hasMore) {
-    const iDisplayStart = page * pageSize;
+    const iDisplayStart = page * pageSize
     const aoData = [
       { name: 'sEcho', value: sEcho++ },
       { name: 'iColumns', value: 14 },
@@ -1028,18 +1028,18 @@ export async function getJpEnabledCsgsForStore(sessionData) {
       { name: 'iSortCol_0', value: 9 },
       { name: 'sSortDir_0', value: 'desc' },
       { name: 'iSortingCols', value: 1 }
-    ];
-    const form = new URLSearchParams();
-    form.append('csrfToken', csrfToken);
-    form.append('shopId', department.id);
-    form.append('sellerId', departmentInfo.sellerId);
-    form.append('deptId', departmentInfo.id);
-    form.append('sellerNo', departmentInfo.sellerNo);
-    form.append('deptNo', departmentInfo.deptNo);
-    form.append('shopNo', store.shopNo);
-    form.append('jdDeliver', '1'); // 1 for JP search enabled
-    form.append('status', '1');
-    form.append('aoData', JSON.stringify(aoData));
+    ]
+    const form = new URLSearchParams()
+    form.append('csrfToken', csrfToken)
+    form.append('shopId', department.id)
+    form.append('sellerId', departmentInfo.sellerId)
+    form.append('deptId', departmentInfo.id)
+    form.append('sellerNo', departmentInfo.sellerNo)
+    form.append('deptNo', departmentInfo.deptNo)
+    form.append('shopNo', store.shopNo)
+    form.append('jdDeliver', '1') // 1 for JP search enabled
+    form.append('status', '1')
+    form.append('aoData', JSON.stringify(aoData))
     //  https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=0.19411635434208996
     try {
       const data = await requestJdApi({
@@ -1054,26 +1054,26 @@ export async function getJpEnabledCsgsForStore(sessionData) {
         },
         data: form.toString(),
         responseType: 'json'
-      });
+      })
 
-      console.log(data);
+      console.log(data)
 
 
       if (data && data.aaData && data.aaData.length > 0) {
-        const csgs = data.aaData.map((item) => item.shopGoodsNo);
-        allCsgs.push(...csgs);
+        const csgs = data.aaData.map((item) => item.shopGoodsNo)
+        allCsgs.push(...csgs)
         // Check if there are more items to fetch
-        hasMore = data.iTotalRecords > allCsgs.length;
-        page++;
+        hasMore = data.iTotalRecords > allCsgs.length
+        page++
       } else {
-        hasMore = false;
+        hasMore = false
       }
     } catch (error) {
-      console.error('Error fetching JP enabled CSGs:', error);
+      console.error('Error fetching JP enabled CSGs:', error)
       // Stop pagination on error
-      hasMore = false;
+      hasMore = false
     }
   }
 
-  return allCsgs;
+  return allCsgs
 }
