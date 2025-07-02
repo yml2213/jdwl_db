@@ -202,14 +202,8 @@ export function getInventoryClearanceForm() {
  * @returns {Object | null}
  */
 export function getWarehouseLabelingForm() {
-  const data = localStorage.getItem(STORAGE_KEYS.WAREHOUSE_LABELING_FORM)
-  if (!data) return null
-  try {
-    return JSON.parse(data)
-  } catch (e) {
-    console.error('解析存储的入仓打标表单失败', e)
-    return null
-  }
+  const saved = localStorage.getItem(STORAGE_KEYS.WAREHOUSE_LABELING_FORM)
+  return saved ? JSON.parse(saved) : null
 }
 
 /**
@@ -331,4 +325,25 @@ export const setLocalStorage = (key, value) => {
   } else {
     localStorage.setItem(key, JSON.stringify(value))
   }
+}
+
+const LAST_SELECTED_STORE_WAREHOUSE_KEY = 'lastSelectedStoreAndWarehouse'
+
+/**
+ * 保存用户最后选择的店铺和仓库
+ * @param {{ store: object, warehouse: object }} selection
+ */
+export function saveSelectedStoreAndWarehouse(selection) {
+  if (selection && selection.store && selection.warehouse) {
+    localStorage.setItem(LAST_SELECTED_STORE_WAREHOUSE_KEY, JSON.stringify(selection))
+  }
+}
+
+/**
+ * 获取用户最后选择的店铺和仓库
+ * @returns {{ store: object, warehouse: object } | null}
+ */
+export function getLastSelectedStoreAndWarehouse() {
+  const saved = localStorage.getItem(LAST_SELECTED_STORE_WAREHOUSE_KEY)
+  return saved ? JSON.parse(saved) : null
 }

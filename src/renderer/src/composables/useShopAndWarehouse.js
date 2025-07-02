@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { getShopList, getWarehouseList } from '@/services/apiService'
 import {
   saveSelectedShop,
@@ -10,7 +10,9 @@ import {
   saveWarehousesList,
   getWarehousesList,
   getSelectedDepartment,
-  getSelectedVendor
+  getSelectedVendor,
+  getLastSelectedStoreAndWarehouse,
+  saveSelectedStoreAndWarehouse
 } from '@/utils/storageHelper'
 
 /**
@@ -32,6 +34,29 @@ export function useShopAndWarehouse() {
   const selectedDepartment = ref(getSelectedDepartment()) // 当前选中的事业部
   const selectedVendor = ref(getSelectedVendor()) // 当前选中的供应商
 
+  // 在组件挂载时加载上次的选择
+  onMounted(() => {
+    const lastSelected = getLastSelectedStoreAndWarehouse()
+    if (lastSelected) {
+      selectedStore.value = lastSelected.store
+      selectedWarehouse.value = lastSelected.warehouse
+    }
+    loadShops()
+    loadWarehouses()
+  })
+
+  // 监听选择变化并保存
+  watch(
+    [selectedStore, selectedWarehouse],
+    ([newStore, newWarehouse]) => {
+      saveSelectedStoreAndWarehouse({
+        store: newStore,
+        warehouse: newWarehouse
+      })
+    },
+    { deep: true }
+  )
+
   /**
    * @description 异步加载店铺列表。
    * 优先从本地缓存加载，如果缓存不存在，则通过API获取。
@@ -51,9 +76,6 @@ export function useShopAndWarehouse() {
         shopsList.value = shops
         saveShopsList(shops) // 缓存到本地
       }
-      // 恢复上次选择的店铺，或默认选择第一个
-      const lastSelected = getSelectedShop()
-      selectedStore.value = lastSelected?.shopNo || shopsList.value[0]?.shopNo
     } catch (error) {
       shopLoadError.value = `加载店铺失败: ${error.message}`
     } finally {
@@ -84,9 +106,6 @@ export function useShopAndWarehouse() {
         warehousesList.value = warehouses
         saveWarehousesList(warehouses) // 缓存到本地
       }
-      // 恢复上次选择的仓库，或默认选择第一个
-      const lastSelected = getSelectedWarehouse()
-      selectedWarehouse.value = lastSelected?.warehouseNo || warehousesList.value[0]?.warehouseNo
     } catch (error) {
       warehouseLoadError.value = `加载仓库失败: ${error.message}`
     } finally {
@@ -111,10 +130,6 @@ export function useShopAndWarehouse() {
     const warehouse = warehousesList.value.find((w) => w.warehouseNo === warehouseNo)
     if (warehouse) saveSelectedWarehouse(warehouse)
   }
-
-  // 组件初始化时自动加载数据
-  loadShops()
-  loadWarehouses()
 
   // 返回所有状态和方法，供组件使用
   return {
