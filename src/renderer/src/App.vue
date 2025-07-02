@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted, computed, provide } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, provide } from 'vue'
 import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { getSessionStatus } from './services/apiService'
+import { getSessionStatus, initSession, logoutSession } from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
@@ -19,12 +19,36 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 
 // 统一的会话上下文
 const sessionContext = ref(null)
+const isInitialized = ref(false) // 添加初始化状态标记
 
 // 登录状态现在是一个计算属性，更可靠
 const isLoggedIn = computed(() => !!sessionContext.value)
 
 // 将会话上下文提供给所有子组件
 provide('sessionContext', sessionContext)
+
+/**
+ * @description 初始化应用会话
+ */
+const performInit = async () => {
+  if (!isLoggedIn.value || isInitialized.value) {
+    return // 如果未登录或已初始化，则直接返回
+  }
+  try {
+    console.log('用户已登录，开始执行初始化流程...')
+    isInitialized.value = true // 立即设置状态，防止重入
+    const result = await initSession()
+    if (result.success) {
+      console.log('应用初始化成功，获取到的 operationId:', result.operationId)
+    } else {
+      console.error('应用初始化失败:', result.message)
+      isInitialized.value = false // 失败时允许重试
+    }
+  } catch (error) {
+    console.error('执行初始化流程时出错:', error)
+    isInitialized.value = false // 异常时允许重试
+  }
+}
 
 /**
  * @description 检查服务器上的会话状态，并在会话有效时恢复它
@@ -46,6 +70,10 @@ const checkSessionStatus = async () => {
 const handleSessionCreated = async () => {
   console.log('会话创建/重建成功，正在从服务器获取最新会话状态...')
   await checkSessionStatus()
+  // 检查通过后，sessionContext 会被设置，此时可以进行初始化
+  if (isLoggedIn.value) {
+    await performInit()
+  }
 }
 
 /**
@@ -55,13 +83,17 @@ const handleSessionCreated = async () => {
 const handleSessionRestored = (context) => {
   sessionContext.value = context
   console.log('会话已恢复:', context)
+  performInit() // 恢复会话后也执行初始化
 }
 
 // 处理退出登录
-const handleLogout = () => {
+const handleLogout = async () => {
+  console.log('正在执行登出操作...')
+  await logoutSession() // 调用后端logout
   sessionContext.value = null
+  isInitialized.value = false // 重置初始化状态
   clearSelections()
-  // TODO: 调用后端接口来使会话失效
+  console.log('前端登出完成。')
 }
 
 // 当前活动标签
@@ -118,7 +150,31 @@ const copyToClipboard = (text, section) => {
 }
 
 // 组件挂载时检查会话状态
-onMounted(checkSessionStatus)
+onMounted(async () => {
+  await checkSessionStatus()
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  
+  // 监听主进程发来的关闭应用前的通知
+  window.electron.ipcRenderer.on('app-quitting', async () => {
+    console.log('接收到主进程的 app-quitting 信号，执行登出...')
+    await logoutSession()
+    // 通知主进程可以安全退出了
+    window.electron.ipcRenderer.send('safe-to-quit')
+  })
+})
+
+const handleBeforeUnload = (event) => {
+  // 这个同步调用不足以保证异步的logoutSession完成
+  // 主要依赖主进程的 'before-quit' 事件来处理
+  console.log('窗口即将关闭 (beforeunload event)')
+  // 尝试调用，但不保证成功
+  logoutSession()
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  window.electron.ipcRenderer.removeAllListeners('app-quitting')
+})
 
 // 选择JSON内容
 const selectJsonContent = (event) => {

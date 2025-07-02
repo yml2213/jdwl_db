@@ -1566,21 +1566,40 @@ export const getSessionStatus = async () => {
  */
 export const executeFlow = async (flowName, payload) => {
   try {
-    const response = await apiClient.post('/api/execute-flow', {
-      flowName,
-      payload
-    })
+    const response = await apiClient.post('/api/execute-flow', { flowName, payload })
     return response.data
   } catch (error) {
-    console.error(`[apiService] 执行工作流 ${flowName} 失败:`, error)
-    // 确保即使在网络层或axios出错时，也返回一个符合格式的错误对象
-    if (error.response) {
-      return error.response.data
-    }
-    return {
-      success: false,
-      logs: [],
-      message: `[前端] 请求后端工作流失败: ${error.message}`
-    }
+    console.error(`Error executing flow ${flowName}:`, error.response?.data || error.message)
+    throw error.response?.data || new Error('服务器错误')
+  }
+}
+
+/**
+ * @description 调用后端 /api/init 接口
+ */
+export const initSession = async () => {
+  try {
+    console.log('调用 /api/init 初始化会话...')
+    const response = await apiClient.post('/api/init')
+    console.log('/api/init 响应:', response.data)
+    return response.data
+  } catch (error) {
+    console.error('初始化会话失败:', error.response?.data || error.message)
+    throw error.response?.data || new Error('服务器错误')
+  }
+}
+
+/**
+ * @description 调用后端 /api/logout 接口
+ */
+export const logoutSession = async () => {
+  try {
+    console.log('调用 /api/logout 注销会话...')
+    const response = await apiClient.post('/api/logout')
+    console.log('/api/logout 响应:', response.data)
+    return response.data
+  } catch (error) {
+    console.error('注销会话失败:', error.response?.data || error.message)
+    // 即便失败也继续，因为可能是网络问题或服务器已关闭
   }
 }

@@ -2,6 +2,28 @@ import axios from 'axios'
 import FormData from 'form-data'
 import qs from 'qs'
 
+// 创建一个专门用于报表API请求的axios实例
+const reportApiAxios = axios.create({
+  baseURL: 'https://reportp.jclps.com',
+  timeout: 120000,
+  headers: {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+    Accept: 'application/json, text/plain, */*',
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'accept-language': 'zh-CN,zh;q=0.9,fr;q=0.8,de;q=0.7,en;q=0.6',
+    origin: 'https://reportp.jclps.com',
+    priority: 'u=1, i',
+    referer: 'https://reportp.jclps.com/reportIndex?rand=' + Math.random(),
+    'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"macOS"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin'
+  }
+})
+
 // 创建一个专门用于京东API请求的axios实例
 const jdApiAxios = axios.create({
   baseURL: 'https://o.jdl.com',
@@ -57,6 +79,26 @@ export async function requestJdApi(config) {
   } catch (error) {
     console.error('京东API请求失败:', error.message)
     // 重新抛出错误，以便上层可以捕获
+    throw error
+  }
+}
+
+/**
+ * 封装的报表API请求函数
+ * @param {object} config - Axios请求配置
+ * @returns {Promise<object>}
+ */
+export async function requestReportApi(config) {
+  try {
+    const response = await reportApiAxios(config)
+    if (response.data && response.data.resultCode !== 1) {
+      const errorMessage =
+        (response.data.resultData && response.data.resultData[0]) || response.data.resultMessage
+      throw new Error(errorMessage || '报表API返回未知错误')
+    }
+    return response.data
+  } catch (error) {
+    console.error('报表API请求失败:', error.message)
     throw error
   }
 }
@@ -190,6 +232,8 @@ export async function uploadJpSearchFile(fileBuffer, sessionData) {
       data: formData,
       headers
     })
+
+    console.log('上传京配打标文件 请求结果 result 111===>', result)
 
     // 检查业务层面的频率限制错误
     if (result && result.resultMessage && result.resultMessage.includes('频繁操作')) {
@@ -460,8 +504,6 @@ export async function uploadAddInventoryFile(fileBuffer, sessionData) {
     headers
   })
 }
-
-
 
 /**
  * 根据SKU列表获取完整的商品详情列表 (处理分页)
@@ -1080,4 +1122,122 @@ export async function getJpEnabledCsgsForStore(sessionData) {
   }
 
   return allCsgs
+}
+
+/**
+ * 启动会话操作，创建一个新的报表方案并返回其ID
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果，包含 operationId
+ */
+export async function startSessionOperation(sessionData) {
+  console.log('[jdApiService] 正在启动会话操作，创建报表方案...')
+  const { cookieString } = getAuthInfo(sessionData)
+  const schemeName = `jdwl-temp-scheme-${Date.now()}`
+
+  // 1. 新建查询方案
+  const addSchemeData = {
+    source: 2,
+    menuId: 'gs',
+    schemeName: schemeName,
+    templateCode: 1025,
+    isShare: 0,
+    templateName: '销售订单查询',
+    templateContent: JSON.stringify({
+      reportSchemeColumnList: [
+        { dataField: 'shopGoodsNo', seq: 0 },
+        { dataField: 'shopGoodsName', seq: 1 },
+        { dataField: 'status', seq: 2 },
+        { dataField: 'jdDeliver', seq: 3 },
+        { dataField: 'goodsNo', seq: 4 }
+      ],
+      reportSchemeConditionList: [
+        { dataField: 'shopGoodsNo', seq: 0 },
+        { dataField: 'shopGoodsName', seq: 1 },
+        { dataField: 'status', seq: 5 },
+        { dataField: 'shopName', seq: 6 },
+        { dataField: 'jdDeliver', seq: 7 },
+        { dataField: 'sellerGoodsSign', seq: 13 },
+        { dataField: 'deptId', seq: 16 }
+      ]
+    }),
+    templateVContent: JSON.stringify({
+      valueMap: {
+        goodsNo: null,
+        goodsName: null,
+        sellerGoodsSign: null,
+        enableFlag: null,
+        source: null,
+        deptId: null,
+        sellerId: null,
+        maintainStatus: null,
+        CreateTime: null,
+        isvSku: null,
+        spSku: null,
+        mnemonic: null,
+        safePeriod: null,
+        humidity: null,
+        quality: null,
+        isSerialNumber: null,
+        isLogisticsCollect: null,
+        oripack: null,
+        adventGoodsDelivery: null,
+        expireGoodsDelivery: null,
+        airMark: null,
+        crowdSourcingFlag: null
+      }
+    })
+  }
+
+  await requestReportApi({
+    method: 'POST',
+    url: '/report/scheme/addScheme.do',
+    data: qs.stringify(addSchemeData),
+    headers: { Cookie: cookieString }
+  })
+
+  // 2. 获取新建的方案ID
+  const getSchemesData = { source: 2, menuId: 'gs' }
+  const schemesResult = await requestReportApi({
+    method: 'POST',
+    url: '/report/scheme/schemes.do',
+    data: qs.stringify(getSchemesData),
+    headers: { Cookie: cookieString }
+  })
+
+  if (!schemesResult.resultData || !Array.isArray(schemesResult.resultData)) {
+    throw new Error('获取方案列表失败或响应格式不正确。')
+  }
+
+  const newScheme = schemesResult.resultData.find((scheme) => scheme.schemeName === schemeName)
+
+  if (!newScheme || !newScheme.id) {
+    throw new Error(`无法在列表中找到刚创建的方案: ${schemeName}`)
+  }
+
+  const operationId = newScheme.id
+  console.log(`[jdApiService] 报表方案已创建，ID: ${operationId}`)
+  return { success: true, operationId }
+}
+
+/**
+ * 结束会话操作，删除之前创建的报表方案
+ * @param {string} operationId - 要结束的操作ID (即 schemeId)
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function endSessionOperation(operationId, sessionData) {
+  console.log(`[jdApiService] 正在结束会话操作，删除报表方案 ID: ${operationId}...`)
+  const { cookieString } = getAuthInfo(sessionData)
+
+  const deleteData = { schemeId: operationId }
+
+  await requestReportApi({
+    method: 'POST',
+    url: '/report/scheme/schemeDelete.do',
+    data: qs.stringify(deleteData),
+    headers: { Cookie: cookieString }
+  })
+
+  console.log(`[jdApiService] 报表方案 ${operationId} 已成功删除。`)
+  return { success: true, message: `方案 ${operationId} 已删除` }
 }

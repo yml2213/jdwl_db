@@ -13,7 +13,7 @@ import { executeInBatches } from '../utils/batchProcessor.js'
  */
 async function execute(context, sessionData) {
     let { skus, products, warehouse, vendor } = context
-    console.log('addInventory---1  context===>', context)
+    // console.log('addInventory---1  context===>', context)
     console.log('addInventory---1  vendor===>', vendor)
 
     if (!skus || skus.length === 0) {
