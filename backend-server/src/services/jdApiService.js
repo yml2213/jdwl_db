@@ -286,7 +286,6 @@ async function fetchShopGoodsPage(skuBatch, status, sessionData, start, length) 
     aoData: JSON.stringify(aoDataArray)
   }
 
-  console.log('fetchShopGoodsPage---1  data_obj===>', data_obj)
 
   const data = qs.stringify(data_obj)
 
@@ -485,10 +484,22 @@ export async function getCsgBySkus(skus, sessionData) {
     let totalRecords = null
     const productsInBatch = []
 
+    const info = {}
+    info.shopId = store?.shopNo?.replace(/^CSP00/, '')
+    info.sellerId = department?.sellerId || ''
+    info.deptId = department?.id || ''
+    info.sellerNo = department?.sellerNo || ''
+    info.deptNo = department?.deptNo || ''
+    info.shopNo = store?.shopNo || ''
+
+
+    // console.log('getCsgBySkus---1  info===>', info)
+
     while (hasMore) {
       try {
 
-        const url = `/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
+        // https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=0.3821882614100426
+        const url = `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`
         const aoDataArray = [
           { name: 'sEcho', value: 3 },
           { name: 'iColumns', value: 14 },
@@ -531,12 +542,12 @@ export async function getCsgBySkus(skus, sessionData) {
         const data_obj = {
           csrfToken: csrfToken,
           ids: '',
-          shopId: store?.shopNo?.replace(/^CSP00/, '') || '',
-          sellerId: department?.sellerId || '',
-          deptId: department?.id || '',
-          sellerNo: department?.sellerNo || '',
-          deptNo: department?.deptNo || '',
-          shopNo: store?.shopNo || '',
+          shopId: info.shopId,
+          sellerId: info.sellerId,
+          deptId: info.deptId,
+          sellerNo: info.sellerNo,
+          deptNo: info.deptNo,
+          shopNo: info.shopNo,
           spSource: '',
           shopGoodsName: '',
           isCombination: '',
@@ -547,20 +558,19 @@ export async function getCsgBySkus(skus, sessionData) {
           spGoodsNos: '',
           goodsNos: '',
           isvGoodsNos: '',
-          status: 1, // 使用传入的状态
+          status: 1,
           originSend: '',
           aoData: JSON.stringify(aoDataArray)
         }
 
-        console.log('fetchShopGoodsPage---1  data_obj===>', data_obj)
 
         const data = qs.stringify(data_obj)
 
         console.log(
-          `[jdApiService] 查询商品, Status: '${status}', SKUs: ${skuBatch.length}, Start: ${start}, Length: ${length}`
+          `[jdApiService] 查询商品, Status: '1', SKUs: ${skuBatch.length}, Start: ${start}, Length: ${PAGE_SIZE}`
         )
 
-        return await requestJdApi({
+        const response = await requestJdApi({
           method: 'POST',
           url,
           data,
@@ -575,7 +585,7 @@ export async function getCsgBySkus(skus, sessionData) {
           }
         })
 
-        console.log('getCsgBySkus---1  response===>', response)
+        // console.log('getCsgBySkus---1  response===>', response)
 
         if (response && response.aaData) {
           if (totalRecords === null) {

@@ -13,6 +13,8 @@ import { executeInBatches } from '../utils/batchProcessor.js'
  */
 async function execute(context, sessionData) {
     let { skus, products, warehouse, vendor } = context
+    console.log('addInventory---1  context===>', context)
+    console.log('addInventory---1  vendor===>', vendor)
 
     if (!skus || skus.length === 0) {
         return { success: true, message: '商品列表为空，无需操作。' }

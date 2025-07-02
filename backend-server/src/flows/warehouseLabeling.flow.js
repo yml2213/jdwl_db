@@ -136,19 +136,19 @@ async function execute(context, session, log) {
     }
 
     // 基于 store 对象，重建纯净的 department 和 vendor 对象，防止上下文污染
-    context.department = {
-      id: store.deptId,
-      name: store.deptName,
-      deptNo: store.deptNo,
-      sellerId: store.sellerId,
-      sellerName: store.sellerName,
-      sellerNo: store.sellerNo
-    }
-    context.vendor = {
-      id: store.supplierNo, // 假设供应商编号在 store.supplierNo
-      name: store.deptName, // 通常供应商名称与事业部名称相同
-      supplierNo: store.supplierNo
-    }
+    // context.department = {
+    //   id: store.deptId,
+    //   name: store.deptName,
+    //   deptNo: store.deptNo,
+    //   sellerId: store.sellerId,
+    //   sellerName: store.sellerName,
+    //   sellerNo: store.sellerNo
+    // }
+    // context.vendor = {
+    //   id: store.supplierNo, // 假设供应商编号在 store.supplierNo
+    //   name: store.deptName, // 通常供应商名称与事业部名称相同
+    //   supplierNo: store.supplierNo
+    // }
 
     console.log('[Workflow Normalization] 上下文已净化，确保数据一致性。')
   }
@@ -178,14 +178,6 @@ async function execute(context, session, log) {
             department: currentContext.department,
             vendor: currentContext.vendor
           }
-          enhancedLog(
-            `[Debug] 即将执行 getCSGList，传入的上下文关键内容: \n${JSON.stringify(
-              contextToLog,
-              null,
-              2
-            )}`,
-            'info'
-          )
         }
 
         enhancedLog(`[初始化] 开始执行: ${task.name}`)
