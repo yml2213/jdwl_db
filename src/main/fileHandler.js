@@ -110,6 +110,16 @@ export function setupFileHandlers() {
     return await saveFile(params)
   })
 
+  ipcMain.handle('read-file-content', async (event, filePath) => {
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8')
+      return content
+    } catch (error) {
+      console.error(`读取文件失败: ${filePath}`, error)
+      return null
+    }
+  })
+
   ipcMain.handle('save-excel-and-get-path', async (event, { base64Data, fileName }) => {
     try {
       const tempDir = app.getPath('temp')

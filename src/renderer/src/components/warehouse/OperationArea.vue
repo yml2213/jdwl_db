@@ -210,13 +210,9 @@ const updateLogistics = (key, value) => {
   emit('update:logisticsOptions', { ...props.logisticsOptions, [key]: value })
 }
 
-const handleFileChange = (file) => {
-  if (file && file.name.endsWith('.txt')) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      emit('update:form', { ...props.form, sku: e.target.result })
-    }
-    reader.readAsText(file)
+const handleFileChange = (content) => {
+  if (typeof content === 'string') {
+    emit('update:form', { ...props.form, sku: content })
   }
 }
 </script>

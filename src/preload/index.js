@@ -54,7 +54,10 @@ const api = {
   addInventory: (context) => ipcRenderer.invoke('add-inventory', context),
 
   // 显示打开对话框
-  showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options)
+  showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),
+
+  // 读取文件内容
+  readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { reactive, watch, ref } from 'vue'
+import { reactive, watch, ref, onMounted } from 'vue'
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 import { useTaskList } from '../composables/useTaskList'
@@ -38,7 +38,12 @@ import {
   getInitialFormState,
   getAllManualTaskKeys
 } from '../features/warehouseLabeling/taskConfiguration'
-import { getSelectedVendor, getSelectedDepartment } from '../utils/storageHelper'
+import {
+  getSelectedVendor,
+  getSelectedDepartment,
+  saveWarehouseLabelingForm,
+  getWarehouseLabelingForm
+} from '../utils/storageHelper'
 
 const {
   taskList: tasks,
@@ -67,6 +72,24 @@ const logisticsOptions = reactive({
   height: '6.00',
   grossWeight: '0.1'
 })
+
+// Load saved form state on component mount
+onMounted(() => {
+  const savedState = getWarehouseLabelingForm()
+  if (savedState) {
+    Object.assign(form, savedState.form)
+    Object.assign(logisticsOptions, savedState.logisticsOptions)
+  }
+})
+
+// Watch for changes and save them
+watch(
+  () => ({ form: { ...form }, logisticsOptions: { ...logisticsOptions } }),
+  (newState) => {
+    saveWarehouseLabelingForm(newState)
+  },
+  { deep: true }
+)
 
 function updateForm(newFormState) {
   Object.assign(form, newFormState)

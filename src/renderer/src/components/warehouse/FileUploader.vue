@@ -20,7 +20,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'file-change'])
 
 const selectedFile = ref(props.modelValue)
 
@@ -54,6 +54,10 @@ const triggerFileInput = async () => {
       }
       selectedFile.value = fileObject
       emit('update:modelValue', fileObject)
+
+      // Read file content and emit file-change event
+      const content = await window.api.readFileContent(filePath)
+      emit('file-change', content)
     }
   } catch (error) {
     console.error('选择文件时出错:', error)
@@ -63,6 +67,7 @@ const triggerFileInput = async () => {
 const clearFile = () => {
   selectedFile.value = null
   emit('update:modelValue', null)
+  emit('file-change', '') // Also clear content
 }
 </script>
 

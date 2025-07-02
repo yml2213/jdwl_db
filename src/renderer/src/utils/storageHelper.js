@@ -15,7 +15,8 @@ const STORAGE_KEYS = {
   LAST_WORKFLOW: 'last_workflow',
   MANUAL_OPTIONS: 'manual_options',
   LAST_SKU_INPUT: 'last_sku_input',
-  INVENTORY_CLEARANCE_FORM: 'inventory_clearance_form'
+  INVENTORY_CLEARANCE_FORM: 'inventory_clearance_form',
+  WAREHOUSE_LABELING_FORM: 'warehouse_labeling_form'
 }
 
 /**
@@ -111,6 +112,16 @@ export function saveInventoryClearanceForm(form) {
 }
 
 /**
+ * 保存入仓打标表单状态
+ * @param {Object} form
+ */
+export function saveWarehouseLabelingForm(form) {
+  if (form) {
+    localStorage.setItem(STORAGE_KEYS.WAREHOUSE_LABELING_FORM, JSON.stringify(form))
+  }
+}
+
+/**
  * 获取店铺列表
  * @returns {Array} 店铺列表，如果不存在则返回空数组
  */
@@ -182,6 +193,21 @@ export function getInventoryClearanceForm() {
     return JSON.parse(data)
   } catch (e) {
     console.error('解析存储的库存清零表单失败', e)
+    return null
+  }
+}
+
+/**
+ * 获取入仓打标表单状态
+ * @returns {Object | null}
+ */
+export function getWarehouseLabelingForm() {
+  const data = localStorage.getItem(STORAGE_KEYS.WAREHOUSE_LABELING_FORM)
+  if (!data) return null
+  try {
+    return JSON.parse(data)
+  } catch (e) {
+    console.error('解析存储的入仓打标表单失败', e)
     return null
   }
 }
@@ -276,6 +302,7 @@ export function clearSelections() {
   localStorage.removeItem(STORAGE_KEYS.MANUAL_OPTIONS)
   localStorage.removeItem(STORAGE_KEYS.LAST_SKU_INPUT)
   localStorage.removeItem(STORAGE_KEYS.INVENTORY_CLEARANCE_FORM)
+  localStorage.removeItem(STORAGE_KEYS.WAREHOUSE_LABELING_FORM)
   console.log('用户选择数据已清除')
 }
 
@@ -288,6 +315,7 @@ export function clearAppSettings() {
   localStorage.removeItem(STORAGE_KEYS.MANUAL_OPTIONS)
   localStorage.removeItem(STORAGE_KEYS.LAST_SKU_INPUT)
   localStorage.removeItem(STORAGE_KEYS.INVENTORY_CLEARANCE_FORM)
+  localStorage.removeItem(STORAGE_KEYS.WAREHOUSE_LABELING_FORM)
   console.log('应用设置缓存已清除。')
 }
 
