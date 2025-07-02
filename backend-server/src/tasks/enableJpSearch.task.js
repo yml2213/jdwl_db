@@ -21,6 +21,11 @@ const TEMP_DIR_NAME = '启用京配打标生效'
  */
 async function execute(context, updateFn, sessionData) {
   const { skus, store } = context
+  // console.log('enableJpSearch.task.js -- context:', context)
+  // console.log('enableJpSearch.task.js -- sessionData:', sessionData)
+
+  console.log('enableJpSearch.task.js -- skus:', skus)
+  console.log('enableJpSearch.task.js -- store:', store)
 
   // 验证输入参数
   if (!skus || !Array.isArray(skus) || skus.length === 0) {
@@ -36,7 +41,8 @@ async function execute(context, updateFn, sessionData) {
     updateFn('获取CSG...')
 
     // 获取商品数据
-    const productData = await getProductData.execute(skus, updateFn, sessionData)
+    const payload = { skus }
+    const productData = await getProductData.execute(payload, updateFn, sessionData)
 
     // 验证商品数据
     if (!productData || productData.length === 0) {

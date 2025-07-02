@@ -365,7 +365,7 @@ export async function getDisabledProducts(skus, sessionData) {
   const { departmentInfo, operationId } = sessionData
 
   if (!skus || !Array.isArray(skus) || skus.length === 0) {
-    throw new Error('请求负载中必须包含一个非空的SKU数组。')
+    throw new Error('请求负载中必须包含一个非空的SKU数组。--1')
   }
   if (!departmentInfo || !departmentInfo.id) {
     throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。')

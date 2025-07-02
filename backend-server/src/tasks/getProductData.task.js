@@ -6,9 +6,13 @@ import { queryProductDataBySkus } from '../services/jdApiService.js'
  * @param {object} sessionContext - 用户会话上下文，包含认证信息、事业部信息和操作ID
  */
 async function execute(payload, updateFn, sessionContext) {
+    console.log('getProductData.task.js -- payload:', payload)
+    console.log('getProductData.task.js -- updateFn:', updateFn)
+    console.log('getProductData.task.js -- sessionContext:', sessionContext)
+
     const { skus } = payload
     if (!skus || !Array.isArray(skus) || skus.length === 0) {
-        throw new Error('请求负载中必须包含一个非空的SKU数组。')
+        throw new Error('请求负载中必须包含一个非空的SKU数组。--2')
     }
 
     const { departmentInfo, operationId } = sessionContext
