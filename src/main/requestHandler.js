@@ -45,19 +45,19 @@ async function sendRequest(url, options = {}) {
     await logRequest(`发送请求: ${url}, 方法: ${options.method || 'GET'}`)
 
     // 记录更详细的请求信息
-    console.log(
-      '完整请求选项:',
-      JSON.stringify(
-        {
-          url,
-          method: options.method,
-          headers: options.headers,
-          hasBody: !!options.body
-        },
-        null,
-        2
-      )
-    )
+    // console.log(
+    //   '完整请求选项:',
+    //   JSON.stringify(
+    //     {
+    //       url,
+    //       method: options.method,
+    //       headers: options.headers,
+    //       hasBody: !!options.body
+    //     },
+    //     null,
+    //     2
+    //   )
+    // )
 
     // 将fetch风格的options转换为axios接受的格式
     const axiosOptions = {
@@ -121,8 +121,8 @@ async function sendRequest(url, options = {}) {
     // 使用axios发送请求
     const response = await axiosInstance(axiosOptions)
 
-    console.log('响应状态:', response.status)
-    console.log('响应数据:', response.data)
+    // console.log('响应状态:', response.status)
+    // console.log('响应数据:', response.data)
 
     // 根据响应类型决定如何处理响应
     let result
