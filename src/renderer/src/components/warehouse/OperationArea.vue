@@ -107,14 +107,23 @@
           </div>
         </div>
 
-        <div v-if="form.options.addInventory" class="sub-options-container inventory-container">
-          <label class="inventory-label">库存数量：</label>
-          <input
-            type="number"
-            :value="form.options.inventoryAmount"
-            @input="updateOption('inventoryAmount', $event.target.value)"
-            class="inventory-input"
-          />
+        <div v-if="form.options.addInventory" class="sub-options-container">
+          <div class="logistics-header">库存信息</div>
+          <div class="logistics-options">
+            <div class="logistics-input-group" style="grid-column: 1 / -1;">
+              <label>数量：</label>
+              <input 
+                type="number" 
+                :value="form.options.inventoryAmount" 
+                @input="updateOption('inventoryAmount', $event.target.value)" 
+                placeholder="默认: 1000" 
+                class="logistics-input" 
+              />
+            </div>
+          </div>
+          <div class="logistics-hint">
+            <span>提示：添加库存会对所选SKU创建指定数量的库存</span>
+          </div>
         </div>
       </div>
 

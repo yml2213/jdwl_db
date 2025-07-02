@@ -43,15 +43,24 @@
     </div>
 
     <div class="inventory-container" v-if="options.useAddInventory">
-      <label class="inventory-label">库存数量：</label>
-      <input
-        type="number"
-        v-model="options.inventoryAmount"
-        min="1"
-        max="10000"
-        class="inventory-input"
-        :disabled="!isManualMode"
-      />
+      <div class="logistics-header">库存信息</div>
+      <div class="logistics-options">
+        <div class="logistics-input-group">
+          <label>数量：</label>
+          <input
+            type="number"
+            v-model="options.inventoryAmount"
+            min="1"
+            max="10000"
+            placeholder="默认: 1000"
+            class="logistics-input"
+            :disabled="!isManualMode"
+          />
+        </div>
+      </div>
+      <div class="logistics-hint">
+        <span>提示：添加库存会对所选SKU创建指定数量的库存</span>
+      </div>
     </div>
 
     <!-- 动态显示导入商品简称组件 -->
@@ -143,18 +152,38 @@ const handleAddInventoryChange = (event) => {
   background-color: #f9f9f9;
   border-radius: 4px;
   border: 1px solid #eaeaea;
+}
+
+.logistics-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.logistics-options {
+  padding: 10px;
+  background-color: #fafafa;
+  border-radius: 4px;
+}
+
+.logistics-input-group {
   display: flex;
   align-items: center;
-  max-width: 250px;
+  gap: 5px;
 }
 
-.inventory-label {
-  font-weight: 500;
-  margin-right: 8px;
-  color: #333;
+.logistics-input-group label {
+  flex-shrink: 0;
+  width: 45px;
+  text-align: right;
+  font-size: 13px;
+  color: #606266;
 }
 
-.inventory-input {
+.logistics-input {
   width: 100px;
   padding: 6px 8px;
   border: 1px solid #d9d9d9;
@@ -162,9 +191,15 @@ const handleAddInventoryChange = (event) => {
   font-size: 14px;
 }
 
-.inventory-input:focus {
+.logistics-input:focus {
   border-color: #1890ff;
   outline: none;
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.logistics-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>
