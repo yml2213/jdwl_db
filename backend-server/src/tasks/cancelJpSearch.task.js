@@ -14,6 +14,12 @@ import {
 import getCSGTask from './getCSG.task.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import { getFormattedChinaTime } from '../utils/timeUtils.js'
+import { saveExcelFile } from '../utils/fileUtils.js'
+
+// 配置常量
+const BATCH_SIZE = 5000
+const BATCH_DELAY = 1 * 60 * 1000 // 1分钟
+const TEMP_DIR_NAME = '取消京配打标'
 
 /**
  * 创建用于取消京配查询的Excel文件Buffer
@@ -97,19 +103,14 @@ async function execute(context, sessionData) {
                 const fileBuffer = createJpSearchExcelBuffer(batchItems)
 
                 // 保存文件到本地
-                try {
-                    const tempDir = path.resolve(process.cwd(), 'temp', '取消京配打标')
-                    if (!fs.existsSync(tempDir)) {
-                        fs.mkdirSync(tempDir, { recursive: true })
-                    }
-                    const timestamp = getFormattedChinaTime()
-                    const shopNameForFile = store.shopName.replace(/[\\/:"*?<>|]/g, '_')
-                    const filename = `${timestamp}_${shopNameForFile}.xls`
-                    const filePath = path.join(tempDir, filename)
-                    fs.writeFileSync(filePath, fileBuffer)
+                const filePath = await saveExcelFile(fileBuffer, {
+                    dirName: TEMP_DIR_NAME,
+                    store: store,
+                    extension: 'xls'
+                })
+
+                if (filePath) {
                     console.log(`[Task: cancelJpSearch] 批处理文件已保存: ${filePath}`)
-                } catch (saveError) {
-                    console.error('[Task: cancelJpSearch] 保存Excel文件失败:', saveError)
                 }
 
                 const response = await uploadJpSearchFile(fileBuffer, sessionData)
@@ -130,13 +131,10 @@ async function execute(context, sessionData) {
             }
         }
 
-        const BATCH_SIZE = 5000
-        const DELAY_MS = 1 * 60 * 1000
-
         const batchResults = await executeInBatches({
             items: uniqueItems,
             batchSize: BATCH_SIZE,
-            delay: DELAY_MS,
+            delay: BATCH_DELAY,
             batchFn,
             log: (message, level = 'info') =>
                 console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),

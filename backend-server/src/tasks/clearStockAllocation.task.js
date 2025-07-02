@@ -5,16 +5,17 @@
  * 2. 调用API，清零整个店铺的库存。
  */
 import XLSX from 'xlsx'
-import fs from 'fs'
-import path from 'path'
 import {
   clearStockForWholeStore,
   uploadInventoryAllocationFile,
-  uploadClearAllocationFile,
-  checkClearAllocationResult
 } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
-import { getFormattedChinaTime } from '../utils/timeUtils.js'
+import { saveExcelFile } from '../utils/fileUtils.js'
+
+// 配置常量
+const BATCH_SIZE = 2000
+const BATCH_DELAY = 5 * 60 * 1000 // 5分钟
+const TEMP_DIR_NAME = '清零库存分配'
 
 function createExcelFile(skuList, department, store) {
   const headers = [
@@ -83,20 +84,14 @@ async function execute(context, sessionData) {
         const fileBuffer = createExcelFile(skuBatch, department, store)
 
         // 临时文件保存到本地
-        try {
-          const tempDir = path.resolve(process.cwd(), 'temp', '清零库存分配')
-          if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true })
-          }
-          const timestamp = getFormattedChinaTime()
-          const shopNameForFile = store.shopName.replace(/[\\/:"*?<>|]/g, '_')
-          const fileName = `${timestamp}_${shopNameForFile}.xlsx`
-          const filePath = path.join(tempDir, fileName)
-          fs.writeFileSync(filePath, fileBuffer)
+        const filePath = await saveExcelFile(fileBuffer, {
+          dirName: TEMP_DIR_NAME,
+          store: store,
+          extension: 'xlsx'
+        })
+
+        if (filePath) {
           console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${filePath}`)
-        } catch (saveError) {
-          console.error('[Task: clearStockAllocation] 保存Excel文件失败:', saveError)
-          // 保存失败不应中断整个任务
         }
 
         // 调用封装在 jdApiService 中的函数来上传文件
@@ -120,13 +115,10 @@ async function execute(context, sessionData) {
       }
     }
 
-    const BATCH_SIZE = 2000
-    const DELAY_MS = 5 * 60 * 1000 // 5 minutes
-
     const batchResults = await executeInBatches({
       items: skus,
       batchSize: BATCH_SIZE,
-      delay: DELAY_MS,
+      delay: BATCH_DELAY,
       batchFn,
       log: (message, level = 'info') =>
         console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),

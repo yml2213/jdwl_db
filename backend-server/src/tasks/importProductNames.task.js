@@ -1,8 +1,10 @@
 import * as XLSX from 'xlsx'
 import { uploadProductNames } from '../services/jdApiService.js'
-import fs from 'fs'
-import path from 'path'
 import { getFormattedChinaTime } from '../utils/timeUtils.js'
+import { saveExcelFile } from '../utils/fileUtils.js'
+
+// 配置常量
+const TEMP_DIR_NAME = '导入商品简称'
 
 async function readExcelFile(filePath) {
     try {
@@ -47,41 +49,6 @@ function createNewExcelData(originalData, department) {
     return [chineseHeaders, englishHeaders, ...rows]
 }
 
-/**
- * 将生成的Excel文件保存到临时目录，用于测试
- * @param {Buffer} buffer - Excel文件的Buffer
- * @param {string} fileName - 文件名
- * @returns {string} 保存的文件路径
- */
-async function saveExcelForTesting(buffer, fileName, sessionData) {
-    try {
-        // 从会话数据中获取店铺名称，如果没有则使用 'unknown-shop'
-        const shopName = sessionData?.shop?.shopName || 'unknown-shop'
-
-        // 创建临时目录（如果不存在）
-        const tempDir = path.resolve(process.cwd(), 'temp', '导入商品简称')
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true })
-        }
-
-        // 生成唯一文件名，避免冲突
-        const timestamp = getFormattedChinaTime()
-        // 清理店铺名称，移除可能导致路径问题的字符
-        const safeShopName = shopName.replace(/[\\/:"*?<>|]/g, '_')
-        const uniqueFileName = `${timestamp}_${safeShopName}_${fileName}`
-        const filePath = path.join(tempDir, uniqueFileName)
-
-        // 写入文件
-        fs.writeFileSync(filePath, buffer)
-        console.log(`测试文件已保存到: ${filePath}`)
-
-        return filePath
-    } catch (error) {
-        console.error('保存测试文件失败:', error)
-        return null // 失败时返回null，但不中断主流程
-    }
-}
-
 async function convertToExcelFile(data, fileName, sessionData) {
     try {
         const ws = XLSX.utils.aoa_to_sheet(data)
@@ -91,7 +58,20 @@ async function convertToExcelFile(data, fileName, sessionData) {
         const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xls' })
 
         // 保存文件用于测试
-        await saveExcelForTesting(buffer, fileName, sessionData)
+        // 从会话数据中获取店铺名称，如果没有则使用 'unknown-shop'
+        const shopName = sessionData?.shop?.shopName || 'unknown-shop'
+
+        // 保存文件
+        const filePath = await saveExcelFile(buffer, {
+            dirName: TEMP_DIR_NAME,
+            fileName: fileName.replace('.xls', ''),
+            store: { shopName },
+            extension: 'xls'
+        })
+
+        if (filePath) {
+            console.log(`测试文件已保存到: ${filePath}`)
+        }
 
         return { buffer, fileName }
     } catch (error) {

@@ -7,6 +7,12 @@ import { executeInBatches } from '../utils/batchProcessor.js'
 import fs from 'fs'
 import path from 'path'
 import { getFormattedChinaTime } from '../utils/timeUtils.js'
+import { saveExcelFile } from '../utils/fileUtils.js'
+
+// 配置常量
+const BATCH_SIZE = 2000
+const BATCH_DELAY = 60 * 1000 // 1分钟
+const TEMP_DIR_NAME = '导入店铺商品'
 
 /**
  * 在后端创建包含SKU的Excel文件Buffer
@@ -75,20 +81,14 @@ async function execute(context, updateFn, sessionData) {
         )
 
         // 将生成的Excel文件保存到本地
-        try {
-          const tempDir = path.resolve(process.cwd(), 'temp', '导入店铺商品')
-          if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true })
-          }
-          const timestamp = getFormattedChinaTime()
-          const shopNameForFile = store?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
-          const filename = `${timestamp}_${shopNameForFile}.xls`
-          const filePath = path.join(tempDir, filename)
-          fs.writeFileSync(filePath, fileBuffer)
+        const filePath = await saveExcelFile(fileBuffer, {
+          dirName: TEMP_DIR_NAME,
+          store: { shopName: store?.name },
+          extension: 'xls'
+        })
+
+        if (filePath) {
           console.log(`[Task: importStoreProducts] Excel文件已保存到: ${filePath}`)
-        } catch (saveError) {
-          console.error(`[Task: importStoreProducts] 保存Excel文件失败:`, saveError)
-          // 保存失败不应中断整个任务，仅记录错误
         }
 
         const dataForUpload = { ...sessionData, store, department }
@@ -108,13 +108,10 @@ async function execute(context, updateFn, sessionData) {
       }
     }
 
-    const BATCH_SIZE = 2000
-    const DELAY_MS = 60 * 1000
-
     const batchResults = await executeInBatches({
       items: skus,
       batchSize: BATCH_SIZE,
-      delay: DELAY_MS,
+      delay: BATCH_DELAY,
       batchFn,
       log: (message, level = 'info') =>
         console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),

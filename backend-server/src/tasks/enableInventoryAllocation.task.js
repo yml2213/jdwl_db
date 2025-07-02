@@ -1,12 +1,11 @@
 import XLSX from 'xlsx'
 import { uploadInventoryAllocationFile } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
-import fs from 'fs'
-import path from 'path'
-import { getFormattedChinaTime } from '../utils/timeUtils.js'
+import { saveExcelFile } from '../utils/fileUtils.js'
 
 const BATCH_SIZE = 2000
 const BATCH_DELAY = 5 * 60 * 1000 // 5 minutes
+const TEMP_DIR_NAME = '启用库存商品分配'
 
 /**
  * 启用商品库存分配的任务
@@ -54,23 +53,16 @@ async function execute(context, updateFn, sessionData) {
       const fileBuffer = createExcelFile(batchItems, department, store)
 
       // 保存文件到本地
-      try {
-        const tempDir = path.resolve(process.cwd(), 'temp', '启用库存商品分配')
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true })
-        }
-        const timestamp = getFormattedChinaTime()
-        console.log('enableInventoryAllocation.task.js -- timestamp:', timestamp)
+      const filePath = await saveExcelFile(fileBuffer, {
+        dirName: TEMP_DIR_NAME,
+        store: store,
+        extension: 'xlsx'
+      })
 
-        const shopNameForFile = store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
-        const filename = `${timestamp}_${shopNameForFile}.xlsx`
-        const filePath = path.join(tempDir, filename)
-        fs.writeFileSync(filePath, fileBuffer)
+      if (filePath) {
         console.log(`${batchLogPrefix} Excel文件已保存到: ${filePath}`)
-      } catch (saveError) {
-        console.error(`${batchLogPrefix} 保存Excel文件失败:`, saveError)
-        // 不中断流程
       }
+
       updateFn('Excel文件已生成，正在上传...')
       console.log(`${batchLogPrefix} 正在上传文件...`)
       const response = await uploadInventoryAllocationFile(fileBuffer, sessionData)
