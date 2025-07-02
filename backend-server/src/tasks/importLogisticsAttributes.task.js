@@ -13,15 +13,17 @@ import path from 'path'
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, sessionData) {
-  const { skus, csgList, store, logisticsOptions } = context
+async function execute(context, updateFn, sessionData) {
+  const { skus, csgList, department, logisticsOptions } = context
+  console.log('importLogisticsAttributes.task.js -- context:', context)
+  console.log('importLogisticsAttributes.task.js -- sessionData:', sessionData)
 
   // 1. 参数校验
-  const itemsToProcess = csgList || skus
+  const itemsToProcess = skus
   if (!itemsToProcess || itemsToProcess.length === 0) {
-    return { success: true, message: '商品列表为空，无需操作。' }
+    return { success: false, message: 'sku为空，无需操作。' }
   }
-  if (!store || !store.deptNo) {
+  if (!department || !department.deptNo) {
     throw new Error('缺少有效的事业部信息。')
   }
   if (!sessionData || !sessionData.cookies) {
@@ -29,7 +31,7 @@ async function execute(context, sessionData) {
   }
 
   console.log(
-    `[Task: importLogisticsAttributes] "导入物流属性" 开始，事业部 [${store.deptName}]...`
+    `[Task: importLogisticsAttributes] "导入物流属性" 开始，事业部 [${department.name} - ${department.deptNo}]...`
   )
   console.log(
     `[Task: importLogisticsAttributes] 将为 ${itemsToProcess.length} 个商品导入物流属性。`
@@ -38,7 +40,7 @@ async function execute(context, sessionData) {
 
   const batchFn = async (batchItems) => {
     try {
-      const fileBuffer = createLogisticsExcelBuffer(batchItems, store, logisticsOptions)
+      const fileBuffer = createLogisticsExcelBuffer(batchItems, department, logisticsOptions)
 
       // 将生成的Excel文件保存到本地
       try {

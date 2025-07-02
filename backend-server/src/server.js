@@ -230,21 +230,21 @@ app.post('/task', async (req, res) => {
         : null)
 
     if (!taskFunction) {
-      throw new Error(`任务 ${taskName} 未找到或其导出格式不正确`)
+      throw new Error(`单任务执行 -- 任务 ${taskName} 未找到或其导出格式不正确`)
     }
 
     // 创建一个状态更新函数
     const updateFn = (status) => {
-      console.log(`任务 ${taskName} 状态更新:`, typeof status === 'string' ? status : JSON.stringify(status));
+      console.log(`单任务执行 -- 任务 ${taskName} 状态更新:`, typeof status === 'string' ? status : JSON.stringify(status));
     }
 
-    console.log(`开始执行任务 ${taskName}...`);
+    console.log(`单任务执行 -- 开始执行任务 ${taskName}...`);
     const result = await taskFunction(payload, updateFn, sessionData)
-    console.log(`任务 ${taskName} 执行完成:`, result);
+    console.log(`单任务执行 -- 任务 ${taskName} 执行完成:`, result);
 
     res.status(200).json({ success: true, data: result })
   } catch (error) {
-    console.error(`执行任务 ${taskName} 时出错:`, error)
+    console.error(`单任务执行 -- 执行任务 ${taskName} 时出错:`, error)
     res.status(500).json({ success: false, message: error.message, stack: error.stack })
   }
 })
