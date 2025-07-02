@@ -1,5 +1,6 @@
 /**
  * 后端任务：启用京配打标生效
+ * 7.3 优化 使用 getProductData.task.js 查询商品数据
  */
 import XLSX from 'xlsx'
 import { uploadJpSearchFile } from '../services/jdApiService.js'
@@ -24,8 +25,8 @@ async function execute(context, updateFn, sessionData) {
   // console.log('enableJpSearch.task.js -- context:', context)
   // console.log('enableJpSearch.task.js -- sessionData:', sessionData)
 
-  console.log('enableJpSearch.task.js -- skus:', skus)
-  console.log('enableJpSearch.task.js -- store:', store)
+  // console.log('enableJpSearch.task.js -- skus:', skus)
+  // console.log('enableJpSearch.task.js -- store:', store)
 
   // 验证输入参数
   if (!skus || !Array.isArray(skus) || skus.length === 0) {
@@ -42,15 +43,15 @@ async function execute(context, updateFn, sessionData) {
 
     // 获取商品数据
     const payload = { skus }
-    const productData = await getProductData.execute(payload, updateFn, sessionData)
+    const result = await getProductData.execute(payload, updateFn, sessionData)
 
     // 验证商品数据
-    if (!productData || productData.length === 0) {
+    if (!result || !result.data || result.data.length === 0) {
       return { success: false, message: '未能获取到商品列表，请检查SKU是否正确。' }
     }
 
     // 提取CSG列表
-    const csgList = productData.map((p) => p.shopGoodsNo).filter(Boolean)
+    const csgList = result.data.map((p) => p.shopGoodsNo).filter(Boolean)
     if (csgList.length === 0) {
       return { success: false, message: '未找到有效的CSG编号' }
     }
@@ -59,13 +60,13 @@ async function execute(context, updateFn, sessionData) {
     console.log(`[Task: enableJpSearch] "启用京配打标生效" 开始，店铺 [${store?.shopName || '未知店铺'}]...`)
 
     // 执行批处理
-    const result = await processInBatches(csgList, store, sessionData)
+    const result2 = await processInBatches(csgList, store, sessionData)
 
-    if (!result.success) {
-      throw new Error(`启用京配打标生效失败: ${result.message}`)
+    if (!result2.success) {
+      throw new Error(`启用京配打标生效失败: ${result2.message}`)
     }
 
-    return { success: true, message: result.message }
+    return { success: true, message: result2.message }
   } catch (error) {
     console.error(`[Task: enableJpSearch] 执行失败:`, error)
     return { success: false, message: `执行失败: ${error.message}` }
