@@ -1,11 +1,10 @@
 <template>
   <div class="file-upload-container">
-    <el-button type="primary" @click="triggerFileInput">选择文件</el-button>
+    <el-button type="primary" size="small" @click="triggerFileInput">选择文件</el-button>
     <div v-if="selectedFile" class="selected-file-info">
       <span class="file-name">{{ selectedFile.name }}</span>
-      <el-button type="danger" link @click="clearFile">清除</el-button>
+      <el-button type="danger" size="small" link @click="clearFile">清除</el-button>
     </div>
-    <span v-else class="no-file-selected">未选择文件</span>
   </div>
 </template>
 
@@ -71,17 +70,20 @@ const clearFile = () => {
 .file-upload-container {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 .selected-file-info {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 12px;
   color: #606266;
+  max-width: 150px;
+  overflow: hidden;
 }
-.no-file-selected {
-  font-size: 14px;
-  color: #909399;
+.file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

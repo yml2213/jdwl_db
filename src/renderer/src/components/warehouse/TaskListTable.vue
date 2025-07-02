@@ -106,7 +106,7 @@ watch(
 
 .task-header-cell,
 .task-cell {
-  padding: 10px 12px;
+  padding: 8px 10px;
   text-align: left;
   border-bottom: 1px solid #e0e0e0;
   white-space: nowrap;
@@ -116,6 +116,11 @@ watch(
 .task-header-cell {
   background-color: #f9fafb;
   font-weight: 600;
+  font-size: 12px;
+}
+
+.task-cell {
+  font-size: 12px;
 }
 
 .actions-header-cell {
@@ -149,14 +154,14 @@ watch(
 
 .actions-cell {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
   align-items: center;
 }
 
 .action-btn {
   border: none;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;

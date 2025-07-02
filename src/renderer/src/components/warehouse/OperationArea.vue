@@ -18,7 +18,9 @@
       <div class="form-group sku-input-container">
         <div class="sku-header">
           <label class="form-label">输入SKU</label>
-          <FileUploader @file-change="handleFileChange" />
+          <div class="file-upload-wrapper">
+            <FileUploader @file-change="handleFileChange" />
+          </div>
         </div>
         <div class="textarea-wrapper">
           <textarea
@@ -48,7 +50,7 @@
               :checked="form.options[option.key]"
               @change="updateOption(option.key, $event.target.checked)"
             />
-            <label :for="option.key">{{ option.label }}</label>
+            <label :for="option.key" class="option-label">{{ option.label }}</label>
           </div>
         </div>
 
@@ -220,6 +222,16 @@ const handleFileChange = (file) => {
   background-color: white;
 }
 
+.sku-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-upload-wrapper {
+  margin-left: auto;
+}
+
 .textarea-wrapper {
   position: relative;
 }
@@ -259,7 +271,7 @@ const handleFileChange = (file) => {
 .manual-options-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px 12px;
 }
 
 .option-item {
@@ -268,7 +280,14 @@ const handleFileChange = (file) => {
 }
 
 .option-item input[type='checkbox'] {
-  margin-right: 8px;
+  margin-right: 6px;
+}
+
+.option-label {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sub-options-container {
