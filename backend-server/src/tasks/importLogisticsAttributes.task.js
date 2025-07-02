@@ -6,6 +6,7 @@ import { uploadLogisticsAttributesFile } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import fs from 'fs'
 import path from 'path'
+import { getFormattedChinaTime } from '../utils/timeUtils.js'
 
 /**
  * 主执行函数 - 由任务调度器调用
@@ -57,7 +58,8 @@ async function execute(context, updateFn, sessionData) {
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true })
         }
-        const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+        const timestamp = getFormattedChinaTime()
+        console.log('importLogisticsAttributes.task.js -- timestamp:', timestamp)
         const deptNameForFile = department?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-dept'
         const filename = `${timestamp}_${deptNameForFile}.xls`
         const filePath = path.join(tempDir, filename)
@@ -70,6 +72,7 @@ async function execute(context, updateFn, sessionData) {
 
       const dataForApi = { ...sessionData, store }
       const result = await uploadLogisticsAttributesFile(fileBuffer, dataForApi)
+
 
       if (result.success) {
         return { success: true, message: result.data || '物流属性导入成功' }

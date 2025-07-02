@@ -1299,6 +1299,8 @@ export async function queryProductDataBySkus(skus, deptId, schemeId, sessionData
     }
   }
 
+  console.log('queryProductDataBySkus -- dataRequest ===>', dataRequest)
+
   const aaData = [{ name: 'iDisplayStart', value: 0 }, { name: 'iDisplayLength', value: 100000 }]
 
   const response = await requestReportApi({

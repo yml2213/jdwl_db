@@ -9,9 +9,12 @@ import fs from 'fs'
 import path from 'path'
 import {
   clearStockForWholeStore,
-  uploadInventoryAllocationFile
+  uploadInventoryAllocationFile,
+  uploadClearAllocationFile,
+  checkClearAllocationResult
 } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
+import { getFormattedChinaTime } from '../utils/timeUtils.js'
 
 function createExcelFile(skuList, department, store) {
   const headers = [
@@ -85,7 +88,7 @@ async function execute(context, sessionData) {
           if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true })
           }
-          const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+          const timestamp = getFormattedChinaTime()
           const shopNameForFile = store.shopName.replace(/[\\/:"*?<>|]/g, '_')
           const fileName = `${timestamp}_${shopNameForFile}.xlsx`
           const filePath = path.join(tempDir, fileName)

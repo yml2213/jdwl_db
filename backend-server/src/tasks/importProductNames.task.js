@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { uploadProductNames } from '../services/jdApiService.js'
 import fs from 'fs'
 import path from 'path'
+import { getFormattedChinaTime } from '../utils/timeUtils.js'
 
 async function readExcelFile(filePath) {
     try {
@@ -64,7 +65,7 @@ async function saveExcelForTesting(buffer, fileName, sessionData) {
         }
 
         // 生成唯一文件名，避免冲突
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const timestamp = getFormattedChinaTime()
         // 清理店铺名称，移除可能导致路径问题的字符
         const safeShopName = shopName.replace(/[\\/:"*?<>|]/g, '_')
         const uniqueFileName = `${timestamp}_${safeShopName}_${fileName}`
@@ -159,7 +160,7 @@ async function execute(payload, updateFn, sessionData) {
                 const end = Math.min(start + BATCH_SIZE, dataRows.length)
                 const currentBatchRows = dataRows.slice(start, end)
                 const batchData = [...headers, ...currentBatchRows]
-                const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+                const timestamp = getFormattedChinaTime()
                 const batchFileName = `${timestamp}_商品批量修改自定义模板_批次${i + 1}.xls`
 
                 updateFn({

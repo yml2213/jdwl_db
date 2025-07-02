@@ -2,11 +2,11 @@
  * 后端任务：导入店铺商品
  */
 import * as XLSX from 'xlsx'
-import { uploadStoreProducts } from '../services/jdApiService.js'
+import { uploadStoreProducts, uploadStoreProductsFile } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import fs from 'fs'
 import path from 'path'
-
+import { getFormattedChinaTime } from '../utils/timeUtils.js'
 
 /**
  * 在后端创建包含SKU的Excel文件Buffer
@@ -80,7 +80,7 @@ async function execute(context, updateFn, sessionData) {
           if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true })
           }
-          const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+          const timestamp = getFormattedChinaTime()
           const shopNameForFile = store?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
           const filename = `${timestamp}_${shopNameForFile}.xls`
           const filePath = path.join(tempDir, filename)

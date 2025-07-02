@@ -78,15 +78,14 @@ onMounted(() => {
   const savedState = getWarehouseLabelingForm()
   if (savedState) {
     Object.assign(form, savedState.form)
-    Object.assign(logisticsOptions, savedState.logisticsOptions)
   }
 })
 
 // Watch for changes and save them
 watch(
-  () => ({ form: { ...form }, logisticsOptions: { ...logisticsOptions } }),
+  () => ({ form: { ...form } }),
   (newState) => {
-    saveWarehouseLabelingForm(newState)
+    saveWarehouseLabelingForm({ form: newState.form })
   },
   { deep: true }
 )
