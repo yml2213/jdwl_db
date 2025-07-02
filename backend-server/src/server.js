@@ -103,47 +103,13 @@ app.post('/api/init', async (req, res) => {
     const result = await taskFunction({}, () => { }, req.session.context)
 
     if (result.success) {
-      req.session.operationId = result.operationId
+      // ID已存入DB，会话中无需保存
       res.status(200).json({ success: true, operationId: result.operationId })
     } else {
       throw new Error(result.message || '初始化任务失败')
     }
   } catch (error) {
     console.error('执行 /api/init 时出错:', error)
-    res.status(500).json({ success: false, message: error.message })
-  }
-})
-
-/**
- * @description 退出应用，清理会话中的操作ID
- */
-app.post('/api/logout', async (req, res) => {
-  if (!req.session.context) {
-    return res.status(401).json({ message: '无效的会话，请先登录' })
-  }
-
-  const { operationId } = req.session
-  if (!operationId) {
-    // 如果没有 operationId，也认为是成功退出，因为可能已经清理过了
-    return res.status(200).json({ success: true, message: '会话中没有需要清理的操作ID。' })
-  }
-
-  try {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url))
-    const taskPath = path.join(__dirname, 'tasks', 'logoutSession.task.js')
-    const taskModule = await import(taskPath)
-    const taskFunction = taskModule.default.execute
-
-    // 调用注销任务
-    await taskFunction({ operationId }, () => { }, req.session.context)
-
-    // 从会话中删除 operationId
-    delete req.session.operationId
-
-    res.status(200).json({ success: true, message: '会话清理成功。' })
-  } catch (error) {
-    console.error('执行 /api/logout 时出错:', error)
-    // 即便后端清理失败，也告知前端可以继续，但记录错误
     res.status(500).json({ success: false, message: error.message })
   }
 })

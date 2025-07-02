@@ -4,7 +4,7 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { getSessionStatus, initSession, logoutSession } from './services/apiService'
+import { getSessionStatus, initSession } from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
@@ -87,9 +87,8 @@ const handleSessionRestored = (context) => {
 }
 
 // 处理退出登录
-const handleLogout = async () => {
-  console.log('正在执行登出操作...')
-  await logoutSession() // 调用后端logout
+const handleLogout = () => {
+  console.log('正在执行前端登出操作...')
   sessionContext.value = null
   isInitialized.value = false // 重置初始化状态
   clearSelections()
@@ -152,28 +151,10 @@ const copyToClipboard = (text, section) => {
 // 组件挂载时检查会话状态
 onMounted(async () => {
   await checkSessionStatus()
-  window.addEventListener('beforeunload', handleBeforeUnload)
-  
-  // 监听主进程发来的关闭应用前的通知
-  window.electron.ipcRenderer.on('app-quitting', async () => {
-    console.log('接收到主进程的 app-quitting 信号，执行登出...')
-    await logoutSession()
-    // 通知主进程可以安全退出了
-    window.electron.ipcRenderer.send('safe-to-quit')
-  })
 })
 
-const handleBeforeUnload = (event) => {
-  // 这个同步调用不足以保证异步的logoutSession完成
-  // 主要依赖主进程的 'before-quit' 事件来处理
-  console.log('窗口即将关闭 (beforeunload event)')
-  // 尝试调用，但不保证成功
-  logoutSession()
-}
-
 onBeforeUnmount(() => {
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-  window.electron.ipcRenderer.removeAllListeners('app-quitting')
+  // 不再需要监听任何事件
 })
 
 // 选择JSON内容

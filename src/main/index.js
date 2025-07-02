@@ -103,33 +103,6 @@ function createWindow() {
       createLoginWindow(mainWindow, icon)
     }
   })
-
-  let isQuitting = false
-
-  app.on('before-quit', (event) => {
-    if (!isQuitting) {
-      event.preventDefault()
-      isQuitting = true
-      console.log('应用即将退出，正在通知渲染进程执行清理...')
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('app-quitting')
-      } else {
-        app.quit()
-      }
-
-      const quitTimeout = setTimeout(() => {
-        console.log('等待渲染进程超时，强制退出。')
-        app.quit()
-      }, 5000)
-
-      ipcMain.once('safe-to-quit', () => {
-        clearTimeout(quitTimeout)
-        console.log('渲染进程已清理完毕，应用安全退出。')
-        app.quit()
-      })
-    }
-  })
 }
 
 // This method will be called when Electron has finished

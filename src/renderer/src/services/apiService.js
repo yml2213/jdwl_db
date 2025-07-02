@@ -1588,18 +1588,3 @@ export const initSession = async () => {
     throw error.response?.data || new Error('服务器错误')
   }
 }
-
-/**
- * @description 调用后端 /api/logout 接口
- */
-export const logoutSession = async () => {
-  try {
-    console.log('调用 /api/logout 注销会话...')
-    const response = await apiClient.post('/api/logout')
-    console.log('/api/logout 响应:', response.data)
-    return response.data
-  } catch (error) {
-    console.error('注销会话失败:', error.response?.data || error.message)
-    // 即便失败也继续，因为可能是网络问题或服务器已关闭
-  }
-}
