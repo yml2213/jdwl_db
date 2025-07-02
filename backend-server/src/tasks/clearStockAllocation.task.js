@@ -85,9 +85,8 @@ async function execute(context, sessionData) {
           if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, { recursive: true })
           }
-          const timestamp = new Date().toISOString().replace(/:/g, '-')
-          const shopNameForFile =
-            store?.shopName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-shop'
+          const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+          const shopNameForFile = store.shopName.replace(/[\\/:"*?<>|]/g, '_')
           const fileName = `${timestamp}_${shopNameForFile}.xlsx`
           const filePath = path.join(tempDir, fileName)
           fs.writeFileSync(filePath, fileBuffer)

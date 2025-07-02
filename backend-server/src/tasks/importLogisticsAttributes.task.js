@@ -14,7 +14,7 @@ import path from 'path'
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, updateFn, sessionData) {
-  const { skus, csgList, department, logisticsOptions } = context
+  const { skus, department, store } = context
   console.log('importLogisticsAttributes.task.js -- context:', context)
   console.log('importLogisticsAttributes.task.js -- sessionData:', sessionData)
 
@@ -26,8 +26,17 @@ async function execute(context, updateFn, sessionData) {
   if (!department || !department.deptNo) {
     throw new Error('缺少有效的事业部信息。')
   }
+  if (!store) {
+    throw new Error('缺少有效的店铺信息。')
+  }
   if (!sessionData || !sessionData.cookies) {
     throw new Error('缺少会话信息')
+  }
+  const logisticsOptions = {
+    length: context.length,
+    width: context.width,
+    height: context.height,
+    grossWeight: context.grossWeight
   }
 
   console.log(
@@ -48,8 +57,8 @@ async function execute(context, updateFn, sessionData) {
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true })
         }
-        const timestamp = new Date().toISOString().replace(/:/g, '-')
-        const deptNameForFile = store?.deptName?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-dept'
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+        const deptNameForFile = department?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-dept'
         const filename = `${timestamp}_${deptNameForFile}.xls`
         const filePath = path.join(tempDir, filename)
         fs.writeFileSync(filePath, fileBuffer)

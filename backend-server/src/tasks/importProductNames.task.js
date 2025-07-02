@@ -159,7 +159,8 @@ async function execute(payload, updateFn, sessionData) {
                 const end = Math.min(start + BATCH_SIZE, dataRows.length)
                 const currentBatchRows = dataRows.slice(start, end)
                 const batchData = [...headers, ...currentBatchRows]
-                const batchFileName = `商品批量修改自定义模板_批次${i + 1}.xls`
+                const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+                const batchFileName = `${timestamp}_商品批量修改自定义模板_批次${i + 1}.xls`
 
                 updateFn({
                     message: `正在处理批次 ${i + 1}/${totalBatches} (${currentBatchRows.length}行)...`
