@@ -62,10 +62,10 @@ const {
 
 const form = reactive(getInitialFormState())
 const logisticsOptions = reactive({
-  length: '',
-  width: '',
-  height: '',
-  grossWeight: ''
+  length: '120.00',
+  width: '60.00',
+  height: '6.00',
+  grossWeight: '0.1'
 })
 
 function updateForm(newFormState) {

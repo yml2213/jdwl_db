@@ -57,11 +57,53 @@
         <!-- Sub-options -->
         <div
           v-if="form.options.importLogisticsAttributes"
-          class="sub-options-container logistics-options"
+          class="sub-options-container"
         >
-          <div v-for="logisticsKey in Object.keys(logisticsOptions)" :key="logisticsKey" class="logistics-input-group">
-            <label>{{ logisticsKey }}:</label>
-            <input type="text" :value="logisticsOptions[logisticsKey]" @input="updateLogistics(logisticsKey, $event.target.value)" />
+          <div class="logistics-header">物流属性信息</div>
+          <div class="logistics-options">
+            <div class="logistics-input-group">
+              <label>长度：</label>
+              <input 
+                type="text" 
+                :value="logisticsOptions.length" 
+                @input="updateLogistics('length', $event.target.value)" 
+                placeholder="默认: 120.00" 
+                class="logistics-input" 
+              />
+            </div>
+            <div class="logistics-input-group">
+              <label>宽度：</label>
+              <input 
+                type="text" 
+                :value="logisticsOptions.width" 
+                @input="updateLogistics('width', $event.target.value)" 
+                placeholder="默认: 60.00" 
+                class="logistics-input" 
+              />
+            </div>
+            <div class="logistics-input-group">
+              <label>高度：</label>
+              <input 
+                type="text" 
+                :value="logisticsOptions.height" 
+                @input="updateLogistics('height', $event.target.value)" 
+                placeholder="默认: 6.00" 
+                class="logistics-input" 
+              />
+            </div>
+            <div class="logistics-input-group">
+              <label>毛重：</label>
+              <input 
+                type="text" 
+                :value="logisticsOptions.grossWeight" 
+                @input="updateLogistics('grossWeight', $event.target.value)" 
+                placeholder="默认: 0.1" 
+                class="logistics-input" 
+              />
+            </div>
+          </div>
+          <div class="logistics-hint">
+            <span>提示：长宽高单位为cm，毛重单位为kg</span>
           </div>
         </div>
 
@@ -296,10 +338,23 @@ const handleFileChange = (file) => {
   border-top: 1px dashed #dcdfe6;
 }
 
+.logistics-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
 .logistics-options {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 12px 15px;
+  position: relative;
+  background-color: #fafafa;
+  padding: 10px;
+  border-radius: 4px;
 }
 
 .logistics-input-group {
@@ -307,12 +362,36 @@ const handleFileChange = (file) => {
   align-items: center;
   gap: 5px;
 }
+
 .logistics-input-group label {
   flex-shrink: 0;
+  width: 45px;
+  text-align: right;
+  font-size: 13px;
+  color: #606266;
 }
-.logistics-input-group input {
+
+.logistics-input {
   width: 100%;
-  padding: 4px 6px;
+  padding: 6px 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #606266;
+  background-color: white;
+}
+
+.logistics-input::placeholder {
+  color: #c0c4cc;
+  font-size: 12px;
+}
+
+.logistics-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+  text-align: right;
+  padding-right: 5px;
 }
 
 .inventory-container {
