@@ -6,8 +6,7 @@ import { uploadStoreProducts } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import fs from 'fs'
 import path from 'path'
-// 注意：这里的 executeInBatches 和其他工具函数也需要从前端迁移到后端
-// import { executeInBatches } from './utils/taskUtils';
+
 
 /**
  * 在后端创建包含SKU的Excel文件Buffer

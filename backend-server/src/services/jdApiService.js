@@ -354,12 +354,47 @@ async function fetchShopGoodsPage(skuBatch, status, sessionData, start, length) 
 }
 
 /**
- * 查询指定SKU列表中所有已停用的商品
+ * 查询指定SKU列表中所有已停用的商品 
+ * 7.2 优化  新方案查询  getProductData.task.js 查询
  * @param {string[]} skus - 要查询的SKU列表
  * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
  * @returns {Promise<Array<object>>} - 返回停用商品对象的列表，每个对象包含shopGoodsNo等信息
  */
 export async function getDisabledProducts(skus, sessionData) {
+  getAuthInfo(sessionData)
+  const { departmentInfo, operationId } = sessionData
+
+  if (!skus || !Array.isArray(skus) || skus.length === 0) {
+    throw new Error('请求负载中必须包含一个非空的SKU数组。')
+  }
+  if (!departmentInfo || !departmentInfo.id) {
+    throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。')
+  }
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID--1 (operationId)。')
+  }
+
+  const deptId = departmentInfo.id
+
+  const allProductData = await queryProductDataBySkus(skus, deptId, operationId, sessionData)
+
+  console.log(`任务完成，共获取到 ${allProductData.length} 条商品数据。`)
+
+  // 过滤出状态为"禁用"的商品
+  const disabledProducts = allProductData.filter(product => product.status === '禁用')
+
+  console.log(`[jdApiService] 总共获取了 ${disabledProducts.length} 个已停用的商品。`)
+  return disabledProducts
+}
+
+/**
+ * 查询指定SKU列表中所有已停用的商品 
+ * 7.2 优化  新方案查询  getProductData.task.js 查询
+ * @param {string[]} skus - 要查询的SKU列表
+ * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
+ * @returns {Promise<Array<object>>} - 返回停用商品对象的列表，每个对象包含shopGoodsNo等信息
+ */
+export async function getDisabledProducts_bak(skus, sessionData) {
   getAuthInfo(sessionData)
   const allDisabledProducts = []
   const PAGE_SIZE = 100
@@ -1240,4 +1275,49 @@ export async function endSessionOperation(operationId, sessionData) {
 
   console.log(`[jdApiService] 报表方案 ${operationId} 已成功删除。`)
   return { success: true, message: `方案 ${operationId} 已删除` }
+}
+
+/**
+ * 根据SKU列表查询商品详细数据  通过报表API查询 -- 方案查询
+ * @param {string[]} skus - 商品的SKU数组 (sellerGoodsSign)
+ * @param {string} deptId - 事业部ID
+ * @param {string} schemeId - 查询方案ID (即 operationId)
+ * @param {object} sessionData - 包含认证信息的会话对象
+ * @returns {Promise<Array>} - 包含商品数据的数组
+ */
+export async function queryProductDataBySkus(skus, deptId, schemeId, sessionData) {
+  console.log(`[jdApiService] 正在查询 ${skus.length} 个SKU的商品数据...`)
+  const { cookieString } = getAuthInfo(sessionData)
+
+  const dataRequest = {
+    source: 2,
+    menuId: 'gs',
+    querySchemaID: schemeId,
+    condition: {
+      sellerGoodsSign: skus.join(','), // 将SKU数组合并为逗号分隔的字符串
+      deptId: deptId
+    }
+  }
+
+  const aaData = [{ name: 'iDisplayStart', value: 0 }, { name: 'iDisplayLength', value: 100000 }]
+
+  const response = await requestReportApi({
+    method: 'POST',
+    url: '/report/scheme/queryByPage.do',
+    data: qs.stringify({
+      dataRequest: JSON.stringify(dataRequest),
+      aaData: JSON.stringify(aaData)
+    }),
+    headers: { Cookie: cookieString }
+  })
+
+  if (response.resultData && response.resultData.aaData) {
+    console.log(
+      `[jdApiService] 成功获取SKU数据，共 ${response.resultData.aaData.length} 条记录。`
+    )
+    return response.resultData.aaData
+  }
+
+  console.log(`[jdApiService] 未能获取到商品数据。`)
+  return []
 }

@@ -103,8 +103,15 @@ app.post('/api/init', async (req, res) => {
     const result = await taskFunction({}, () => { }, req.session.context)
 
     if (result.success) {
-      // ID已存入DB，会话中无需保存
-      res.status(200).json({ success: true, operationId: result.operationId })
+      // 将 operationId 存入会话，供其他任务使用
+      req.session.operationId = result.operationId
+      req.session.save((err) => {
+        if (err) {
+          console.error('会话保存失败:', err)
+          return res.status(500).json({ success: false, message: '会话保存失败' })
+        }
+        res.status(200).json({ success: true, operationId: result.operationId })
+      })
     } else {
       throw new Error(result.message || '初始化任务失败')
     }
@@ -168,8 +175,11 @@ app.post('/task', async (req, res) => {
     return res.status(400).json({ success: false, message: '必须提供 taskName' })
   }
 
-  // 从会话中获取上下文
+  // 从会话中获取上下文，并注入 operationId
   const sessionData = req.session.context || {}
+  if (req.session.operationId) {
+    sessionData.operationId = req.session.operationId
+  }
 
   try {
     const __dirname = path.dirname(fileURLToPath(import.meta.url))

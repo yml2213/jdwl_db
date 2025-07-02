@@ -1,5 +1,10 @@
 /**
  * 后端任务：启用店铺商品
+ * 1. 查询停用的商品
+ * 2. 提取CSG编号并创建Excel文件
+ * 3. 上传文件以启用商品
+ * 
+ * 7.2 优化 查询csg使用 新方案查询  getProductData.task.js 查询
  */
 import XLSX from 'xlsx'
 import { getDisabledProducts, uploadStatusUpdateFile } from '../services/jdApiService.js'
@@ -39,7 +44,7 @@ async function execute(context, sessionData) {
       return { success: true, message: '所有商品状态均正常，无需启用。' }
     }
 
-    // 3. 提取CSG编号并创建Excel文件
+    // 3. 提取CSG编号并创建Excel文件 shopGoodsNo
     const csgNumbers = disabledProducts.map((p) => p.shopGoodsNo)
     console.log(
       `[Task: enableStoreProducts] 发现 ${csgNumbers.length} 个停用商品，准备通过上传文件启用...`
