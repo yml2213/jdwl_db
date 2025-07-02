@@ -248,6 +248,20 @@ export function getSelectedDepartment() {
  * @returns {Object|null} 店铺对象，如果不存在则返回null
  */
 export function getSelectedShop() {
+  // 首先尝试从新的存储位置获取
+  const lastSelected = getLastSelectedStoreAndWarehouse();
+  if (lastSelected && lastSelected.store) {
+    // 如果在新存储位置找到了店铺ID，则从店铺列表中查找完整对象
+    const shopsList = getShopsList();
+    if (shopsList && shopsList.length > 0) {
+      const shopFromList = shopsList.find(shop => shop.shopNo === lastSelected.store);
+      if (shopFromList) {
+        return shopFromList;
+      }
+    }
+  }
+
+  // 如果从新存储位置没有找到，则尝试从旧存储位置获取
   const data = localStorage.getItem(STORAGE_KEYS.SHOP)
   if (!data) return null
   try {
@@ -263,6 +277,20 @@ export function getSelectedShop() {
  * @returns {Object|null} 仓库对象，如果不存在则返回null
  */
 export function getSelectedWarehouse() {
+  // 首先尝试从新的存储位置获取
+  const lastSelected = getLastSelectedStoreAndWarehouse();
+  if (lastSelected && lastSelected.warehouse) {
+    // 如果在新存储位置找到了仓库ID，则从仓库列表中查找完整对象
+    const warehousesList = getWarehousesList();
+    if (warehousesList && warehousesList.length > 0) {
+      const warehouseFromList = warehousesList.find(warehouse => warehouse.warehouseNo === lastSelected.warehouse);
+      if (warehouseFromList) {
+        return warehouseFromList;
+      }
+    }
+  }
+
+  // 如果从新存储位置没有找到，则尝试从旧存储位置获取
   const data = localStorage.getItem(STORAGE_KEYS.WAREHOUSE)
   if (!data) return null
   try {

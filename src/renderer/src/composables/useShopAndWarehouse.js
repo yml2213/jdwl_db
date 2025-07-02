@@ -34,21 +34,30 @@ export function useShopAndWarehouse() {
   const selectedDepartment = ref(getSelectedDepartment()) // 当前选中的事业部
   const selectedVendor = ref(getSelectedVendor()) // 当前选中的供应商
 
-  // 在组件挂载时加载上次的选择
+  // 在组件挂载时加载上次的选择，改成同步执行以确保设置值的顺序正确
   onMounted(() => {
-    const lastSelected = getLastSelectedStoreAndWarehouse()
-    if (lastSelected) {
-      selectedStore.value = lastSelected.store
-      selectedWarehouse.value = lastSelected.warehouse
-    }
+    // 先加载数据
     loadShops()
     loadWarehouses()
+
+    // 然后在setTimeout中恢复选择，确保在shopsList已经加载完成后
+    setTimeout(() => {
+      const lastSelected = getLastSelectedStoreAndWarehouse()
+      console.log('Last selected store and warehouse:', lastSelected)
+      if (lastSelected && lastSelected.store) {
+        selectedStore.value = lastSelected.store
+      }
+      if (lastSelected && lastSelected.warehouse) {
+        selectedWarehouse.value = lastSelected.warehouse
+      }
+    }, 500) // 给予500ms的时间来加载shopsList和warehousesList
   })
 
   // 监听选择变化并保存
   watch(
     [selectedStore, selectedWarehouse],
     ([newStore, newWarehouse]) => {
+      console.log('Saving store and warehouse:', newStore, newWarehouse)
       saveSelectedStoreAndWarehouse({
         store: newStore,
         warehouse: newWarehouse
