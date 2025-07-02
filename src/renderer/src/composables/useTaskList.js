@@ -49,16 +49,36 @@ export function useTaskList(initialTasks = []) {
 
     try {
       let result;
-      // The payload is already perfectly constructed in executionData
-      const payload = task.executionData;
+      // 确保负载包含所有必要的信息
+      const payload = {
+        ...task.executionData,
+        // 确保这些关键字段存在且有效
+        skus: task.executionData.skus || [],
+        store: task.executionData.store || {},
+        vendor: task.executionData.vendor || {},
+        department: task.executionData.department || {}
+      };
+
+      console.log(`正在执行任务: ${task.name}, 类型: ${task.executionType}, 特性: ${task.executionFeature}`);
+      console.log('任务数据:', JSON.stringify({
+        sku: payload.skus ? payload.skus.length : 0,
+        store: payload.store?.shopName,
+        warehouse: payload.warehouse?.warehouseName,
+        vendor: payload.vendor?.name,
+        department: payload.department?.name
+      }));
 
       if (task.executionType === 'task') {
+        console.log(`调用后端 task 接口: ${task.executionFeature}`);
         result = await apiExecuteTask(task.executionFeature, payload)
         task.logs = result.logs || [{ message: result.message || JSON.stringify(result.data), type: 'info', timestamp: new Date().toISOString() }];
       } else { // Default to 'flow'
+        console.log(`调用后端 flow 接口: ${task.executionFeature}`);
         result = await executeFlow(task.executionFeature, payload)
         task.logs = result.logs || []
       }
+
+      console.log('任务执行结果:', result);
 
       if (result.success) {
         task.status = '成功'
@@ -68,6 +88,7 @@ export function useTaskList(initialTasks = []) {
         task.result = result.message || '未知错误，请检查提交日志'
       }
     } catch (error) {
+      console.error('任务执行出错:', error);
       task.status = '失败'
       task.result = error.response?.data?.message || error.message || '执行时发生未知网络或脚本错误'
       if (task.logs.length === 0 || !task.logs.find((log) => log.message.includes(task.result))) {

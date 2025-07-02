@@ -12,26 +12,44 @@ import { getDisabledProducts, uploadStatusUpdateFile } from '../services/jdApiSe
 /**
  * 主执行函数 - 由任务调度器调用
  * @param {object} context 包含 skus, store, department, vendor
+ * @param {function} updateFn 更新任务状态的函数
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, sessionData) {
-  const { skus, store } = context
-
-  // 1. 参数校验
-  if (!skus || skus.length === 0) {
-    return { success: true, message: 'SKU列表为空，无需操作。' }
-  }
-  if (!store) {
-    throw new Error('缺少有效的店铺信息。')
-  }
-  if (!sessionData || !sessionData.cookies) {
-    throw new Error('缺少会话信息')
-  }
-
-  console.log(`[Task: enableStoreProducts] "启用店铺商品" 开始，店铺 [${store.name}]...`)
-
+async function execute(context, updateFn, sessionData) {
   try {
+    console.log('enableStoreProducts 任务开始执行');
+    console.log('接收到的 context 参数:', JSON.stringify({
+      skus: context.skus ? `${context.skus.length} 个SKU` : '无SKUs',
+      store: context.store ? { name: context.store.name, shopNo: context.store.shopNo, spShopNo: context.store.spShopNo } : '无店铺信息',
+      department: context.department ? { name: context.department.name, deptNo: context.department.deptNo } : '无事业部信息',
+      vendor: context.vendor ? { name: context.vendor.name, id: context.vendor.id } : '无供应商信息'
+    }, null, 2));
+    console.log('sessionData 状态:', sessionData ? '存在' : '不存在');
+    if (sessionData) {
+      console.log('sessionData 内容检查:');
+      console.log('- cookies 存在:', !!sessionData.cookies);
+      console.log('- uniqueKey 存在:', !!sessionData.uniqueKey);
+      console.log('- operationId 存在:', !!sessionData.operationId);
+    }
+
+    const { skus, store } = context
+
+    // 1. 参数校验
+    if (!skus || skus.length === 0) {
+      return { success: true, message: 'SKU列表为空，无需操作。' }
+    }
+    if (!store) {
+      console.error('缺少有效的店铺信息');
+      throw new Error('缺少有效的店铺信息。')
+    }
+    if (!sessionData || !sessionData.cookies) {
+      console.error('缺少会话信息:', sessionData);
+      throw new Error('缺少会话信息')
+    }
+
+    console.log(`[Task: enableStoreProducts] "启用店铺商品" 开始，店铺 [${store.name}]...`)
+
     // 准备调用API所需的数据，合并上下文和会话信息
     const dataForApi = { ...sessionData, store }
 
@@ -69,8 +87,8 @@ async function execute(context, sessionData) {
 
     return { success: true, message: `成功启用 ${successCount} 个商品。` }
   } catch (error) {
-    console.error('[Task: enableStoreProducts] 任务执行失败:', error)
-    throw new Error(`启用店铺商品失败: ${error.message}`)
+    console.error('enableStoreProducts 任务执行出错:', error);
+    throw error;
   }
 }
 

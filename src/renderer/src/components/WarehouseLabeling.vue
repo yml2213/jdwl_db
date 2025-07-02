@@ -38,6 +38,7 @@ import {
   getInitialFormState,
   getAllManualTaskKeys
 } from '../features/warehouseLabeling/taskConfiguration'
+import { getSelectedVendor, getSelectedDepartment } from '../utils/storageHelper'
 
 const {
   taskList: tasks,
@@ -85,14 +86,29 @@ function addTask() {
 
   const storeInfo = shopsList.value.find((s) => s.shopNo === selectedStore.value)
   const warehouseInfo = warehousesList.value.find((w) => w.warehouseNo === selectedWarehouse.value)
+  const vendorInfo = getSelectedVendor()
+  const departmentInfo = getSelectedDepartment()
 
   if (!storeInfo) return alert('请选择店铺')
   if (!warehouseInfo) return alert('请选择仓库')
+  if (!vendorInfo) return alert('缺少供应商信息，请重新登录')
+  if (!departmentInfo) return alert('缺少事业部信息，请重新登录')
+
+  const vendor = {
+    ...vendorInfo,
+    id: vendorInfo.id || vendorInfo.supplierNo
+  }
 
   const baseExecutionData = {
-    store: storeInfo,
+    store: {
+      ...storeInfo,
+      name: storeInfo.shopName,
+      spShopNo: storeInfo.spShopNo || storeInfo.shopNo
+    },
     warehouse: warehouseInfo,
-    sku: skusAsArray
+    skus: skusAsArray,
+    vendor: vendor,
+    department: departmentInfo
   }
 
   const displaySku = skusAsArray.length > 1 ? `批量(${skusAsArray.length})` : skusAsArray[0]

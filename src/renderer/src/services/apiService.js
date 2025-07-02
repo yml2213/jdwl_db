@@ -17,6 +17,25 @@ const apiClient = axios.create({
   }
 })
 
+// 添加拦截器记录请求和响应
+apiClient.interceptors.request.use(config => {
+  console.log(`请求: ${config.method.toUpperCase()} ${config.baseURL}${config.url}`,
+    config.data ? JSON.stringify(config.data).substring(0, 200) + '...' : '无数据');
+  return config;
+}, error => {
+  console.error('请求拦截器错误:', error);
+  return Promise.reject(error);
+});
+
+apiClient.interceptors.response.use(response => {
+  console.log(`响应: ${response.config.method.toUpperCase()} ${response.config.url} - ${response.status}`,
+    response.data ? '有数据' : '无数据');
+  return response;
+}, error => {
+  console.error('响应拦截器错误:', error.response?.status, error.response?.data || error.message);
+  return Promise.reject(error);
+});
+
 // 从主进程发送请求的辅助函数
 async function sendRequest(url, options) {
   return await window.electron.ipcRenderer.invoke('sendRequest', url, options)

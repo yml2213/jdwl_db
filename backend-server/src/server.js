@@ -57,7 +57,15 @@ app.get('/', (req, res) => {
 app.post('/api/session', async (req, res) => {
   const { uniqueKey, cookies } = req.body
 
+  console.log('收到会话创建请求:', {
+    uniqueKey: uniqueKey ? `${uniqueKey.substring(0, 10)}...` : '无',
+    hasCookies: cookies && cookies.length > 0,
+    hasSupplierInfo: !!req.body.supplierInfo,
+    hasDepartmentInfo: !!req.body.departmentInfo
+  });
+
   if (!uniqueKey || !cookies) {
+    console.warn('会话创建失败: 缺少必要数据');
     return res.status(400).json({ message: 'Missing session data.' })
   }
 
@@ -65,20 +73,33 @@ app.post('/api/session', async (req, res) => {
   // express-session 会自动处理 cookie 和 session ID
   req.session.context = req.body
 
-  res.status(200).json({ message: 'Session initialized successfully.' })
+  // 保存会话
+  req.session.save((err) => {
+    if (err) {
+      console.error('保存会话失败:', err);
+      return res.status(500).json({ message: 'Failed to save session.' });
+    }
+    console.log('会话创建成功，Session ID:', req.sessionID);
+    res.status(200).json({ message: 'Session initialized successfully.' });
+  });
 })
 
 /**
  * @description 检查当前会话的状态
  */
 app.get('/api/session/status', (req, res) => {
+  console.log('检查会话状态, Session ID:', req.sessionID);
+  console.log('会话上下文存在:', !!req.session?.context);
+
   if (req.session && req.session.context) {
+    console.log('会话有效，用户已登录');
     res.status(200).json({
       success: true,
       loggedIn: true,
       context: req.session.context
     })
   } else {
+    console.log('会话无效或用户未登录');
     res.status(200).json({
       success: true,
       loggedIn: false
@@ -175,12 +196,23 @@ app.post('/api/execute-flow', async (req, res) => {
 app.post('/task', async (req, res) => {
   const { taskName, payload } = req.body
 
+  console.log(`执行任务 ${taskName} 请求，Session ID:`, req.sessionID);
+  console.log('会话上下文存在:', !!req.session?.context);
+
   if (!taskName) {
+    console.warn('任务请求缺少 taskName');
     return res.status(400).json({ success: false, message: '必须提供 taskName' })
   }
 
   // 从会话中获取上下文，并注入 operationId
   const sessionData = req.session.context || {}
+  console.log('任务执行使用的会话数据:', {
+    hasSessionContext: !!sessionData,
+    hasUniqueKey: !!sessionData.uniqueKey,
+    hasCookies: !!(sessionData.cookies && sessionData.cookies.length > 0),
+    hasOperationId: !!req.session.operationId
+  });
+
   if (req.session.operationId) {
     sessionData.operationId = req.session.operationId
   }
@@ -201,11 +233,14 @@ app.post('/task', async (req, res) => {
       throw new Error(`任务 ${taskName} 未找到或其导出格式不正确`)
     }
 
-    // 创建一个空的更新函数
+    // 创建一个状态更新函数
     const updateFn = (status) => {
-      console.log(`任务 ${taskName} 状态更新:`, status)
+      console.log(`任务 ${taskName} 状态更新:`, typeof status === 'string' ? status : JSON.stringify(status));
     }
+
+    console.log(`开始执行任务 ${taskName}...`);
     const result = await taskFunction(payload, updateFn, sessionData)
+    console.log(`任务 ${taskName} 执行完成:`, result);
 
     res.status(200).json({ success: true, data: result })
   } catch (error) {

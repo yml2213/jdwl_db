@@ -4,7 +4,7 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { getSessionStatus, initSession } from './services/apiService'
+import { getSessionStatus, initSession, createSession } from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
@@ -14,6 +14,7 @@ import {
   getSelectedShop,
   getSelectedWarehouse
 } from './utils/storageHelper'
+import { getAllCookies } from '@/utils/cookieHelper'
 
 // 开发模式标志
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -29,14 +30,14 @@ const isLoggedIn = computed(() => !!sessionContext.value)
 provide('sessionContext', sessionContext)
 
 /**
- * @description 初始化应用会话
+ * @description 执行初始化流程，包括调用后端API获取操作ID
+ * @returns {Promise<void>}
  */
 const performInit = async () => {
-  if (!isLoggedIn.value || isInitialized.value) {
-    return // 如果未登录或已初始化，则直接返回
-  }
+  if (isInitialized.value) return // 防止重入
+  
+  console.log('开始执行应用初始化流程...');
   try {
-    console.log('用户已登录，开始执行初始化流程...')
     isInitialized.value = true // 立即设置状态，防止重入
     const result = await initSession()
     if (result.success) {
@@ -166,8 +167,64 @@ const handleClearCacheAndReload = () => {
 
 // 组件挂载时检查会话状态
 onMounted(async () => {
-  await checkSessionStatus()
-})
+  console.log('App 组件挂载，开始会话检查流程...');
+  await checkSessionStatus();
+  console.log('会话状态检查完成，当前登录状态:', isLoggedIn.value);
+  
+  // 如果没有登录，但本地有 cookies 和 vendor/department 信息，尝试自动创建会话
+  if (!isLoggedIn.value) {
+    try {
+      console.log('尝试自动恢复会话...');
+      const cookies = await getAllCookies();
+      console.log('获取到 cookies:', cookies?.length || 0);
+      const vendorInfo = getSelectedVendor();
+      console.log('本地存储中的供应商信息:', vendorInfo?.name);
+      const departmentInfo = getSelectedDepartment();
+      console.log('本地存储中的事业部信息:', departmentInfo?.name);
+      
+      if (cookies && cookies.length > 0 && vendorInfo && departmentInfo) {
+        const pinCookie = cookies.find(c => c.name === 'pin');
+        if (pinCookie) {
+          console.log('找到 pin cookie:', pinCookie.value);
+          const sessionData = {
+            uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
+            cookies,
+            supplierInfo: vendorInfo,
+            departmentInfo
+          };
+          
+          console.log('发现本地凭据，尝试创建会话...');
+          const sessionResult = await createSession(sessionData);
+          console.log('会话创建结果:', sessionResult);
+          
+          // 重新检查会话状态
+          await checkSessionStatus();
+          console.log('会话恢复后检查登录状态:', isLoggedIn.value);
+          
+          if (isLoggedIn.value) {
+            console.log('会话自动恢复成功, 开始执行初始化...');
+            await performInit();
+            console.log('应用初始化完成');
+          } else {
+            console.warn('会话恢复后仍未登录，可能需要重新登录');
+          }
+        } else {
+          console.warn('未找到 pin cookie，无法自动恢复会话');
+        }
+      } else {
+        console.warn('缺少自动恢复会话所需的数据:',
+                    cookies ? '有cookies' : '无cookies',
+                    vendorInfo ? '有供应商' : '无供应商', 
+                    departmentInfo ? '有事业部' : '无事业部');
+      }
+    } catch (error) {
+      console.error('自动恢复会话失败:', error);
+    }
+  } else {
+    console.log('已经登录，执行应用初始化');
+    await performInit();
+  }
+});
 
 onBeforeUnmount(() => {
   // 不再需要监听任何事件
