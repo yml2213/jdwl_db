@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { executeFlow } from '@/services/apiService'
+import { executeFlow, executeTask as apiExecuteTask } from '@/services/apiService'
 import { getSelectedDepartment, getSelectedVendor } from '@/utils/storageHelper'
 
 /**
@@ -17,12 +17,19 @@ export function useTaskList(initialTasks = []) {
    * @param {object} taskDetails - 包含任务所需信息的对象。
    */
   const addTask = (taskDetails) => {
+    // 确保存储店铺和仓库信息的完整性
+    const storeInfo = taskDetails.store;
+    const warehouseInfo = taskDetails.warehouse;
+
     const newTask = {
       id: `task-${Date.now()}`,
       status: '等待中',
       result: '',
       logs: [], // 新增：用于存储该任务的日志
       createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      // 确保存储完整信息
+      store: storeInfo,
+      warehouse: warehouseInfo,
       ...taskDetails
     }
     taskList.value.push(newTask)
@@ -37,30 +44,25 @@ export function useTaskList(initialTasks = []) {
     if (!task) return
 
     task.status = '运行中'
-    task.logs = [] // 清空旧日志
-    task.result = '' // 清空旧结果
+    task.logs = []
+    task.result = ''
 
     try {
-      // 获取全局选定的事业部信息
-      const department = getSelectedDepartment()
-      if (!department) {
-        throw new Error('无法获取当前选定的事业部信息，请重新选择。')
-      }
+      let result;
+      // The payload is already perfectly constructed in executionData
+      const payload = task.executionData;
 
-      // 将全局事业部信息合并到payload中
-      const payload = {
-        ...task.executionData,
-        department: department
+      if (task.executionType === 'task') {
+        result = await apiExecuteTask(task.executionFeature, payload)
+        task.logs = result.logs || [{ message: result.message || JSON.stringify(result.data), type: 'info', timestamp: new Date().toISOString() }];
+      } else { // Default to 'flow'
+        result = await executeFlow(task.executionFeature, payload)
+        task.logs = result.logs || []
       }
-
-      // 直接调用后端的flow执行器
-      const result = await executeFlow(task.executionFeature, payload)
-      
-      task.logs = result.logs || []
 
       if (result.success) {
         task.status = '成功'
-        task.result = result.data?.msg || result.data?.message || '工作流执行完毕'
+        task.result = result.data?.msg || result.data?.message || result.message || '操作执行完毕'
       } else {
         task.status = '失败'
         task.result = result.message || '未知错误，请检查提交日志'
@@ -68,7 +70,7 @@ export function useTaskList(initialTasks = []) {
     } catch (error) {
       task.status = '失败'
       task.result = error.response?.data?.message || error.message || '执行时发生未知网络或脚本错误'
-      if (task.logs.length === 0 || !task.logs.find(log => log.message.includes(task.result))) {
+      if (task.logs.length === 0 || !task.logs.find((log) => log.message.includes(task.result))) {
         task.logs.push({
           message: `前端捕获到错误: ${task.result}`,
           type: 'error',

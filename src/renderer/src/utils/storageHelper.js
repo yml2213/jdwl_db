@@ -276,6 +276,19 @@ export function clearSelections() {
   localStorage.removeItem(STORAGE_KEYS.MANUAL_OPTIONS)
   localStorage.removeItem(STORAGE_KEYS.LAST_SKU_INPUT)
   localStorage.removeItem(STORAGE_KEYS.INVENTORY_CLEARANCE_FORM)
+  console.log('用户选择数据已清除')
+}
+
+/**
+ * @description 清除所有应用设置相关的缓存，但保留用户身份和选择
+ */
+export function clearAppSettings() {
+  console.log('正在清除应用设置缓存...')
+  localStorage.removeItem(STORAGE_KEYS.LAST_WORKFLOW)
+  localStorage.removeItem(STORAGE_KEYS.MANUAL_OPTIONS)
+  localStorage.removeItem(STORAGE_KEYS.LAST_SKU_INPUT)
+  localStorage.removeItem(STORAGE_KEYS.INVENTORY_CLEARANCE_FORM)
+  console.log('应用设置缓存已清除。')
 }
 
 // 通用函数

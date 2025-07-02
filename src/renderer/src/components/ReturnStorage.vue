@@ -97,34 +97,33 @@ onMounted(() => {
 
 <template>
   <div v-if="isLoggedIn" class="return-storage-container">
-    <div class="operation-panel">
-      <div class="form-content">
-        <div class="form-item">
-          <label for="order-number">京东订单号</label>
-          <div class="input-with-button">
-            <input
+    <div class="operation-area">
+      <div class="scrollable-content">
+        <div class="form-group">
+          <label class="form-label" for="order-number">京东订单号</label>
+          <div class="textarea-wrapper">
+            <textarea
               id="order-number"
               v-model.trim="form.orderNumber"
-              type="text"
-              placeholder="输入或粘贴订单号"
-            />
-            <el-button type="primary" @click="pasteFromClipboard">从剪贴板导入</el-button>
+              placeholder="输入或粘贴订单号，支持多个，每行一个"
+              class="order-textarea"
+            ></textarea>
+            <button class="paste-btn" @click="pasteFromClipboard">粘贴</button>
           </div>
         </div>
 
-        <div class="form-item">
-          <label for="year">订单年份</label>
-          <input id="year" v-model="form.year" type="text" />
-          <small class="form-item-desc">默认为当前年份，如果订单是去年的，请手动修改。</small>
+        <div class="form-group">
+          <label class="form-label" for="year">订单年份</label>
+          <input id="year" v-model="form.year" type="text" class="form-input" />
+          <p class="form-item-desc">默认为当前年份，如果订单是去年的，请手动修改。</p>
         </div>
 
-        <div class="form-item">
-          <label for="return-reason">退货原因</label>
-          <input id="return-reason" v-model="form.returnReason" type="text" />
-          <small class="form-item-desc">此项为选填。</small>
+        <div class="form-group">
+          <label class="form-label" for="return-reason">退货原因 (选填)</label>
+          <input id="return-reason" v-model="form.returnReason" type="text" class="form-input" />
         </div>
 
-        <div class="form-item">
+        <div class="form-group">
           <StoreSelector
             v-model="selectedStore"
             :shops="shopsList"
@@ -132,10 +131,10 @@ onMounted(() => {
             :error="shopLoadError"
           />
         </div>
+      </div>
 
-        <div class="form-item">
-          <button class="add-task-btn" @click="handleAddTask">添加到任务列表</button>
-        </div>
+      <div class="form-actions">
+        <button class="action-btn add-task-btn" @click="handleAddTask">添加到任务列表</button>
       </div>
     </div>
 
@@ -156,81 +155,107 @@ onMounted(() => {
   display: flex;
   height: 100%;
 }
-.operation-panel {
+.operation-area {
   flex: 0 0 380px;
+  background: #ffffff;
+  border-right: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+}
+
+.scrollable-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
   padding: 20px;
-  border-right: 1px solid #e0e0e0;
-  display: flex;
-  flex-direction: column;
-  background: #f7f8fa;
-  overflow-y: auto;
 }
-.operation-panel h3 {
-  margin-bottom: 15px;
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 10px;
   color: #333;
+  font-size: 14px;
 }
-.form-content {
-  overflow-y: auto;
-  padding: 0 4px;
+
+.textarea-wrapper {
+  position: relative;
 }
-.form-item {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 15px;
-}
-label {
-  margin-bottom: 5px;
-  font-weight: bold;
-  color: #333;
-}
-input,
-textarea,
-select {
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+
+.order-textarea {
   width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  resize: vertical;
+  line-height: 1.6;
+  font-size: 14px;
+  background-color: #f9fafb;
 }
-.form-actions {
-  margin-top: auto;
-  padding-top: 15px;
-  border-top: 1px solid #e8e8e8;
+.order-textarea:focus {
+  outline: none;
+  border-color: #409eff;
+  background-color: #fff;
 }
-.add-task-btn {
-  padding: 10px 15px;
-  background-color: #16a34a;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  width: 100%;
-}
-.add-task-btn:hover {
-  background-color: #15803d;
-}
-.error-text {
-  color: red;
-  font-size: 12px;
-}
-.input-with-button {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
+
 .paste-btn {
-  padding: 8px 12px;
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 12px;
+  background: #e9ecef;
+  border: 1px solid #ced4da;
   border-radius: 4px;
+  color: #495057;
   cursor: pointer;
-  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
 }
 .paste-btn:hover {
-  background-color: #e0e0e0;
+  background-color: #dee2e6;
 }
+
+.form-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
 .form-item-desc {
   font-size: 12px;
   color: #6c757d;
-  margin-top: 4px;
+  margin-top: 6px;
+  padding-left: 2px;
+}
+
+.form-actions {
+  margin-top: auto;
+  padding: 20px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.action-btn {
+  width: 100%;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.add-task-btn {
+  background-color: #2563eb;
+  color: white;
+}
+.add-task-btn:hover {
+  background-color: #1d4ed8;
 }
 </style>

@@ -1,68 +1,67 @@
 <template>
   <div class="operation-area">
-    <div class="form-group">
-      <label class="form-label">快捷选择</label>
-      <div class="segmented-control">
-        <label class="segmented-control-option" :class="{ 'is-active': mode === 'sku' }">
-          <input type="radio" v-model="mode" value="sku" class="segmented-control-input" />
-          输入SKU
-        </label>
-        <label class="segmented-control-option" :class="{ 'is-active': mode === 'whole_store' }">
-          <input type="radio" v-model="mode" value="whole_store" class="segmented-control-input" />
-          整店
-        </label>
+    <div class="scrollable-content">
+      <div class="form-group">
+        <label class="form-label">模式选择</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" v-model="mode" value="sku" />
+            按SKU
+          </label>
+          <label class="radio-label">
+            <input type="radio" v-model="mode" value="whole_store" />
+            按整店
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div v-if="mode === 'sku'" class="form-group sku-input-container">
-      <div class="sku-header">
-        <label class="form-label">输入SKU</label>
-        <FileUploader @file-change="handleFileChange" />
+      <div v-if="mode === 'sku'" class="form-group sku-input-container">
+        <div class="sku-header">
+          <label class="form-label">输入SKU</label>
+          <FileUploader @file-change="handleFileChange" />
+        </div>
+        <div class="textarea-wrapper">
+          <textarea
+            v-model="sku"
+            placeholder="请输入SKU (多个SKU请每行一个)"
+            class="sku-textarea"
+          ></textarea>
+          <button v-if="sku" class="clear-sku-btn" @click="sku = ''">清空</button>
+        </div>
       </div>
-      <div class="textarea-wrapper">
-        <textarea
-          v-model="sku"
-          placeholder="请输入SKU (多个SKU请每行一个)"
-          class="sku-textarea"
-        ></textarea>
-        <el-button v-if="sku" class="clear-sku-btn" type="danger" link @click="sku = ''"
-          >清空</el-button
-        >
-      </div>
-    </div>
 
-    <div class="form-group">
-      <label class="form-label">功能选项 <span class="required-tip">(必选至少一项)</span></label>
-      <div class="checkbox-group">
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="clearStockAllocation" />
-          库存分配清零
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="cancelJpSearch" />
-          取消京配打标
-        </label>
+      <div class="form-group">
+        <label class="form-label">功能选项 <span class="required-tip">(必选至少一项)</span></label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="clearStockAllocation" />
+            库存分配清零
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="cancelJpSearch" />
+            取消京配打标
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div class="form-group">
-      <StoreSelector
-        v-model="storeVModel"
-        :shops="props.shopsList"
-        :loading="props.isLoadingShops"
-        :error="props.shopLoadError"
-      />
+      <div class="form-group">
+        <StoreSelector
+          v-model="storeVModel"
+          :shops="props.shopsList"
+          :loading="props.isLoadingShops"
+          :error="props.shopLoadError"
+        />
+      </div>
     </div>
 
     <div class="form-actions">
-      <button class="btn btn-primary" @click="$emit('addTask')">添加任务</button>
+      <button class="action-btn add-task-btn" @click="$emit('addTask')">添加任务</button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { ElButton } from 'element-plus'
 import StoreSelector from './StoreSelector.vue'
 import FileUploader from './FileUploader.vue'
 
@@ -127,73 +126,34 @@ const handleFileChange = (file) => {
 <style scoped>
 .operation-area {
   flex: 0 0 380px;
-  background: #f7f8fa;
-  padding: 20px;
+  background: #ffffff;
   border-right: 1px solid #e8e8e8;
-  color: #333;
   display: flex;
   flex-direction: column;
 }
 
+.scrollable-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 20px;
+}
+
 .form-group {
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 .form-label {
   display: block;
-  font-weight: 500;
-  margin-bottom: 8px;
+  font-weight: 600;
+  margin-bottom: 10px;
   color: #333;
   font-size: 14px;
-}
-
-/* Updated styles for a modern segmented control */
-.segmented-control {
-  display: flex;
-  background-color: #f0f2f5; /* Light grey background for the container */
-  border-radius: 6px; /* More rounded corners */
-  padding: 4px;
-  width: 100%;
-  gap: 4px; /* Add space between options */
-}
-
-.segmented-control-option {
-  flex: 1;
-  padding: 8px 12px;
-  text-align: center;
-  cursor: pointer;
-  color: #606266; /* Muted text color for inactive options */
-  transition: all 0.2s ease-in-out;
-  position: relative;
-  font-size: 14px;
-  border-radius: 4px; /* Rounded corners for the option itself */
-  background-color: transparent;
-  border: none;
-}
-
-.segmented-control-option:not(:last-child) {
-  border-right: none;
-}
-
-.segmented-control-option.is-active {
-  background-color: #409eff; /* White background for the active "pill" */
-  color: #ffffff; /* Darker text for active */
-  font-weight: 500;
-  box-shadow: none; /* Subtle shadow to lift it up */
-}
-
-.segmented-control-input {
-  /* Hide the actual radio button */
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
 }
 
 .radio-group,
 .checkbox-group {
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .radio-label,
@@ -202,6 +162,7 @@ const handleFileChange = (file) => {
   align-items: center;
   gap: 0.5rem;
   font-weight: 400;
+  cursor: pointer;
 }
 
 .sku-header {
@@ -218,45 +179,66 @@ const handleFileChange = (file) => {
 .sku-textarea {
   width: 100%;
   min-height: 120px;
-  padding: 8px 40px 8px 10px; /* 右侧留出清空按钮空间 */
+  padding: 10px 45px 10px 10px;
   border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border-radius: 6px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.6;
   font-size: 14px;
+  background-color: #f9fafb;
+}
+
+.sku-textarea:focus {
+  outline: none;
+  border-color: #409eff;
+  background-color: #fff;
 }
 
 .clear-sku-btn {
   position: absolute;
   top: 8px;
   right: 8px;
-  padding: 0;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: #909399;
+  cursor: pointer;
+  font-size: 12px;
+}
+.clear-sku-btn:hover {
+  color: #dc3545;
 }
 
 .form-actions {
-  margin-top: auto; /* Push to the bottom */
+  margin-top: auto;
+  padding: 20px;
+  border-top: 1px solid #e8e8e8;
+  background-color: #ffffff;
 }
 
-.btn-primary {
+.action-btn {
   width: 100%;
   padding: 10px 15px;
-  background-color: #409eff;
-  color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   transition: background-color 0.2s;
 }
 
-.btn-primary:hover {
-  background-color: #66b1ff;
+.add-task-btn {
+  background-color: #2563eb;
+  color: white;
+}
+.add-task-btn:hover {
+  background-color: #1d4ed8;
 }
 
 .required-tip {
-  color: #f56c6c;
   font-size: 12px;
-  font-weight: normal;
-  margin-left: 4px;
+  color: #909399;
+  font-weight: 400;
+  margin-left: 5px;
 }
 </style>

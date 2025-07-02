@@ -154,6 +154,10 @@ app.post('/api/execute-flow', async (req, res) => {
       department: payload.store, // department 信息通常和 store 绑定在一起
       vendor: payload.vendor
     }
+    // 注入 operationId
+    if (req.session.operationId) {
+      sessionData.operationId = req.session.operationId
+    }
 
     const result = await flowModule.default.execute(payload, sessionData, log)
 

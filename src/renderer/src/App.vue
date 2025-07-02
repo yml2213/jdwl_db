@@ -8,6 +8,7 @@ import { getSessionStatus, initSession } from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
+  clearAppSettings,
   getSelectedDepartment,
   getSelectedVendor,
   getSelectedShop,
@@ -98,6 +99,14 @@ const handleLogout = () => {
 // 当前活动标签
 const activeTab = ref('入仓打标')
 
+const tabComponents = {
+  '入仓打标': WarehouseLabeling,
+  '清库下标': InventoryClearance,
+  '退货入库': ReturnStorage
+}
+
+const currentComponent = computed(() => tabComponents[activeTab.value])
+
 // 创建一个任务列表的全局状态，以便在标签页切换时保持
 const globalTaskList = ref([])
 
@@ -148,6 +157,13 @@ const copyToClipboard = (text, section) => {
   }
 }
 
+// 清除缓存并重载页面
+const handleClearCacheAndReload = () => {
+  clearAppSettings()
+  alert('缓存已清除，应用即将刷新。')
+  window.location.reload()
+}
+
 // 组件挂载时检查会话状态
 onMounted(async () => {
   await checkSessionStatus()
@@ -179,15 +195,12 @@ const selectJsonContent = (event) => {
       <div class="header-left">
         <h1 class="app-title">订单下载系统 - 云打标工具</h1>
       </div>
-
       <div class="header-right">
-        <!-- 登录后才在header显示 -->
         <AccountManager
           v-if="isLoggedIn"
           @session-created="handleSessionCreated"
           @logout="handleLogout"
         />
-        <!-- 开发模式下的调试按钮 -->
         <button v-if="isDev" @click="toggleDebugPanel" class="debug-toggle">
           {{ showDebugPanel ? '隐藏调试' : '显示调试' }}
         </button>
@@ -196,6 +209,9 @@ const selectJsonContent = (event) => {
 
     <!-- 开发模式调试面板 -->
     <div v-if="isDev && showDebugPanel" class="debug-panel">
+      <div class="debug-actions">
+        <button @click="handleClearCacheAndReload" class="btn btn-warning">清除缓存并重启</button>
+      </div>
       <h3>当前用户数据 (localStorage)</h3>
       <div class="debug-section">
         <div class="section-header">
@@ -267,91 +283,70 @@ const selectJsonContent = (event) => {
       </div>
     </div>
 
-    <!-- 主内容区 -->
-    <main class="main-content">
-      <!-- 登录提示 -->
-      <div v-if="!isLoggedIn" class="login-prompt">
-        <div class="login-card">
-          <div class="card-header">
-            <img :src="electronLogo" alt="应用图标" class="logo-image" />
-            <h2>欢迎使用云打标工具</h2>
-            <p>请登录您的京东账号以开始使用所有功能</p>
-          </div>
-          <div class="card-divider"></div>
-          <div class="card-footer">
-            <AccountManager
-              class="login-button-container"
-              display-mode="central"
-              @session-created="handleSessionCreated"
-            />
-          </div>
-        </div>
+    <!-- 主体内容区 -->
+    <div class="main-body" v-if="isLoggedIn">
+      <div class="tabs">
+        <button
+          v-for="(_, tabName) in tabComponents"
+          :key="tabName"
+          @click="activeTab = tabName"
+          :class="{ active: activeTab === tabName }"
+          class="tab-button"
+        >
+          {{ tabName }}
+        </button>
       </div>
 
-      <!-- 已登录内容 -->
-      <div v-else class="logged-in-content">
-        <!-- 标签页 -->
-        <div class="tabs">
-          <div
-            v-for="tab in ['入仓打标', '清库下标', '退货入库']"
-            :key="tab"
-            :class="['tab', { active: activeTab === tab }]"
-            @click="activeTab = tab"
-          >
-            {{ tab }}
-          </div>
-        </div>
+      <main class="main-content">
+        <keep-alive>
+          <component :is="currentComponent" :is-logged-in="isLoggedIn" />
+        </keep-alive>
+      </main>
+    </div>
 
-        <!-- 所有组件同时渲染，但只有当前选中的可见 -->
-        <div class="tab-contents">
-          <div v-show="activeTab === '入仓打标'" class="tab-content">
-            <WarehouseLabeling :isLoggedIn="isLoggedIn" />
-          </div>
-          <div v-show="activeTab === '清库下标'" class="tab-content">
-            <InventoryClearance :isLoggedIn="isLoggedIn" />
-          </div>
-          <div v-show="activeTab === '退货入库'" class="tab-content">
-            <ReturnStorage :isLoggedIn="isLoggedIn" />
-          </div>
+    <!-- 登录界面 -->
+    <div v-else class="login-prompt">
+      <img :src="electronLogo" alt="Electron logo" class="logo" />
+      <div class="login-card">
+        <div class="card-header">
+          <h2>欢迎使用云打标工具</h2>
+          <p>请登录您的京东账号以开始使用所有功能</p>
+        </div>
+        <div class="card-divider"></div>
+        <div class="card-footer">
+          <AccountManager
+            class="login-button-container"
+            display-mode="central"
+            @session-created="handleSessionCreated"
+          />
         </div>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-}
-
-body {
-  background-color: #f5f5f5;
-  color: #333;
-  font-size: 14px;
-}
-
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
   background-color: #f0f2f5;
-  color: var(--color-text-dark);
+  overflow: hidden; /* Prevent any overflow issues */
 }
 
-/* 顶部导航栏 */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #2196f3;
+  background-color: #1e88e5;
   color: white;
   padding: 0 20px;
-  height: 60px;
+  height: 60px; /* Strict fixed height */
+  min-height: 60px; /* Ensure minimum height */
+  max-height: 60px; /* Enforce maximum height */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex: 0 0 auto; /* Don't allow flex growth/shrink */
+  z-index: 10; /* Ensure it stays on top */
 }
 
 .header-left {
@@ -364,12 +359,51 @@ body {
   font-weight: 500;
 }
 
-/* 主内容区 */
-.main-content {
-  flex: 1;
+.main-body {
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* 防止子元素溢出时出现滚动条 */
+  flex-grow: 1;
+  background-color: #f4f7fa;
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  background-color: #ffffff;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid #e0e0e0;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  flex: 0 0 auto; /* Don't allow flex growth */
+}
+
+.tab-button {
+  padding: 10px 20px;
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+}
+
+.tab-button.active {
+  color: #1a66ff;
+  font-weight: 600;
+  border-bottom-color: #1a66ff;
+}
+
+.main-content {
+  flex: 1 1 auto;
+  display: flex;
+  overflow: hidden; /* Let child components handle their own overflow */
+}
+
+.main-content > :deep(*) {
+  flex: 1;
 }
 
 .login-prompt {
@@ -379,52 +413,20 @@ body {
   height: 100%;
 }
 
-.logged-in-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background-color: #fff;
+.login-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow:
+    0 15px 35px rgba(0, 0, 0, 0.1),
+    0 5px 15px rgba(0, 0, 0, 0.05);
+  width: 90%;
+  max-width: 500px;
+  animation: fadeIn 0.8s ease-out;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.3s;
 }
 
-/* 标签页 */
-.tabs {
-  display: flex;
-  border-bottom: 1px solid #e0e0e0;
-  margin-bottom: 0;
-  padding: 0 10px;
-  background-color: #f5f5f5;
-}
-
-.tab {
-  padding: 10px 20px;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  color: #666;
-}
-
-.tab.active {
-  color: #2196f3;
-  border-bottom-color: #2196f3;
-  background-color: #fff;
-}
-
-/* 未实现功能提示 */
-.feature-not-implemented {
-  background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  text-align: center;
-  max-width: 800px;
-  margin: 30px auto;
-}
-
-.feature-not-implemented p {
-  color: #666;
-  font-size: 16px;
-}
-
-/* 调试面板样式 */
 .debug-toggle {
   background-color: #673ab7;
   color: white;
@@ -436,26 +438,39 @@ body {
 }
 
 .debug-panel {
-  background-color: #263238;
-  color: #eee;
   padding: 15px;
-  border-bottom: 1px solid #37474f;
-  overflow-x: auto;
-  max-height: 70vh;
+  background-color: #2c3e50;
+  color: #ecf0f1;
+  border-bottom: 2px solid #34495e;
+  max-height: 40vh;
   overflow-y: auto;
 }
 
-.debug-panel h3 {
-  margin-bottom: 10px;
-  color: #8bc34a;
-  font-size: 16px;
+.debug-actions {
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #34495e;
+}
+
+.btn-warning {
+  background-color: #e67e22;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-warning:hover {
+  background-color: #d35400;
 }
 
 .debug-section {
+  background-color: #34495e;
+  border-radius: 4px;
   margin-bottom: 15px;
   padding: 10px;
-  background-color: #37474f;
-  border-radius: 4px;
   position: relative;
 }
 
@@ -540,29 +555,5 @@ body {
   color: #8bc34a;
   font-size: 12px;
   font-weight: bold;
-}
-
-/* 添加标签内容样式 */
-.tab-contents {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.tab-content {
-  height: 100%;
-}
-
-.login-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
-  box-shadow:
-    0 15px 35px rgba(0, 0, 0, 0.1),
-    0 5px 15px rgba(0, 0, 0, 0.05);
-  width: 90%;
-  max-width: 500px;
-  animation: fadeIn 0.8s ease-out;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  transition: all 0.3s;
 }
 </style>

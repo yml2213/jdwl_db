@@ -24,10 +24,10 @@
           <td class="task-cell checkbox-cell">
             <input type="checkbox" v-model="selectedTasks" :value="task.id" />
           </td>
-          <td class="task-cell">{{ task.displaySku }}</td>
-          <td class="task-cell">{{ task.featureName }}</td>
-          <td class="task-cell">{{ task.storeName }}</td>
-          <td class="task-cell">{{ task.warehouseName }}</td>
+          <td class="task-cell">{{ task.sku }}</td>
+          <td class="task-cell">{{ task.name }}</td>
+          <td class="task-cell">{{ task.store?.shopName }}</td>
+          <td class="task-cell">{{ task.warehouse?.warehouseName }}</td>
           <td class="task-cell">{{ task.createdAt }}</td>
           <td class="task-cell">
             <StatusTag :status="task.status" />

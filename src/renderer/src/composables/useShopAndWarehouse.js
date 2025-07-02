@@ -112,6 +112,10 @@ export function useShopAndWarehouse() {
     if (warehouse) saveSelectedWarehouse(warehouse)
   }
 
+  // 组件初始化时自动加载数据
+  loadShops()
+  loadWarehouses()
+
   // 返回所有状态和方法，供组件使用
   return {
     // State

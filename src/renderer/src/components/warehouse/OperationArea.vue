@@ -4,7 +4,11 @@
       <div class="form-group">
         <label class="form-label">快捷选择</label>
         <div class="select-wrapper">
-          <select v-model="form.quickSelect" class="form-select">
+          <select
+            :value="form.quickSelect"
+            @change="emit('update:form', { ...form, quickSelect: $event.target.value })"
+            class="form-select"
+          >
             <option value="manual">手动选择</option>
             <option value="warehouseLabeling">任务流 -- 入仓打标</option>
           </select>
@@ -18,11 +22,17 @@
         </div>
         <div class="textarea-wrapper">
           <textarea
-            v-model="form.sku"
+            :value="form.sku"
+            @input="emit('update:form', { ...form, sku: $event.target.value })"
             placeholder="请输入SKU (多个SKU请每行一个)"
             class="sku-textarea"
           ></textarea>
-          <el-button v-if="form.sku" class="clear-sku-btn" type="danger" link @click="form.sku = ''"
+          <el-button
+            v-if="form.sku"
+            class="clear-sku-btn"
+            type="danger"
+            link
+            @click="emit('update:form', { ...form, sku: '' })"
             >清空</el-button
           >
         </div>
@@ -31,114 +41,82 @@
       <!-- Manual Options Section -->
       <div v-if="form.quickSelect === 'manual'" class="manual-options-container">
         <div class="manual-options-grid">
-          <div class="option-item">
-            <input type="checkbox" id="importStore" v-model="form.options.importStore" />
-            <label for="importStore">导入店铺商品</label>
-          </div>
-          <div class="option-item">
-            <input type="checkbox" id="useStore" v-model="form.options.useStore" />
-            <label for="useStore">启用店铺商品</label>
-          </div>
-          <div class="option-item">
-            <input type="checkbox" id="importProps" v-model="form.options.importProps" />
-            <label for="importProps">导入物流属性(参数)</label>
-          </div>
-          <div class="option-item">
-            <input type="checkbox" id="useMainData" v-model="form.options.useMainData" />
-            <label for="useMainData">启用库存商品分配</label>
-          </div>
-          <div class="option-item">
-            <input type="checkbox" id="useJPEffect" v-model="form.options.useJPEffect" />
-            <label for="useJPEffect">启用京配打标生效</label>
-          </div>
-          <div class="option-item">
-            <input type="checkbox" id="useAddInventory" v-model="form.options.useAddInventory" />
-            <label for="useAddInventory">添加库存</label>
-          </div>
-          <div class="option-item">
+          <div v-for="option in manualOptions" :key="option.key" class="option-item">
             <input
               type="checkbox"
-              id="importProductNames"
-              v-model="form.options.importProductNames"
+              :id="option.key"
+              :checked="form.options[option.key]"
+              @change="updateOption(option.key, $event.target.checked)"
             />
-            <label for="importProductNames">导入商品简称</label>
+            <label :for="option.key">{{ option.label }}</label>
           </div>
         </div>
-        <!-- Logistics & Inventory Sub-options -->
-        <div v-if="form.options.importProps" class="sub-options-container logistics-options">
-          <div class="logistics-input-group">
-            <label>长(mm):</label>
-            <input type="text" v-model="logisticsOptions.length" />
-          </div>
-          <div class="logistics-input-group">
-            <label>宽(mm):</label>
-            <input type="text" v-model="logisticsOptions.width" />
-          </div>
-          <div class="logistics-input-group">
-            <label>高(mm):</label>
-            <input type="text" v-model="logisticsOptions.height" />
-          </div>
-          <div class="logistics-input-group">
-            <label>毛重(kg):</label>
-            <input type="text" v-model="logisticsOptions.grossWeight" />
+
+        <!-- Sub-options -->
+        <div
+          v-if="form.options.importLogisticsAttributes"
+          class="sub-options-container logistics-options"
+        >
+          <div v-for="logisticsKey in Object.keys(logisticsOptions)" :key="logisticsKey" class="logistics-input-group">
+            <label>{{ logisticsKey }}:</label>
+            <input type="text" :value="logisticsOptions[logisticsKey]" @input="updateLogistics(logisticsKey, $event.target.value)" />
           </div>
         </div>
-        <div v-if="form.options.useAddInventory" class="sub-options-container inventory-container">
+
+        <div v-if="form.options.addInventory" class="sub-options-container inventory-container">
           <label class="inventory-label">库存数量：</label>
-          <input type="number" v-model="form.options.inventoryAmount" class="inventory-input" />
+          <input
+            type="number"
+            :value="form.options.inventoryAmount"
+            @input="updateOption('inventoryAmount', $event.target.value)"
+            class="inventory-input"
+          />
         </div>
-        <!-- Product Name Importer Sub-options -->
-        <!-- <ProductNameImporter
-          v-model="form.options.importProductNames"
-          v-model:payload="form.payloads.importProductNames"
-        /> -->
       </div>
 
       <div class="form-group">
         <StoreSelector
-          v-model="storeVModel"
+          :model-value="selectedStore"
+          @update:modelValue="emit('update:selectedStore', $event)"
           :shops="shopsList"
           :loading="isLoadingShops"
           :error="shopLoadError"
-        >
-        </StoreSelector>
+        />
       </div>
 
       <div class="form-group">
         <WarehouseSelector
-          v-model="warehouseVModel"
+          :model-value="selectedWarehouse"
+          @update:modelValue="emit('update:selectedWarehouse', $event)"
           :warehouses="warehousesList"
           :loading="isLoadingWarehouses"
           :error="warehouseLoadError"
-        >
-        </WarehouseSelector>
+        />
       </div>
     </div>
 
     <div class="form-actions">
-      <button class="btn btn-primary">添加至快捷</button>
-      <button class="btn btn-success" @click="$emit('addTask')">添加任务</button>
+      <button class="action-btn add-task-btn" @click="emit('addTask')">添加任务</button>
     </div>
 
     <el-dialog
-      v-model="form.options.importProductNames"
+      :model-value="form.options.importProductNames"
+      @update:modelValue="updateOption('importProductNames', $event)"
       title="导入商品简称"
       width="600px"
       :modal="false"
       draggable
-      @close="form.options.importProductNames = false"
     >
       <ProductNameImporter
         v-if="form.options.importProductNames"
         v-model:payload="form.payloads.importProductNames"
-        @cancel="form.options.importProductNames = false"
+        @cancel="updateOption('importProductNames', false)"
       />
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
 import { ElButton, ElDialog } from 'element-plus'
 import StoreSelector from './StoreSelector.vue'
 import WarehouseSelector from './WarehouseSelector.vue'
@@ -166,35 +144,33 @@ const emit = defineEmits([
   'update:selectedWarehouse'
 ])
 
-const form = new Proxy(props.form, {
-  set: (_target, key, value) => {
-    emit('update:form', { ...props.form, [key]: value })
-    return true
-  }
-})
+// Define manual options for rendering
+const manualOptions = [
+  { key: 'importStoreProducts', label: '导入店铺商品' },
+  { key: 'enableStoreProducts', label: '启用店铺商品' },
+  { key: 'importLogisticsAttributes', label: '导入物流属性(参数)' },
+  { key: 'enableInventoryAllocation', label: '启用库存商品分配' },
+  { key: 'enableJpSearch', label: '启用京配打标生效' },
+  { key: 'addInventory', label: '添加库存' },
+  { key: 'importProductNames', label: '导入商品简称' }
+]
 
-const logisticsOptions = new Proxy(props.logisticsOptions, {
-  set: (_target, key, value) => {
-    emit('update:logisticsOptions', { ...props.logisticsOptions, [key]: value })
-    return true
-  }
-})
+const updateOption = (key, value) => {
+  emit('update:form', {
+    ...props.form,
+    options: { ...props.form.options, [key]: value }
+  })
+}
 
-const storeVModel = computed({
-  get: () => props.selectedStore,
-  set: (value) => emit('update:selectedStore', value)
-})
-
-const warehouseVModel = computed({
-  get: () => props.selectedWarehouse,
-  set: (value) => emit('update:selectedWarehouse', value)
-})
+const updateLogistics = (key, value) => {
+  emit('update:logisticsOptions', { ...props.logisticsOptions, [key]: value })
+}
 
 const handleFileChange = (file) => {
   if (file && file.name.endsWith('.txt')) {
     const reader = new FileReader()
     reader.onload = (e) => {
-      form.sku = e.target.result
+      emit('update:form', { ...props.form, sku: e.target.result })
     }
     reader.readAsText(file)
   }
@@ -204,7 +180,7 @@ const handleFileChange = (file) => {
 <style scoped>
 .operation-area {
   flex: 0 0 380px;
-  background: #f7f8fa;
+  background: #ffffff;
   border-right: 1px solid #e8e8e8;
   color: #333;
   display: flex;
@@ -251,18 +227,33 @@ const handleFileChange = (file) => {
 .sku-textarea {
   width: 100%;
   min-height: 120px;
-  padding: 8px 10px;
+  padding: 10px 45px 10px 10px;
   border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border-radius: 6px;
   resize: vertical;
+  line-height: 1.6;
+  font-size: 14px;
+  background-color: #f9fafb;
+}
+
+.clear-sku-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: #909399;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .manual-options-container {
-  border: 1px solid #e8e8e8;
+  border: 1px solid #e4e7ed;
   border-radius: 4px;
   padding: 15px;
-  margin-bottom: 15px;
-  background-color: #fff;
+  background-color: #ffffff;
+  margin-top: 10px;
 }
 
 .manual-options-grid {
@@ -274,26 +265,21 @@ const handleFileChange = (file) => {
 .option-item {
   display: flex;
   align-items: center;
-  font-size: 13px;
 }
 
 .option-item input[type='checkbox'] {
-  margin-right: 4px;
-}
-
-.option-item label {
-  white-space: nowrap;
+  margin-right: 8px;
 }
 
 .sub-options-container {
   margin-top: 15px;
   padding-top: 15px;
-  border-top: 1px dashed #e8e8e8;
+  border-top: 1px dashed #dcdfe6;
 }
 
 .logistics-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
@@ -302,84 +288,54 @@ const handleFileChange = (file) => {
   align-items: center;
   gap: 5px;
 }
-
 .logistics-input-group label {
   flex-shrink: 0;
-  font-size: 13px;
 }
-
 .logistics-input-group input {
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  padding: 4px 6px;
 }
 
 .inventory-container {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .inventory-label {
-  margin-right: 8px;
+  font-weight: 500;
 }
 
 .inventory-input {
   width: 100px;
   padding: 6px 8px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
 }
 
 .form-actions {
-  flex-shrink: 0;
-  padding: 20px;
-  border-top: 1px solid #e8e8e8;
   display: flex;
   gap: 10px;
-  background: #f7f8fa;
+  margin-top: auto;
+  padding: 20px;
+  border-top: 1px solid #e8e8e8;
+  background-color: #ffffff;
 }
 
-.form-actions .btn {
+.action-btn {
   flex: 1;
-  padding: 10px;
-  font-size: 14px;
+  padding: 10px 15px;
   border: none;
-  border-radius: 4px;
-  color: #fff;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  transition: background-color 0.2s;
 }
 
-.btn-primary {
-  background-color: #409eff;
+.add-task-btn {
+  background-color: #2563eb;
+  color: white;
 }
-.btn-primary:hover {
-  background-color: #66b1ff;
-}
-.btn-success {
-  background-color: #67c23a;
-}
-.btn-success:hover {
-  background-color: #85ce61;
-}
-
-.sku-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.sku-header .form-label {
-  margin-bottom: 0;
-}
-
-.clear-sku-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 0;
-  min-height: auto;
-  height: auto;
+.add-task-btn:hover {
+  background-color: #1d4ed8;
 }
 </style>
