@@ -22,6 +22,7 @@ export function useTaskList(initialTasks = []) {
     const warehouseInfo = taskDetails.warehouse;
 
     const newTask = {
+      ...taskDetails,
       id: `task-${Date.now()}`,
       status: '等待中',
       result: '',
@@ -30,7 +31,6 @@ export function useTaskList(initialTasks = []) {
       // 确保存储完整信息
       store: storeInfo,
       warehouse: warehouseInfo,
-      ...taskDetails
     }
     taskList.value.push(newTask)
   }

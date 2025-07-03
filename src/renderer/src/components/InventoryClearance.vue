@@ -67,14 +67,14 @@ const handleAddTask = () => {
 
   // 添加到任务列表
   addTask({
-    displaySku: isWholeStore
+    sku: isWholeStore
       ? '整店操作'
       : skus.length > 1
         ? `批量任务 (${skus.length}个SKU)`
         : skus[0],
-    featureName,
-    storeName: currentShopInfo.value.shopName,
-    warehouseName: 'N/A',
+    name: featureName,
+    store: currentShopInfo.value,
+    warehouse: { warehouseName: 'N/A' }, // Pass an object as expected by the table
     executionFeature: 'stockClearance', // 指定后端的 stockClearance 工作流
     executionData // 附加执行所需的数据
   })

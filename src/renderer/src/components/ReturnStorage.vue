@@ -46,10 +46,10 @@ const handleAddTask = () => {
 
   for (const orderNum of orderNumbers) {
     addTask({
-      displaySku: `订单: ${orderNum}`,
-      featureName: '退货入库',
-      storeName: currentShopInfo.value.shopName,
-      warehouseName: 'N/A',
+      sku: `订单: ${orderNum}`,
+      name: '退货入库',
+      store: currentShopInfo.value,
+      warehouse: { warehouseName: 'N/A' },
       executionFeature: 'returnStorage',
       executionData: {
         orderNumber: orderNum,

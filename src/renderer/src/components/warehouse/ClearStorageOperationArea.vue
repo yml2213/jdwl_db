@@ -163,6 +163,7 @@ const handleFileChange = (file) => {
   gap: 0.5rem;
   font-weight: 400;
   cursor: pointer;
+  color: #333;
 }
 
 .sku-header {
