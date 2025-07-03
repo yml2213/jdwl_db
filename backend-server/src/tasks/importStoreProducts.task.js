@@ -2,11 +2,8 @@
  * 后端任务：导入店铺商品
  */
 import * as XLSX from 'xlsx'
-import { uploadStoreProducts, uploadStoreProductsFile } from '../services/jdApiService.js'
+import { uploadStoreProducts } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
-import fs from 'fs'
-import path from 'path'
-import { getFormattedChinaTime } from '../utils/timeUtils.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 
 // 配置常量
@@ -35,6 +32,16 @@ function createExcelFileAsBuffer(skuList, vendor) {
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, updateFn, sessionData) {
+  // 优雅地处理两种不同的调用方式：
+  // 1. 单项任务调用: execute(context, updateFn, sessionData)
+  // 2. 工作流调用: execute(context, sessionData)
+  if (typeof updateFn !== 'function') {
+    // 这是工作流调用，第二个参数实际上是 sessionData
+    sessionData = updateFn
+    // 提供一个无操作的 updateFn，以防后续代码调用它
+    updateFn = () => { }
+  }
+
   try {
     console.log('importStoreProducts 任务开始执行');
     console.log('接收到的 context 参数:', JSON.stringify({

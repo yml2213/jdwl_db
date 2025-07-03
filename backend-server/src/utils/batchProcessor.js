@@ -18,13 +18,13 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
 
   for (let i = 0; i < items.length; i += batchSize) {
     if (!isRunning.value) {
-      log('Task was stopped externally.', 'warn')
+      log('任务被外部终止。', 'warn')
       break
     }
 
     const batchNumber = i / batchSize + 1
     const batch = items.slice(i, i + batchSize)
-    log(`--- Starting batch ${batchNumber}/${totalBatches} ---`, 'info')
+    log(`--- 开始执行第 ${batchNumber}/${totalBatches} 批 ---`, 'info')
 
     let result = await batchFn(batch, context, i / batchSize, totalBatches)
 
@@ -34,29 +34,29 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
       result.message &&
       (result.message.includes('频繁操作') || result.message.includes('只能导入一次'))
     ) {
-      log(`Batch ${batchNumber} failed due to rate limiting. Retrying in ${delay / 1000}s...`, 'warn')
+      log(`第 ${batchNumber} 批因频率限制失败。将在 ${delay / 1000} 秒后重试...`, 'warn')
       await new Promise((resolve) => setTimeout(resolve, delay))
-      log(`--- Retrying batch ${batchNumber}/${totalBatches} ---`, 'info')
+      log(`--- 重试第 ${batchNumber}/${totalBatches} 批 ---`, 'info')
       result = await batchFn(batch, context, i / batchSize, totalBatches) // Retry the batch
     }
 
     if (result.success) {
       successCount++
-      overallMessage += `Batch ${batchNumber}: ${result.message}\n`
+      overallMessage += `第 ${batchNumber} 批: ${result.message}\n`
       // If successful and not the last batch, wait before proceeding to the next one.
       if (i + batchSize < items.length) {
-        log(`--- Batch ${batchNumber} finished. Waiting for ${delay / 1000}s... ---`, 'info')
+        log(`--- 第 ${batchNumber} 批完成。等待 ${delay / 1000} 秒... ---`, 'info')
         await new Promise((resolve) => setTimeout(resolve, delay))
       }
     } else {
       failureCount++
-      overallMessage += `Batch ${batchNumber} failed: ${result.message}\n`
-      log(`Batch ${batchNumber} failed. Halting further processing.`, 'error')
+      overallMessage += `第 ${batchNumber} 批失败: ${result.message}\n`
+      log(`第 ${batchNumber} 批失败。停止后续处理。`, 'error')
       break // Stop the entire process on a definitive failure.
     }
   }
 
-  log('All batches processed.', 'info')
+  log('所有批次处理完成。', 'info')
   return {
     success: failureCount === 0,
     successCount,

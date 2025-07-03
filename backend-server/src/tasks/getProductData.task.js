@@ -6,9 +6,11 @@ import { queryProductDataBySkus } from '../services/jdApiService.js'
  * @param {object} sessionContext - 用户会话上下文，包含认证信息、事业部信息和操作ID
  */
 async function execute(payload, updateFn, sessionContext) {
-    // console.log('getProductData.task.js -- payload:', payload)
-    // console.log('getProductData.task.js -- updateFn:', updateFn)
-    // console.log('getProductData.task.js -- sessionContext:', sessionContext)
+    // 兼容工作流调用 (payload, sessionContext) 和单任务调用 (payload, updateFn, sessionContext)
+    if (typeof updateFn !== 'function') {
+        sessionContext = updateFn
+        updateFn = () => { }
+    }
 
     const { skus } = payload
     if (!skus || !Array.isArray(skus) || skus.length === 0) {

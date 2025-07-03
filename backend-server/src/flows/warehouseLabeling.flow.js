@@ -26,38 +26,10 @@ const tasks = {
     shouldExecute: (context) => context.options.importStoreProducts,
     execute: (context, session, log) => executeTask('importStoreProducts', context, session, log)
   },
-  waitAfterImport: {
-    name: '等待店铺商品导入后台处理',
-    shouldExecute: (context) => context.options.importStoreProducts,
-    execute: async (context, session, log) => {
-      const waitSeconds = 5
-      const logPrefix = '[初始化][等待商品导入]'
-      await delayWithCountdown(
-        waitSeconds,
-        log,
-        `${logPrefix} 京东后台正在处理商品数据，请稍候...`
-      )
-      log(`${logPrefix} 等待完成，继续下一步操作。`, 'success')
-      return { success: true }
-    }
-  },
   enableStoreProducts: {
     name: '启用店铺商品',
     shouldExecute: (context) => context.options.enableStoreProducts,
     execute: (context, session, log) => executeTask('enableStoreProducts', context, session, log)
-  },
-  getCSGList: {
-    name: '获取店铺商品编号',
-    shouldExecute: (context) => context.options.importStoreProducts,
-    execute: async (context, session, log) => {
-      log('正在获取店铺商品CSG编号列表...')
-      const result = await executeTask('getCSG', context, session, log)
-      if (!result.success || !result.csgList || result.csgList.length === 0) {
-        throw new Error(result.message || '未能获取到CSG编号，可能是后台任务尚未完成。')
-      }
-      log(`成功获取到 ${result.csgList.length} 个CSG编号。`)
-      return { csgList: result.csgList }
-    }
   },
   importLogisticsAttributes: {
     name: '导入物流属性',
@@ -121,7 +93,7 @@ async function delayWithCountdown(seconds, log, messagePrefix) {
   log(`${messagePrefix} 等待结束。`, 'success')
 }
 
-// Main execution function
+// 主执行函数
 async function execute(context, session, log) {
   log('开始执行工作流: 入仓打标...', 'info')
   log(`[调试] 收到的原始 context: ${JSON.stringify(context, null, 2)}`, 'info')
@@ -131,37 +103,46 @@ async function execute(context, session, log) {
     ...context,
     options: context.options || {}
   }
-  let csgList = currentContext.skus || []
+  // 统一商品源：无论是手动输入还是文件导入，都从 context.skus 获取
+  const skuList = currentContext.skus || []
 
   try {
-    // 步骤 1: 准备商品源
+    // 如果没有提供任何 SKU，则直接结束
+    if (skuList.length === 0) {
+      log('没有需要处理的商品 (SKU 列表为空)，工作流结束。', 'warning')
+      return { success: false, message: '没有需要处理的商品。' }
+    }
+
+    // 步骤 1: 执行预备任务
     if (tasks.importStoreProducts.shouldExecute(currentContext)) {
-      await tasks.importStoreProducts.execute(currentContext, session, log)
-      await tasks.waitAfterImport.execute(currentContext, session, log)
-    } else if (tasks.enableStoreProducts.shouldExecute(currentContext)) {
-      await tasks.enableStoreProducts.execute(currentContext, session, log)
+      await tasks.importStoreProducts.execute({ ...currentContext, skus: skuList }, session, log)
     }
 
-    // 步骤 2: 获取商品 CSG 列表
-    // 如果是通过导入或使用店铺所有商品，则需要从页面获取 CSG 列表
-    if (currentContext.options.importStoreProducts || currentContext.options.enableStoreProducts) {
-      log('正在获取店铺商品CSG编号列表...')
-      const result = await executeTask('getCSG', currentContext, session, log)
-      if (!result.success || !result.csgList || result.csgList.length === 0) {
-        throw new Error(result.message || '未能获取到CSG编号，可能是后台任务尚未完成。')
-      }
-      log(`成功获取到 ${result.csgList.length} 个CSG编号。`)
-      csgList = result.csgList
+    // 步骤 2: 核心数据查询 - 使用 getProductData 获取所有需要的商品信息
+    log(`开始使用 getProductData 获取 ${skuList.length} 个SKU的详细数据...`)
+    const productDataResult = await executeTask('getProductData', { skus: skuList }, session, log)
+    if (!productDataResult.success || !productDataResult.data || productDataResult.data.length === 0) {
+      throw new Error(productDataResult.message || '未能获取到商品详细信息。')
+    }
+    log(`成功获取到 ${productDataResult.data.length} 条商品详细数据。`)
+    const allProductData = productDataResult.data
+
+    // 步骤 3: 执行 启用店铺商品 任务 (此任务包含启用主数据和店铺商品两个步骤)
+    if (tasks.enableStoreProducts.shouldExecute(currentContext)) {
+      // 传递完整的商品数据，让任务自己提取所需信息
+      await tasks.enableStoreProducts.execute({ ...currentContext, allProductData }, session, log)
     }
 
-    if (!csgList || csgList.length === 0) {
-      log('没有需要处理的商品 (SKU/CSG 列表为空)，工作流结束。', 'warning')
-      return { success: true, message: '没有需要处理的商品。' }
+    // 步骤 4: 准备并执行后续的批量任务 (需要CSG - shopGoodsNo)
+    const csgList = allProductData.map(p => p.shopGoodsNo).filter(Boolean)
+    if (csgList.length === 0) {
+      log('未能从查询结果中提取到任何有效的CSG编码，无法执行后续批量任务。', 'error')
+      throw new Error('未能提取到有效的CSG编码。')
     }
+    log(`提取到 ${csgList.length} 个CSG编码，准备执行批量任务...`)
 
-    currentContext = { ...currentContext, csgList }
+    currentContext = { ...currentContext, csgList, allProductData }
 
-    // 步骤 3: 执行批量任务 - 顺序根据 note.txt 调整
     const batchableTasksDefinition = [
       { name: 'importLogisticsAttributes', task: tasks.importLogisticsAttributes },
       { name: 'addInventory', task: tasks.addInventory },
