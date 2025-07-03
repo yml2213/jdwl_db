@@ -168,6 +168,13 @@ function addTask() {
     });
 
   } else {
+    // For workflow, we need to pass the options and logistics data
+    const workflowExecutionData = {
+      ...baseExecutionData,
+      options: { ...form.options },
+      logistics: { ...logisticsOptions }
+    };
+
     addTaskToTaskList({
       sku: displaySku,
       name: '工作流: 入仓打标',
@@ -176,7 +183,7 @@ function addTask() {
       warehouse: warehouseInfo,
       executionType: 'flow',
       executionFeature: 'warehouseLabeling',
-      executionData: baseExecutionData
+      executionData: workflowExecutionData
     })
   }
 }
@@ -185,6 +192,19 @@ watch(
   () => form.quickSelect,
   (newValue) => {
     if (newValue !== 'manual') {
+      const workflowTasks = {
+        importStoreProducts: true,
+        enableStoreProducts: true,
+        importLogisticsAttributes: true,
+        enableInventoryAllocation: true,
+        addInventory: true,
+        enableJpSearch: true,
+        importProductNames: false
+      }
+      Object.keys(form.options).forEach((key) => {
+        form.options[key] = workflowTasks[key] ?? false
+      })
+    } else {
       const initialOptions = getInitialFormState().options
       Object.keys(form.options).forEach((key) => {
         form.options[key] = initialOptions[key] ?? false

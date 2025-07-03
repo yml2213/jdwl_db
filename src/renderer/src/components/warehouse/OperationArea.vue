@@ -41,13 +41,14 @@
       </div>
 
       <!-- Manual Options Section -->
-      <div v-if="form.quickSelect === 'manual'" class="manual-options-container">
+      <div class="manual-options-container">
         <div class="manual-options-grid">
           <div v-for="option in manualOptions" :key="option.key" class="option-item">
             <input
               type="checkbox"
               :id="option.key"
               :checked="form.options[option.key]"
+              :disabled="form.quickSelect !== 'manual'"
               @change="updateOption(option.key, $event.target.checked)"
             />
             <label :for="option.key" class="option-label">{{ option.label }}</label>
@@ -68,7 +69,8 @@
                 :value="logisticsOptions.length" 
                 @input="updateLogistics('length', $event.target.value)" 
                 placeholder="默认: 120.00" 
-                class="logistics-input" 
+                class="logistics-input"
+                :disabled="form.quickSelect !== 'manual'"
               />
             </div>
             <div class="logistics-input-group">
@@ -78,7 +80,8 @@
                 :value="logisticsOptions.width" 
                 @input="updateLogistics('width', $event.target.value)" 
                 placeholder="默认: 60.00" 
-                class="logistics-input" 
+                class="logistics-input"
+                :disabled="form.quickSelect !== 'manual'"
               />
             </div>
             <div class="logistics-input-group">
@@ -88,7 +91,8 @@
                 :value="logisticsOptions.height" 
                 @input="updateLogistics('height', $event.target.value)" 
                 placeholder="默认: 6.00" 
-                class="logistics-input" 
+                class="logistics-input"
+                :disabled="form.quickSelect !== 'manual'"
               />
             </div>
             <div class="logistics-input-group">
@@ -98,7 +102,8 @@
                 :value="logisticsOptions.grossWeight" 
                 @input="updateLogistics('grossWeight', $event.target.value)" 
                 placeholder="默认: 0.1" 
-                class="logistics-input" 
+                class="logistics-input"
+                :disabled="form.quickSelect !== 'manual'"
               />
             </div>
           </div>
@@ -117,7 +122,8 @@
                 :value="form.options.inventoryAmount" 
                 @input="updateOption('inventoryAmount', $event.target.value)" 
                 placeholder="默认: 1000" 
-                class="logistics-input" 
+                class="logistics-input"
+                :disabled="form.quickSelect !== 'manual'"
               />
             </div>
           </div>

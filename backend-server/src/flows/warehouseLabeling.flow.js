@@ -23,12 +23,12 @@ async function executeTask(taskName, payload, session, log) {
 const tasks = {
   importStoreProducts: {
     name: '导入店铺商品',
-    shouldExecute: (context) => context.options.importStore,
+    shouldExecute: (context) => context.options.importStoreProducts,
     execute: (context, session, log) => executeTask('importStoreProducts', context, session, log)
   },
   waitAfterImport: {
     name: '等待店铺商品导入后台处理',
-    shouldExecute: (context) => context.options.importStore,
+    shouldExecute: (context) => context.options.importStoreProducts,
     execute: async (context, session, log) => {
       const waitSeconds = 5
       const logPrefix = '[初始化][等待商品导入]'
@@ -43,12 +43,12 @@ const tasks = {
   },
   enableStoreProducts: {
     name: '启用店铺商品',
-    shouldExecute: (context) => context.options.useStore,
+    shouldExecute: (context) => context.options.enableStoreProducts,
     execute: (context, session, log) => executeTask('enableStoreProducts', context, session, log)
   },
   getCSGList: {
     name: '获取店铺商品编号',
-    shouldExecute: (context) => context.options.importStore,
+    shouldExecute: (context) => context.options.importStoreProducts,
     execute: async (context, session, log) => {
       log('正在获取店铺商品CSG编号列表...')
       const result = await executeTask('getCSG', context, session, log)
@@ -63,9 +63,9 @@ const tasks = {
     name: '导入物流属性',
     batchSize: 2000,
     delayBetweenBatches: 300, // 5 分钟
-    shouldExecute: (context) => context.options.importProps,
+    shouldExecute: (context) => context.options.importLogisticsAttributes,
     execute: (context, session, log) => {
-      const taskPayload = { ...context, logisticsOptions: context.options.logistics }
+      const taskPayload = { ...context, logisticsOptions: context.logistics }
       return executeTask('importLogisticsAttributes', taskPayload, session, log)
     }
   },
@@ -73,7 +73,7 @@ const tasks = {
     name: '启用库存商品分配',
     batchSize: 2000,
     delayBetweenBatches: 5, // 5 秒
-    shouldExecute: (context) => context.options.useMainData,
+    shouldExecute: (context) => context.options.enableInventoryAllocation,
     execute: (context, session, log) =>
       executeTask('enableInventoryAllocation', context, session, log)
   },
@@ -81,14 +81,14 @@ const tasks = {
     name: '添加库存',
     batchSize: 500,
     delayBetweenBatches: 60, // 1 分钟
-    shouldExecute: (context) => context.options.useAddInventory,
+    shouldExecute: (context) => context.options.addInventory,
     execute: (context, session, log) => executeTask('addInventory', context, session, log)
   },
   enableJpSearch: {
     name: '启用京配打标生效',
     batchSize: 2000,
     delayBetweenBatches: 5, // 5 秒
-    shouldExecute: (context) => context.options.useJPEffect,
+    shouldExecute: (context) => context.options.enableJpSearch,
     execute: (context, session, log) => executeTask('enableJpSearch', context, session, log)
   },
   importProductNames: (context, session, log) =>
@@ -123,17 +123,83 @@ async function delayWithCountdown(seconds, log, messagePrefix) {
 
 // Main execution function
 async function execute(context, session, log) {
-  // The complex manual mode logic is removed. 
-  // This flow now only handles the standard 'warehouseLabeling' workflow.
+  log('开始执行工作流: 入仓打标...', 'info')
+  log(`[调试] 收到的原始 context: ${JSON.stringify(context, null, 2)}`, 'info')
 
-  log('开始执行标准工作流: 入仓打标...', 'info')
+  // 确保 context.options 存在，避免后续操作因 undefined 出错
+  let currentContext = {
+    ...context,
+    options: context.options || {}
+  }
+  let csgList = currentContext.skus || []
 
-  // You can re-implement the original, simpler workflow logic here if needed.
-  // For now, we'll just log and return success as a placeholder.
-  // This ensures that if the 'flow' is called, it doesn't crash.
+  try {
+    // 步骤 1: 准备商品源
+    if (tasks.importStoreProducts.shouldExecute(currentContext)) {
+      await tasks.importStoreProducts.execute(currentContext, session, log)
+      await tasks.waitAfterImport.execute(currentContext, session, log)
+    } else if (tasks.enableStoreProducts.shouldExecute(currentContext)) {
+      await tasks.enableStoreProducts.execute(currentContext, session, log)
+    }
 
-  log('标准工作流执行完毕。', 'success')
-  return { success: true, message: '标准工作流执行完毕' }
+    // 步骤 2: 获取商品 CSG 列表
+    // 如果是通过导入或使用店铺所有商品，则需要从页面获取 CSG 列表
+    if (currentContext.options.importStoreProducts || currentContext.options.enableStoreProducts) {
+      log('正在获取店铺商品CSG编号列表...')
+      const result = await executeTask('getCSG', currentContext, session, log)
+      if (!result.success || !result.csgList || result.csgList.length === 0) {
+        throw new Error(result.message || '未能获取到CSG编号，可能是后台任务尚未完成。')
+      }
+      log(`成功获取到 ${result.csgList.length} 个CSG编号。`)
+      csgList = result.csgList
+    }
+
+    if (!csgList || csgList.length === 0) {
+      log('没有需要处理的商品 (SKU/CSG 列表为空)，工作流结束。', 'warning')
+      return { success: true, message: '没有需要处理的商品。' }
+    }
+
+    currentContext = { ...currentContext, csgList }
+
+    // 步骤 3: 执行批量任务 - 顺序根据 note.txt 调整
+    const batchableTasksDefinition = [
+      { name: 'importLogisticsAttributes', task: tasks.importLogisticsAttributes },
+      { name: 'addInventory', task: tasks.addInventory },
+      { name: 'enableInventoryAllocation', task: tasks.enableInventoryAllocation },
+      { name: 'enableJpSearch', task: tasks.enableJpSearch }
+    ]
+
+    for (const taskDef of batchableTasksDefinition) {
+      if (taskDef.task.shouldExecute(currentContext)) {
+        log(`开始批量任务: ${taskDef.task.name}...`, 'info')
+        const batches = createBatches(csgList, taskDef.task.batchSize)
+        log(`商品列表已分为 ${batches.length} 个批次进行处理，每批次 ${taskDef.task.batchSize} 个。`)
+
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i]
+          const batchContext = { ...currentContext, csgList: batch }
+          log(`处理批次 ${i + 1}/${batches.length} (共 ${batch.length} 个商品)...`)
+          await taskDef.task.execute(batchContext, session, log)
+
+          if (i < batches.length - 1 && taskDef.task.delayBetweenBatches > 0) {
+            await delayWithCountdown(
+              taskDef.task.delayBetweenBatches,
+              log,
+              `批次 ${i + 1} 处理完毕，等待 ${taskDef.task.delayBetweenBatches} 秒`
+            )
+          }
+        }
+        log(`批量任务: ${taskDef.task.name} 已全部处理完成。`, 'success')
+      }
+    }
+
+    log('工作流: 入仓打标 执行完毕。', 'success')
+    return { success: true, message: '入仓打标工作流执行完毕' }
+  } catch (error) {
+    log(`工作流执行时发生错误: ${error.message}`, 'error')
+    console.error(error)
+    return { success: false, message: `工作流失败: ${error.message}` }
+  }
 }
 
 export default { execute } 
