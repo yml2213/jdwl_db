@@ -3,17 +3,15 @@
  * 支持两种模式：
  * 1. 整店取消京配打标
  * 2. 部分取消京配打标
+ * 7.4 优化 使用 getProductData.task.js 查询商品数据
  */
 import XLSX from 'xlsx'
-import fs from 'fs'
-import path from 'path'
 import {
     uploadJpSearchFile,
     getJpEnabledCsgsForStore
 } from '../services/jdApiService.js'
-import getCSGTask from './getCSG.task.js'
+import getProductData from './getProductData.task.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
-import { getFormattedChinaTime } from '../utils/timeUtils.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 
 // 配置常量
@@ -38,12 +36,71 @@ function createJpSearchExcelBuffer(items) {
 }
 
 /**
+ * 批量处理需要取消京配打标的商品
+ * @param {string[]} itemsToProcess - 商品CSG列表
+ * @param {object} store - 店铺信息
+ * @param {object} sessionData - 会话数据
+ * @returns {Promise<object>} 批处理结果
+ */
+async function processInBatches(itemsToProcess, store, sessionData) {
+    const batchFn = async (batchItems) => {
+        try {
+            console.log(`[Task: cancelJpSearch] 正在为 ${batchItems.length} 个商品创建批处理文件...`)
+            const fileBuffer = createJpSearchExcelBuffer(batchItems)
+
+            // 保存文件到本地
+            const filePath = await saveExcelFile(fileBuffer, {
+                dirName: TEMP_DIR_NAME,
+                store: store,
+                extension: 'xls'
+            })
+
+            if (filePath) {
+                console.log(`[Task: cancelJpSearch] 批处理文件已保存: ${filePath}`)
+            }
+
+            const response = await uploadJpSearchFile(fileBuffer, sessionData)
+            console.log('取消京配打标=======> response', response)
+
+            if (response && response.resultCode === 1) {
+                return {
+                    success: true,
+                    message: `${response.resultData || '取消京配打标任务提交成功。'} (处理了 ${batchItems.length
+                        } 个商品)`
+                }
+            }
+
+            // 检查频率限制错误
+            if (response && response.message && response.message.includes('频繁操作')) {
+                return { success: false, message: response.message }
+            }
+
+            const errorMessage = response?.message || '取消京配打标时发生未知错误'
+            return { success: false, message: errorMessage }
+        } catch (error) {
+            console.error('[Task: cancelJpSearch] 批处理执行时发生严重错误:', error)
+            return { success: false, message: `批处理失败: ${error.message}` }
+        }
+    }
+
+    return await executeInBatches({
+        items: itemsToProcess,
+        batchSize: BATCH_SIZE,
+        delay: BATCH_DELAY,
+        batchFn,
+        log: (message, level = 'info') =>
+            console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
+        isRunning: { value: true }
+    })
+}
+
+/**
  * 主执行函数 - 由工作流调用
  * @param {object} context 包含 skus, csgList, store, options
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, sessionData) {
+async function execute(context, updateFn = () => { }, sessionData) {
     const { skus, store, options } = context
     let { csgList } = context
     const isWholeStore = options?.cancelJpSearchScope === 'all'
@@ -59,20 +116,26 @@ async function execute(context, sessionData) {
     try {
         let itemsToProcess = []
         if (isWholeStore) {
-            // 1. Get all products with JP search enabled for the entire store
+            // 1. 获取整店已开启京配的商品
             console.log('[Task: cancelJpSearch] 正在查询整店已开启京配的商品...')
             itemsToProcess = await getJpEnabledCsgsForStore(sessionData)
         } else {
+            // 2. 如果只提供了SKU，先查询CSG
             if (!csgList && skus && skus.length > 0) {
                 console.log(
                     `[Task: cancelJpSearch] 未提供CSG列表，将通过SKU查询CSG...`
                 )
-                const csgContext = { ...context }
-                const csgResult = await getCSGTask.execute(csgContext, sessionData)
-                if (!csgResult.success) {
-                    throw new Error(`获取CSG失败: ${csgResult.message}`)
+                const payload = { skus }
+                const result = await getProductData.execute(
+                    payload,
+                    updateFn,
+                    sessionData
+                )
+
+                if (!result || !result.data || result.data.length === 0) {
+                    throw new Error('获取商品数据失败，请检查SKU是否正确。')
                 }
-                csgList = csgResult.csgList
+                csgList = result.data.map((p) => p.shopGoodsNo).filter(Boolean)
             }
             itemsToProcess = csgList || []
         }
@@ -84,7 +147,7 @@ async function execute(context, sessionData) {
             return { success: true, message }
         }
 
-        // 对CSG列表去重，避免"重复sku"错误
+        // 对CSG列表去重
         const uniqueItems = [...new Set(itemsToProcess)]
         const duplicatesCount = itemsToProcess.length - uniqueItems.length
         if (duplicatesCount > 0) {
@@ -97,49 +160,8 @@ async function execute(context, sessionData) {
             `[Task: cancelJpSearch] 查询到 ${uniqueItems.length} 个商品，将为它们取消京配打标。`
         )
 
-        const batchFn = async (batchItems) => {
-            try {
-                console.log(`[Task: cancelJpSearch] 正在为 ${batchItems.length} 个商品创建批处理文件...`)
-                const fileBuffer = createJpSearchExcelBuffer(batchItems)
-
-                // 保存文件到本地
-                const filePath = await saveExcelFile(fileBuffer, {
-                    dirName: TEMP_DIR_NAME,
-                    store: store,
-                    extension: 'xls'
-                })
-
-                if (filePath) {
-                    console.log(`[Task: cancelJpSearch] 批处理文件已保存: ${filePath}`)
-                }
-
-                const response = await uploadJpSearchFile(fileBuffer, sessionData)
-                console.log('取消京配打标=======> response', response)
-                if (response && response.resultCode === 1) {
-                    return {
-                        success: true,
-                        message: `${response.resultData || '取消京配打标任务提交成功。'} (处理了 ${batchItems.length
-                            } 个商品)`
-                    }
-                } else {
-                    const errorMessage = response?.message || '取消京配打标时发生未知错误'
-                    return { success: false, message: errorMessage }
-                }
-            } catch (error) {
-                console.error('[Task: cancelJpSearch] 批处理执行时发生严重错误:', error)
-                return { success: false, message: `批处理失败: ${error.message}` }
-            }
-        }
-
-        const batchResults = await executeInBatches({
-            items: uniqueItems,
-            batchSize: BATCH_SIZE,
-            delay: BATCH_DELAY,
-            batchFn,
-            log: (message, level = 'info') =>
-                console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
-            isRunning: { value: true }
-        })
+        // 批量处理
+        const batchResults = await processInBatches(uniqueItems, store, sessionData)
 
         if (!batchResults.success) {
             throw new Error(`取消京配打标任务有失败的批次: ${batchResults.message}`)

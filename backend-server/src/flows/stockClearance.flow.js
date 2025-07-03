@@ -12,7 +12,7 @@ async function executeTask(taskName, payload, session) {
   if (!taskModule.default || typeof taskModule.default.execute !== 'function') {
     throw new Error(`任务 ${taskName} 或其 execute 方法未找到`)
   }
-  return taskModule.default.execute(payload, session)
+  return taskModule.default.execute(payload, () => { }, session)
 }
 
 const workflowSteps = [
