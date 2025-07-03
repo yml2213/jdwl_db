@@ -1,5 +1,5 @@
 /**
- * 后端任务：清零库存分配
+ * 后端任务：库存分配清零
  * 支持两种模式：
  * 1. 上传Excel文件，清零指定SKU的库存。
  * 2. 调用API，清零整个店铺的库存。
@@ -15,43 +15,17 @@ import { saveExcelFile } from '../utils/fileUtils.js'
 // 配置常量
 const BATCH_SIZE = 2000
 const BATCH_DELAY = 5 * 60 * 1000 // 5分钟
-const TEMP_DIR_NAME = '清零库存分配'
+const TEMP_DIR_NAME = '库存分配清零'
 
-function createExcelFile(skuList, department, store) {
-  const headers = [
-    '事业部编码',
-    '主商品编码',
-    '商家商品标识',
-    '店铺编码',
-    '库存管理方式',
-    '库存比例/数值',
-    '仓库编号'
-  ]
-  const introRow = [
-    'CBU开头的事业部编码',
-    'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
-    '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
-    'CSP开头的店铺编码',
-    '纯数值，1-独占，2-共享，3-固定值',
-    '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100库存方为固定值时，填写正整数，不能大于当前商品的库存总数',
-    '可空，只有在库存管理方式为3-固定值时，读取仓库编码，若为空则按全部仓库执行'
-  ]
-  const rows = skuList.map((sku) => [department.deptNo, '', sku, store.shopNo, 1, 0, '']) // 核心：库存比例为0
-  const excelData = [headers, introRow, ...rows]
-  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'GoodsStockConfig')
-  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' })
-}
 
 async function execute(context, sessionData) {
   const { skus, store, department, scope } = context
 
-  // console.log('清空整个店铺的库存分配 ===>', context)
+  console.log('库存分配清零 的 context ===>', context)
   // console.log('清空整个店铺的库存分配 ===>', sessionData)
-  // console.log('库存分配清零 输入的 skus===>', skus)
-  // console.log('库存分配清零  store===>', store)
-  // console.log('库存分配清零  department===>', department)
+  console.log('库存分配清零 输入的 skus ===>', skus)
+  console.log('库存分配清零  store ===>', store)
+  console.log('库存分配清零  department===>', department)
 
   if (!skus || skus.length === 0) throw new Error('SKU列表为空')
   if (!store || !department) throw new Error('缺少店铺或事业部信息')
@@ -133,8 +107,35 @@ async function execute(context, sessionData) {
   }
 }
 
+
+function createExcelFile(skuList, department, store) {
+  const headers = [
+    '事业部编码',
+    '主商品编码',
+    '商家商品标识',
+    '店铺编码',
+    '库存管理方式',
+    '库存比例/数值',
+    '仓库编号'
+  ]
+  const introRow = [
+    'CBU开头的事业部编码',
+    'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
+    '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
+    'CSP开头的店铺编码',
+    '纯数值，1-独占，2-共享，3-固定值',
+    '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100库存方为固定值时，填写正整数，不能大于当前商品的库存总数',
+    '可空，只有在库存管理方式为3-固定值时，读取仓库编码，若为空则按全部仓库执行'
+  ]
+  const rows = skuList.map((sku) => [department.deptNo, '', sku, store.shopNo, 1, 0, '']) // 核心：库存比例为0
+  const excelData = [headers, introRow, ...rows]
+  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'GoodsStockConfig')
+  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' })
+}
 export default {
   name: 'clearStockAllocation',
-  description: '清零库存分配',
+  description: '库存分配清零',
   execute: execute
 } 

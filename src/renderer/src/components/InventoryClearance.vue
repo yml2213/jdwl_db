@@ -22,8 +22,16 @@ const form = ref({
 
 // --- 组合式函数 ---
 // 店铺和仓库管理
-const { shopsList, isLoadingShops, shopLoadError, selectedStore, loadShops, persistSelectedShop } =
-  useShopAndWarehouse()
+const {
+  shopsList,
+  isLoadingShops,
+  shopLoadError,
+  selectedStore,
+  loadShops,
+  persistSelectedShop,
+  selectedVendor,
+  selectedDepartment
+} = useShopAndWarehouse()
 
 // 任务列表管理 (全局共享)
 const { taskList, addTask, executeTask, runAllTasks, clearAllTasks, deleteTask } = useTaskList()
@@ -56,7 +64,9 @@ const handleAddTask = () => {
     scope: form.value.mode, // 'sku' or 'whole_store'
     skus, // 使用处理后的skus
     store: currentShopInfo.value,
-    options: { ...form.value.options }
+    options: { ...form.value.options },
+    vendor: selectedVendor.value,
+    department: selectedDepartment.value
   }
 
   // 计算任务显示名称
