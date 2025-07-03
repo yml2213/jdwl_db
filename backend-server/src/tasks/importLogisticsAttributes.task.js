@@ -32,28 +32,38 @@ const execute = async (context, ...args) => {
 
   // 1. 参数校验
   if (itemsToProcess.length === 0) {
-    return { success: true, message: '商品列表为空，无需操作。' }
+    const msg = '商品列表为空，无需操作。';
+    updateFn(msg);
+    return { success: true, message: msg };
   }
   if (!department || !department.deptNo) {
-    throw new Error('缺少有效的事业部信息。')
+    const msg = '缺少有效的事业部信息。';
+    updateFn({ message: msg, error: true });
+    throw new Error(msg);
   }
   if (!store) {
-    throw new Error('缺少有效的店铺信息。')
+    const msg = '缺少有效的店铺信息。';
+    updateFn({ message: msg, error: true });
+    throw new Error(msg);
   }
   if (!sessionData || !sessionData.cookies) {
-    throw new Error('缺少会话信息')
+    const msg = '缺少会话信息';
+    updateFn({ message: msg, error: true });
+    throw new Error(msg);
   }
   if (!logisticsOptions) {
-    throw new Error('上下文中缺少有效的物流参数 (logisticsOptions 或 logistics)');
+    const msg = '上下文中缺少有效的物流参数 (logisticsOptions 或 logistics)';
+    updateFn({ message: msg, error: true });
+    throw new Error(msg);
   }
 
-  console.log(
-    `[Task: importLogisticsAttributes] "导入物流属性" 开始，事业部 [${department.name} - ${department.deptNo}]...`
+  updateFn(
+    `"导入物流属性" 开始，事业部 [${department.name} - ${department.deptNo}]...`
   )
-  console.log(
-    `[Task: importLogisticsAttributes] 将为 ${itemsToProcess.length} 个商品导入物流属性。`
+  updateFn(
+    `将为 ${itemsToProcess.length} 个商品导入物流属性。`
   )
-  console.log('[Task: importLogisticsAttributes] 使用的物流参数:', logisticsOptions)
+  updateFn(`使用的物流参数: ${JSON.stringify(logisticsOptions)}`)
 
   const batchFn = async (batchItems) => {
     try {
@@ -62,16 +72,17 @@ const execute = async (context, ...args) => {
       // 将生成的Excel文件保存到本地
       const filePath = await saveExcelFile(fileBuffer, {
         dirName: TEMP_DIR_NAME,
-        fileName: department?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-dept',
+        store: { shopName: department?.name?.replace(/[\\/:"*?<>|]/g, '_') || 'unknown-dept' },
         extension: 'xls'
       })
 
       if (filePath) {
-        console.log(`[Task: importLogisticsAttributes] Excel文件已保存到: ${filePath}`)
+        updateFn(`Excel文件已保存到: ${filePath}`)
       }
 
       const dataForApi = { ...sessionData, store }
       const result = await jdApiService.uploadLogisticsAttributesFile(fileBuffer, dataForApi)
+      updateFn(`API 响应: ${JSON.stringify(result)}`);
 
       if (result.success) {
         return { success: true, message: result.data || '物流属性导入成功' }
@@ -81,13 +92,14 @@ const execute = async (context, ...args) => {
       } else {
         // 对于其他错误，认为是决定性的失败
         const errorMessage = result.data || '导入物流属性时发生未知错误'
-        console.error(`[Task: importLogisticsAttributes] 导入失败: ${errorMessage}`)
+        updateFn({ message: `导入失败: ${errorMessage}`, error: true });
         // 抛出错误以在 batch processor 中被捕获为失败
         throw new Error(errorMessage)
       }
     } catch (error) {
-      console.error('[Task: importLogisticsAttributes] 批处理失败:', error)
-      return { success: false, message: `批处理失败: ${error.message}` }
+      const errorMessage = `批处理失败: ${error.message}`;
+      updateFn({ message: errorMessage, error: true });
+      return { success: false, message: errorMessage }
     }
   }
 
@@ -97,12 +109,14 @@ const execute = async (context, ...args) => {
     delay: BATCH_DELAY,
     batchFn,
     log: (message, level = 'info') =>
-      console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
+      updateFn({ message: `[批处理] ${message}`, type: level }),
     isRunning: { value: true }
   })
 
   if (!batchResults.success) {
-    throw new Error(`导入物流属性任务处理完成，但有失败的批次: ${batchResults.message}`)
+    const errorMsg = `导入物流属性任务处理完成，但有失败的批次: ${batchResults.message}`;
+    updateFn({ message: errorMsg, error: true });
+    throw new Error(errorMsg);
   }
 
   return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }

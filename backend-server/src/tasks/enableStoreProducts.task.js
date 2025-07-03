@@ -22,55 +22,64 @@ async function execute(context, ...args) {
   const sessionData = session || (args.length === 1 ? args[0] : context.session)
 
   if (!sessionData || !sessionData.cookies) {
-    updateFn({ message: '错误: 缺少会话信息', error: true })
-    throw new Error('缺少会话信息')
+    const errorMsg = '错误: 缺少会话信息';
+    updateFn({ message: errorMsg, error: true });
+    throw new Error(errorMsg);
   }
 
   const messages = []
 
   try {
+    updateFn('开始执行 "启用店铺商品" 任务...');
     const skusToCheck = context.skus || (context.allProductData ? context.allProductData.map(p => p.sellerGoodsSign) : [])
     if (skusToCheck.length === 0) {
-      return { success: true, message: '没有需要检查的SKU，任务结束。' }
+      const msg = '没有需要检查的SKU，任务结束。';
+      updateFn(msg);
+      return { success: true, message: msg };
     }
 
-    updateFn({ message: `正在查询 ${skusToCheck.length} 个SKU中已停用的商品...` })
+    updateFn(`正在查询 ${skusToCheck.length} 个SKU中已停用的商品...`)
     const disabledProducts = await jdApiService.getDisabledProducts(skusToCheck, sessionData)
 
     if (disabledProducts.length === 0) {
       const message = '所有被检查的商品状态均为启用，无需操作。'
-      updateFn({ message, isCompleted: true })
+      updateFn(message)
       return { success: true, message }
     }
-    updateFn({ message: `查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...` })
+    updateFn(`查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...`)
 
     const cmgList = disabledProducts.map((p) => p.goodsNo).filter(Boolean)
     if (cmgList.length > 0) {
       const numericCmgs = cmgList.map((cmg) => cmg.replace('CMG', ''))
-      updateFn({ message: `正在启用 ${numericCmgs.length} 个商品主数据...` })
+      updateFn(`正在启用 ${numericCmgs.length} 个商品主数据...`)
       const result = await jdApiService.enableStoreProducts(numericCmgs, sessionData)
       if (result.resultCode !== 1) throw new Error(`启用主数据失败: ${result.resultMessage}`)
-      messages.push(`启用主数据成功(${numericCmgs.length}个)`)
+      const msg = `启用主数据成功(${numericCmgs.length}个)`;
+      messages.push(msg);
+      updateFn(msg);
     }
 
     const csgList = disabledProducts.map((p) => p.shopGoodsNo).filter(Boolean)
     if (csgList.length > 0) {
-      updateFn({ message: `正在通过上传文件启用 ${csgList.length} 个店铺商品...` })
+      updateFn(`正在通过上传文件启用 ${csgList.length} 个店铺商品...`)
       const fileBuffer = createStatusUpdateExcel(csgList)
-      await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store: context.store, extension: 'xls' })
+      const filePath = await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store: context.store, extension: 'xls' })
+      updateFn(`状态更新Excel文件已保存到: ${filePath}`);
       const uploadResult = await jdApiService.uploadStatusUpdateFile(fileBuffer, { ...sessionData, ...context })
       const match = uploadResult.message.match(/成功(?:导入|更新)\s*(\d+)\s*条/)
       const successCount = match ? parseInt(match[1], 10) : csgList.length
-      messages.push(`启用店铺商品成功(${successCount}个)`)
+      const msg = `启用店铺商品成功(${successCount}个)`;
+      messages.push(msg);
+      updateFn(msg);
     }
 
     const finalMessage = `任务完成: ${messages.join('; ')}`
-    updateFn({ message: finalMessage, isCompleted: true })
+    updateFn(finalMessage)
     return { success: true, message: finalMessage }
   } catch (error) {
-    console.error(`[Task: enableStoreProducts] 任务执行失败:`, error)
-    updateFn({ message: `任务失败: ${error.message}`, error: true })
-    throw error
+    const errorMsg = `[启用店铺商品] 任务执行失败: ${error.message}`;
+    updateFn({ message: errorMsg, error: true });
+    throw new Error(errorMsg);
   }
 }
 

@@ -55,8 +55,7 @@ const execute = async (context, ...args) => {
       }
     } catch (error) {
       const errorMessage = `通过SKU查询CSG时出错: ${error.message}`;
-      console.error(errorMessage, error);
-      updateFn(errorMessage);
+      updateFn({ message: errorMessage, error: true });
       throw new Error(errorMessage);
     }
   }
@@ -71,25 +70,31 @@ const execute = async (context, ...args) => {
   const batchFn = async (batchCsgList) => {
     try {
       const fileBuffer = createJpSearchExcelBuffer(batchCsgList);
-      await saveExcelFile(fileBuffer, {
+      const filePath = await saveExcelFile(fileBuffer, {
         dirName: TEMP_DIR_NAME,
         store: store,
         extension: 'xls',
       });
+      updateFn(`京配打标文件已保存到: ${filePath}`);
+
       const response = await jdApiService.uploadJpSearchFile(fileBuffer, sessionData);
-      if (response && response.resultCode === 1) {
-        updateFn(`批处理成功，影响 ${batchCsgList.length} 个商品。`);
-        return { success: true, message: response.resultData || '京配打标任务提交成功。' };
+      updateFn(`API 响应: ${JSON.stringify(response)}`);
+
+      if (response && (response.resultCode === 1 || response.resultCode === '1')) {
+        const msg = response.resultData || `批处理成功，影响 ${batchCsgList.length} 个商品。`;
+        updateFn(msg);
+        return { success: true, message: msg };
       } else if (response.resultCode === 2000) {
-        return { success: false, message: response.resultMessage || '京配打标任务--商品已开启,无需重复开启。' };
+        const msg = response.resultMessage || '京配打标任务--商品已开启,无需重复开启。';
+        updateFn(msg);
+        return { success: false, message: msg };
       }
       const errorMessage = response.resultMessage || '启用京配打标时发生未知错误';
-      updateFn(`批处理失败: ${errorMessage}`);
+      updateFn({ message: `批处理失败: ${errorMessage}`, error: true });
       return { success: false, message: errorMessage };
     } catch (error) {
       const errorMessage = `批处理时发生严重错误: ${error.message}`;
-      console.error(errorMessage, error);
-      updateFn(errorMessage);
+      updateFn({ message: errorMessage, error: true });
       return { success: false, message: errorMessage };
     }
   };
@@ -99,12 +104,14 @@ const execute = async (context, ...args) => {
     batchSize: API_BATCH_SIZE,
     delay: BATCH_DELAY,
     batchFn,
-    log: (message, type = 'info') => updateFn(`[批处理] [${type.toUpperCase()}] ${message}`),
+    log: (message, type = 'info') => updateFn({ message: `[批处理] ${message}`, type }),
     isRunning: { value: true },
   });
 
   if (!batchResult.success) {
-    throw new Error(`启用京配打标任务未完全成功: ${batchResult.message}`);
+    const errorMsg = `启用京配打标任务未完全成功: ${batchResult.message}`;
+    updateFn({ message: errorMsg, error: true });
+    throw new Error(errorMsg);
   }
 
   updateFn(`任务完成: 成功 ${batchResult.successCount} 批, 失败 ${batchResult.failureCount} 批。`);

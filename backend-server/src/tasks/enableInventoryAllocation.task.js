@@ -48,8 +48,7 @@ const execute = async (context, ...args) => {
       }
     } catch (error) {
       const errorMessage = `通过SKU查询商品数据时出错: ${error.message}`;
-      console.error(errorMessage, error);
-      updateFn(errorMessage);
+      updateFn({ message: errorMessage, error: true });
       throw new Error(errorMessage);
     }
   }
@@ -64,20 +63,23 @@ const execute = async (context, ...args) => {
   const batchFn = async (batchItems) => {
     try {
       const fileBuffer = createExcelFile(batchItems, department, store);
-      await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store, extension: 'xlsx' });
-      const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData);
+      const filePath = await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store, extension: 'xlsx' });
+      updateFn(`库存分配文件已保存到: ${filePath}`);
 
-      if (response && (response.resultCode === '1' || response.resultCode === '2')) {
-        updateFn(`批处理成功，影响 ${batchItems.length} 个商品。`);
-        return { success: true, message: response.resultData || '文件上传成功' };
+      const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData);
+      updateFn(`API 响应: ${JSON.stringify(response)}`);
+
+      if (response && (response.resultCode === '1' || response.resultCode === 1 || response.resultCode === '2' || response.resultCode === 2)) {
+        const msg = response.resultData || `批处理成功，影响 ${batchItems.length} 个商品。`;
+        updateFn(msg);
+        return { success: true, message: msg };
       }
       const errorMessage = response.resultMessage || JSON.stringify(response);
-      updateFn(`批处理失败: ${errorMessage}`);
+      updateFn({ message: `批处理失败: ${errorMessage}`, error: true });
       return { success: false, message: errorMessage };
     } catch (error) {
       const errorMessage = `批处理时发生严重错误: ${error.message}`;
-      console.error(errorMessage, error);
-      updateFn(errorMessage);
+      updateFn({ message: errorMessage, error: true });
       return { success: false, message: errorMessage };
     }
   };
@@ -87,12 +89,14 @@ const execute = async (context, ...args) => {
     batchSize: API_BATCH_SIZE,
     delay: BATCH_DELAY,
     batchFn,
-    log: (message, type = 'info') => updateFn(`[批处理] [${type.toUpperCase()}] ${message}`),
+    log: (message, type = 'info') => updateFn({ message: `[批处理] ${message}`, type }),
     isRunning: { value: true },
   });
 
   if (!batchResult.success) {
-    throw new Error(`任务未完全成功: ${batchResult.message}`);
+    const errorMsg = `任务未完全成功: ${batchResult.message}`;
+    updateFn({ message: errorMsg, error: true });
+    throw new Error(errorMsg);
   }
 
   updateFn(`任务完成: 成功 ${batchResult.successCount} 批, 失败 ${batchResult.failureCount} 批。`);
