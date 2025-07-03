@@ -10,7 +10,7 @@
             class="form-select"
           >
             <option value="manual">手动选择</option>
-            <option value="warehouseLabeling">任务流 -- 入仓打标</option>
+            <option value="workflow">任务流 -- 入仓打标</option>
           </select>
         </div>
       </div>
@@ -42,7 +42,22 @@
 
       <!-- Manual Options Section -->
       <div class="manual-options-container">
-        <div class="manual-options-grid">
+        <div v-if="form.quickSelect === 'workflow'" class="workflow-info">
+          <div class="workflow-info-title">已选择工作流模式：入仓打标</div>
+          <div class="workflow-info-subtitle">包含以下任务：</div>
+          <div class="workflow-tasks-list">
+            <div v-for="option in manualOptions" :key="option.key" class="workflow-task-item" :class="{ 'enabled': form.options[option.key] }">
+              <i class="workflow-task-icon" :class="form.options[option.key] ? 'enabled' : 'disabled'">
+                {{ form.options[option.key] ? '✓' : '×' }}
+              </i>
+              <span>{{ option.label }}</span>
+            </div>
+          </div>
+          <div class="workflow-info-note">
+            注意：工作流模式下，任务选项由系统配置，无需手动勾选
+          </div>
+        </div>
+        <div v-else class="manual-options-grid">
           <div v-for="option in manualOptions" :key="option.key" class="option-item">
             <input
               type="checkbox"
@@ -209,8 +224,8 @@ const manualOptions = [
   { key: 'enableStoreProducts', label: '启用店铺商品' },
   { key: 'importLogisticsAttributes', label: '导入物流属性(参数)' },
   { key: 'enableInventoryAllocation', label: '启用库存商品分配' },
-  { key: 'enableJpSearch', label: '启用京配打标生效' },
   { key: 'addInventory', label: '添加库存' },
+  { key: 'enableJpSearch', label: '启用京配打标生效' },
   { key: 'importProductNames', label: '导入商品简称' }
 ]
 
@@ -446,5 +461,63 @@ const handleFileChange = (content) => {
 }
 .add-task-btn:hover {
   background-color: #1d4ed8;
+}
+
+.workflow-info {
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.workflow-info-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #409eff;
+}
+
+.workflow-info-subtitle {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.workflow-tasks-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.workflow-task-item {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  padding: 4px;
+}
+
+.workflow-task-item.enabled {
+  color: #67c23a;
+}
+
+.workflow-task-icon {
+  margin-right: 6px;
+  font-weight: bold;
+  font-style: normal;
+}
+
+.workflow-task-icon.enabled {
+  color: #67c23a;
+}
+
+.workflow-task-icon.disabled {
+  color: #f56c6c;
+}
+
+.workflow-info-note {
+  font-size: 12px;
+  color: #909399;
+  font-style: italic;
+  border-top: 1px dashed #dcdfe6;
+  padding-top: 8px;
+  margin-top: 5px;
 }
 </style>

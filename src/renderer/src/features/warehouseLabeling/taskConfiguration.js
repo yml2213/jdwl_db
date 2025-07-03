@@ -17,15 +17,15 @@ const workflows = {
     warehouseLabeling: {
         name: '入仓打标',
         options: {
-            importStore: true,
-            useStore: false,
-            importProps: true,
-            useMainData: true,
-            useWarehouse: true,
-            useJPEffect: true,
+            importStoreProducts: true,
+            enableStoreProducts: true,
+            importLogisticsAttributes: true,
+            enableInventoryAllocation: true,
+            addInventory: true,
+            enableJpSearch: true,
             importProductNames: false,
+            // Non-task options
             skipConfigErrors: true,
-            useAddInventory: true,
             inventoryAmount: 1000
         }
     }

@@ -39,7 +39,8 @@ import { useTaskList } from '../composables/useTaskList'
 import { useShopAndWarehouse } from '../composables/useShopAndWarehouse'
 import {
   getInitialFormState,
-  getAllManualTaskKeys
+  getAllManualTaskKeys,
+  getWorkflows
 } from '../features/warehouseLabeling/taskConfiguration'
 import {
   getSelectedVendor,
@@ -240,12 +241,13 @@ watch(
   (newValue) => {
     resetOptions()
     if (newValue === 'workflow') {
-      form.options.importStoreProducts = true
-      form.options.enableStoreProducts = true
-      form.options.importLogisticsAttributes = true
-      form.options.addInventory = true
-      form.options.enableInventoryAllocation = true
-      form.options.enableJpSearch = true
+      const workflows = getWorkflows()
+      const workflowOptions = workflows.warehouseLabeling.options
+      Object.keys(form.options).forEach(key => {
+        if (workflowOptions.hasOwnProperty(key)) {
+          form.options[key] = workflowOptions[key]
+        }
+      })
     }
   }
 )
