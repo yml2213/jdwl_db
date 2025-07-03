@@ -1,36 +1,95 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { executeFlow, executeTask as apiExecuteTask } from '@/services/apiService'
 import { getSelectedDepartment, getSelectedVendor } from '@/utils/storageHelper'
+
+const API_BASE_URL = 'http://localhost:3000' // 后端服务器地址
 
 /**
  * @description 这是一个Vue组合式函数，用于封装和管理任务队列的所有逻辑。
  * 包括任务的添加、执行、状态更新和清理等。
- * @param {Array} initialTasks - 初始的任务列表（可选）。
  * @returns {object} 返回一个包含任务列表、日志、状态和操作方法的对象。
  */
-export function useTaskList(initialTasks = []) {
-  const taskList = ref(initialTasks)
-  // 注意：不再在这里创建useTask实例，而是在执行具体任务时动态创建
+export function useTaskList() {
+  const taskList = ref([])
+  const activeTaskLogs = ref([])
+  const selectedTask = ref(null)
+
+  let eventSource = null
+
+  // 监听 selectedTask 的变化，自动更新日志视图
+  watch(selectedTask, (newTask) => {
+    if (newTask) {
+      activeTaskLogs.value = newTask.logs
+    } else {
+      activeTaskLogs.value = []
+    }
+  })
+
+  const listenForLogs = (task) => {
+    if (eventSource) {
+      eventSource.close()
+    }
+
+    if (!task.taskId) {
+      console.error('任务缺少 taskId，无法监听日志。')
+      task.status = '失败'
+      task.result = '内部错误：缺少任务ID。'
+      return
+    }
+
+    eventSource = new EventSource(`${API_BASE_URL}/api/log-stream/${task.taskId}`)
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        // 检查是否是任务结束信号
+        if (data.event === 'end') {
+          console.log(`[SSE] 任务 ${task.name} 完成。`, data)
+          task.status = data.success ? '成功' : '失败'
+          task.result = data.message || (data.data ? (data.data.message || '执行完毕') : '未知结果')
+
+          if (data.data?.message && data.data.message.length > (task.result || '').length) {
+            task.result = data.data.message
+          }
+
+          eventSource.close()
+          eventSource = null
+        } else {
+          // 普通日志消息
+          task.logs.push(data)
+          // 如果当前任务被选中，则实时更新日志视图
+          if (selectedTask.value && selectedTask.value.id === task.id) {
+            activeTaskLogs.value = [...task.logs]
+          }
+        }
+      } catch (error) {
+        console.error('[SSE] 解析日志数据失败:', error)
+      }
+    }
+
+    eventSource.onerror = (error) => {
+      console.error('[SSE] 连接发生错误:', error)
+      task.status = '失败'
+      task.result = '与服务器的日志连接中断。'
+      eventSource.close()
+      eventSource = null
+    }
+  }
 
   /**
    * @description 向队列中添加一个新任务。
    * @param {object} taskDetails - 包含任务所需信息的对象。
    */
   const addTask = (taskDetails) => {
-    // 确保存储店铺和仓库信息的完整性
-    const storeInfo = taskDetails.store;
-    const warehouseInfo = taskDetails.warehouse;
-
     const newTask = {
       ...taskDetails,
-      id: `task-${Date.now()}`,
+      id: `task-${Date.now()}-${Math.random()}`,
       status: '等待中',
       result: '',
-      logs: [], // 新增：用于存储该任务的日志
+      logs: [],
+      taskId: null,
       createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-      // 确保存储完整信息
-      store: storeInfo,
-      warehouse: warehouseInfo,
     }
     taskList.value.push(newTask)
   }
@@ -47,57 +106,32 @@ export function useTaskList(initialTasks = []) {
     task.logs = []
     task.result = ''
 
+    // 选中当前执行的任务，以显示日志
+    selectedTask.value = task
+
     try {
-      let result;
-      // 确保负载包含所有必要的信息
       const payload = {
         ...task.executionData,
-        // 确保这些关键字段存在且有效
         skus: task.executionData.skus || [],
         store: task.executionData.store || {},
         vendor: task.executionData.vendor || {},
-        department: task.executionData.department || {}
-      };
+        department: task.executionData.department || {},
+        logistics: task.executionData.logistics || {},
+      }
 
-      console.log(`正在执行任务: ${task.name}, 类型: ${task.executionType}, 特性: ${task.executionFeature}`);
-      console.log('任务数据:', JSON.stringify({
-        sku: payload.skus ? payload.skus.length : 0,
-        store: payload.store?.shopName,
-        warehouse: payload.warehouse?.warehouseName,
-        vendor: payload.vendor?.name,
-        department: payload.department?.name
-      }));
-
+      let taskId
       if (task.executionType === 'task') {
-        console.log(`调用后端 task 接口: ${task.executionFeature}`);
-        result = await apiExecuteTask(task.executionFeature, payload)
-        task.logs = result.logs || [{ message: result.message || JSON.stringify(result.data), type: 'info', timestamp: new Date().toISOString() }];
-      } else { // Default to 'flow'
-        console.log(`调用后端 flow 接口: ${task.executionFeature}`);
-        result = await executeFlow(task.executionFeature, payload)
-        task.logs = result.logs || []
-      }
-
-      console.log('任务执行结果:', result);
-
-      if (result.success) {
-        task.status = '成功'
-        task.result = result.data?.msg || result.data?.message || result.message || '操作执行完毕'
+        taskId = await apiExecuteTask(task.executionFeature, payload)
       } else {
-        task.status = '失败'
-        task.result = result.message || '未知错误，请检查提交日志'
+        taskId = await executeFlow(task.executionFeature, payload)
       }
+      task.taskId = taskId
+      listenForLogs(task)
+
     } catch (error) {
-      console.error('任务执行出错:', error);
+      console.error('启动任务执行出错:', error)
       task.status = '失败'
-      task.result = error.response?.data?.message || error.message || '执行时发生未知网络或脚本错误'
-      if (task.logs.length === 0 || !task.logs.find((log) => log.message.includes(task.result))) {
-        task.logs.push({
-          message: `前端捕获到错误: ${task.result}`,
-          type: 'error',
-          timestamp: new Date().toISOString()
-        })
-      }
+      task.result = error.message || '启动任务失败，请检查网络或后端服务。'
     }
   }
 
@@ -108,6 +142,10 @@ export function useTaskList(initialTasks = []) {
     for (const task of taskList.value) {
       if (task.status === '等待中') {
         await executeTask(task)
+        // 在新的模型中，我们不等待任务完成，所以移除await
+        // 注意：这会导致所有任务几乎同时启动。如果需要顺序执行，
+        // 则需要一个更复杂的队列管理机制，监听每个任务的'end'事件。
+        // 目前，我们保持并行启动。
       }
     }
   }
@@ -123,19 +161,25 @@ export function useTaskList(initialTasks = []) {
    * @description 清空整个任务队列。
    */
   const clearAllTasks = () => {
+    if (eventSource) eventSource.close()
     taskList.value = []
+    selectedTask.value = null
   }
 
   const deleteTask = (taskId) => {
+    const taskToDelete = taskList.value.find((t) => t.id === taskId)
+    if (taskToDelete && selectedTask.value && selectedTask.value.id === taskId) {
+      if (eventSource) eventSource.close()
+      selectedTask.value = null
+    }
     taskList.value = taskList.value.filter((t) => t.id !== taskId)
   }
 
   // 返回状态和方法
   return {
     taskList,
-    // 日志和状态现在是每个任务执行时动态生成的，不再是全局唯一的
-    // taskFlowLogs: taskFlowState.logs,
-    // taskFlowStatus: taskFlowState.status,
+    selectedTask,
+    activeTaskLogs,
     addTask,
     executeTask,
     deleteTask,

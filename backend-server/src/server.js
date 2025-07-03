@@ -4,6 +4,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import session from 'express-session'
 import sessionFileStore from 'session-file-store'
+import crypto from 'crypto'
+import logService from './utils/logService.js'
 
 
 const app = express()
@@ -44,6 +46,39 @@ app.use(
     }
   })
 )
+
+// --- 新增：SSE日志流端点 ---
+app.get('/api/log-stream/:taskId', (req, res) => {
+  const { taskId } = req.params
+  console.log(`[SSE] 客户端已连接，订阅任务ID: ${taskId}`);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); //
+
+  const logListener = (logData) => {
+    console.log(`[SSE] 发送日志给 ${taskId}:`, logData.message);
+    res.write(`data: ${JSON.stringify(logData)}\n\n`);
+  };
+
+  const endListener = (resultData) => {
+    console.log(`[SSE] 任务 ${taskId} 完成，发送最终结果并关闭连接。`);
+    res.write(`data: ${JSON.stringify({ event: 'end', ...resultData })}\n\n`);
+    res.end();
+    // 清理监听器
+    logService.off(taskId, logListener);
+  };
+
+  logService.on(taskId, logListener);
+  logService.once(`${taskId}-end`, endListener);
+
+  req.on('close', () => {
+    console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`);
+    logService.off(taskId, logListener);
+    logService.off(`${taskId}-end`, endListener);
+  });
+});
 
 // 根路由，用于测试服务器是否运行
 app.get('/', (req, res) => {
@@ -152,42 +187,51 @@ app.post('/api/execute-flow', async (req, res) => {
     return res.status(401).json({ message: '无效的会话，请先登录' })
   }
 
-  const logs = []
-  const log = (message, type = 'info') => {
-    logs.push({ message, type, timestamp: new Date().toISOString() })
-    console.log(`[${flowName}] [${type.toUpperCase()}]: ${message}`)
-  }
+  const taskId = crypto.randomUUID()
 
-  try {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url))
-    const flowPath = path.join(__dirname, 'flows', `${flowName}.flow.js`)
-    const flowModule = await import(flowPath)
+  // 立即返回任务ID，让前端可以开始监听日志
+  res.status(202).json({ success: true, taskId })
 
-    if (!flowModule.default || typeof flowModule.default.execute !== 'function') {
-      throw new Error(`工作流 ${flowName} 或其 execute 方法未找到`)
+  // 异步执行工作流
+  setTimeout(async () => {
+    const log = (message, type = 'info') => {
+      const logData = { message, type, timestamp: new Date().toISOString() }
+      // 使用日志服务广播日志
+      logService.emit(taskId, logData)
+      console.log(`[${flowName}] [${type.toUpperCase()}]: ${message}`)
     }
 
-    // 将前端传递的 store 和 department 信息合并到会话上下文中
-    // 以确保后续任务能获取到完整的店铺和事业部数据
-    const sessionData = {
-      ...req.session.context,
-      store: payload.store,
-      department: payload.store, // department 信息通常和 store 绑定在一起
-      vendor: payload.vendor
-    }
-    // 注入 operationId
-    if (req.session.operationId) {
-      sessionData.operationId = req.session.operationId
-    }
+    try {
+      const __dirname = path.dirname(fileURLToPath(import.meta.url))
+      const flowPath = path.join(__dirname, 'flows', `${flowName}.flow.js`)
+      const flowModule = await import(flowPath)
 
-    const result = await flowModule.default.execute(payload, sessionData, log)
+      if (!flowModule.default || typeof flowModule.default.execute !== 'function') {
+        throw new Error(`工作流 ${flowName} 或其 execute 方法未找到`)
+      }
 
-    res.status(200).json({ success: true, logs, data: result })
-  } catch (error) {
-    console.error(`执行工作流 ${flowName} 时出错:`, error)
-    // 即使失败，也返回日志
-    res.status(500).json({ success: false, logs, message: error.message })
-  }
+      const sessionData = {
+        ...req.session.context,
+        store: payload.store,
+        department: payload.department,
+        vendor: payload.vendor,
+        session: req.session,
+      }
+
+      if (req.session.operationId) {
+        sessionData.operationId = req.session.operationId
+      }
+
+      const result = await flowModule.default.execute(payload, sessionData, log)
+      logService.emit(`${taskId}-end`, { success: true, data: result })
+
+    } catch (error) {
+      console.error(`执行工作流 ${flowName} 时出错:`, error)
+      const errorMessage = error.message || '工作流执行时发生未知错误'
+      log(errorMessage, 'error')
+      logService.emit(`${taskId}-end`, { success: false, message: errorMessage })
+    }
+  }, 0)
 })
 
 /**
@@ -196,57 +240,62 @@ app.post('/api/execute-flow', async (req, res) => {
 app.post('/task', async (req, res) => {
   const { taskName, payload } = req.body
 
-  console.log(`执行任务 ${taskName} 请求，Session ID:`, req.sessionID);
-  console.log('会话上下文存在:', !!req.session?.context);
+  if (!req.session.context) {
+    return res.status(401).json({ message: '无效的会话，请先登录' })
+  }
 
   if (!taskName) {
-    console.warn('任务请求缺少 taskName');
     return res.status(400).json({ success: false, message: '必须提供 taskName' })
   }
 
-  // 从会话中获取上下文，并注入 operationId
-  const sessionData = req.session.context || {}
-  console.log('任务执行使用的会话数据:', {
-    hasSessionContext: !!sessionData,
-    hasUniqueKey: !!sessionData.uniqueKey,
-    hasCookies: !!(sessionData.cookies && sessionData.cookies.length > 0),
-    hasOperationId: !!req.session.operationId
-  });
+  const taskId = crypto.randomUUID()
+  // 立即返回任务ID
+  res.status(202).json({ success: true, taskId })
 
-  if (req.session.operationId) {
-    sessionData.operationId = req.session.operationId
-  }
-
-  try {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url))
-    const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
-    const taskModule = await import(taskPath)
-
-    // 检查模块导出的是函数还是对象
-    const taskFunction = typeof taskModule.default === 'function'
-      ? taskModule.default
-      : (taskModule.default && typeof taskModule.default.execute === 'function'
-        ? taskModule.default.execute
-        : null)
-
-    if (!taskFunction) {
-      throw new Error(`单任务执行 -- 任务 ${taskName} 未找到或其导出格式不正确`)
+  // 异步执行任务
+  setTimeout(async () => {
+    const sessionData = {
+      ...req.session.context,
+      store: payload.store,
+      department: payload.department,
+      vendor: payload.vendor,
+      session: req.session,
+    }
+    if (req.session.operationId) {
+      sessionData.operationId = req.session.operationId
     }
 
-    // 创建一个状态更新函数
     const updateFn = (status) => {
-      console.log(`单任务执行 -- 任务 ${taskName} 状态更新:`, typeof status === 'string' ? status : JSON.stringify(status));
+      const message = typeof status === 'string' ? status : (status.message || JSON.stringify(status))
+      const type = status.error ? 'error' : 'info'
+      const logData = { message, type, timestamp: new Date().toISOString() }
+      logService.emit(taskId, logData)
+      console.log(`[Task: ${taskName}] [${type.toUpperCase()}]: ${message}`)
     }
 
-    console.log(`单任务执行 -- 开始执行任务 ${taskName}...`);
-    const result = await taskFunction(payload, updateFn, sessionData)
-    console.log(`单任务执行 -- 任务 ${taskName} 执行完成:`, result);
+    try {
+      const __dirname = path.dirname(fileURLToPath(import.meta.url))
+      const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
+      const taskModule = await import(taskPath)
 
-    res.status(200).json({ success: true, data: result })
-  } catch (error) {
-    console.error(`单任务执行 -- 执行任务 ${taskName} 时出错:`, error)
-    res.status(500).json({ success: false, message: error.message, stack: error.stack })
-  }
+      const taskFunction = taskModule.default?.execute
+
+      if (!taskFunction) {
+        throw new Error(`任务 ${taskName} 未找到或其导出格式不正确`)
+      }
+
+      updateFn(`开始执行任务 ${taskName}...`)
+      const result = await taskFunction(payload, updateFn, sessionData)
+      updateFn(`任务 ${taskName} 执行完成。`)
+      logService.emit(`${taskId}-end`, { success: true, data: result })
+
+    } catch (error) {
+      console.error(`执行任务 ${taskName} 时出错:`, error)
+      const errorMessage = error.message || '任务执行时发生未知错误'
+      updateFn({ message: errorMessage, error: true })
+      logService.emit(`${taskId}-end`, { success: false, message: errorMessage })
+    }
+  }, 0)
 })
 
 app.listen(port, () => {

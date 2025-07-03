@@ -19,11 +19,14 @@
     />
     <TaskArea
       :task-list="tasks"
-      :logs="logs"
+      :logs="activeTaskLogs"
+      :activeTab="state.activeTab"
+      @update:activeTab="newTab => state.activeTab = newTab"
       @execute-tasks="runAllTasks"
       @clear-tasks="clearAllTasks"
       @delete-task="deleteTask"
       @execute-one="executeTask"
+      @row-click="handleRowClick"
     />
   </div>
 </template>
@@ -47,13 +50,14 @@ import {
 
 const {
   taskList: tasks,
+  selectedTask,
+  activeTaskLogs,
   addTask: addTaskToTaskList,
   executeTask,
   deleteTask,
   runAllTasks,
   clearAllTasks
 } = useTaskList()
-const logs = ref([])
 const {
   shopsList,
   warehousesList,
@@ -62,15 +66,58 @@ const {
   isLoadingShops,
   shopLoadError,
   isLoadingWarehouses,
-  warehouseLoadError
+  warehouseLoadError,
+  shopAndWarehouseState,
+  onDepartmentChange
 } = useShopAndWarehouse()
 
-const form = reactive(getInitialFormState())
-const logisticsOptions = reactive({
-  length: '120.00',
-  width: '60.00',
-  height: '6.00',
-  grossWeight: '0.1'
+// Re-create the useFormLogic composable directly inside the component
+function useFormLogic() {
+  const form = reactive({
+    quickSelect: 'manual',
+    skus: '',
+    inventoryAmount: 1000,
+    options: {
+      importStoreProducts: false,
+      enableStoreProducts: false,
+      importLogisticsAttributes: false,
+      enableInventoryAllocation: false,
+      addInventory: false,
+      enableJpSearch: false,
+      importProductNames: false,
+    },
+  });
+
+  const logisticsOptions = reactive({
+    length: '120.00',
+    width: '60.00',
+    height: '6.00',
+    grossWeight: '0.1',
+  });
+
+  const taskOptions = [
+    { key: 'importStoreProducts', label: '导入店铺商品' },
+    { key: 'enableStoreProducts', label: '启用店铺商品' },
+    { key: 'importLogisticsAttributes', label: '导入物流属性(参数)' },
+    { key: 'enableInventoryAllocation', label: '启用库存商品分配' },
+    { key: 'addInventory', label: '添加库存' },
+    { key: 'enableJpSearch', label: '启用京配打标生效' },
+    { key: 'importProductNames', label: '导入商品简称' },
+  ];
+
+  const initialOptionsState = JSON.parse(JSON.stringify(form.options));
+  
+  const resetOptions = () => {
+    Object.assign(form.options, initialOptionsState);
+  };
+
+  return { form, logisticsOptions, taskOptions, resetOptions };
+}
+
+const { form, logisticsOptions, taskOptions, resetOptions } = useFormLogic()
+
+const state = reactive({
+  activeTab: 'tasks', // 'tasks' or 'logs'
 })
 
 // Load saved form state on component mount
@@ -191,24 +238,14 @@ function addTask() {
 watch(
   () => form.quickSelect,
   (newValue) => {
-    if (newValue !== 'manual') {
-      const workflowTasks = {
-        importStoreProducts: true,
-        enableStoreProducts: true,
-        importLogisticsAttributes: true,
-        enableInventoryAllocation: true,
-        addInventory: true,
-        enableJpSearch: true,
-        importProductNames: false
-      }
-      Object.keys(form.options).forEach((key) => {
-        form.options[key] = workflowTasks[key] ?? false
-      })
-    } else {
-      const initialOptions = getInitialFormState().options
-      Object.keys(form.options).forEach((key) => {
-        form.options[key] = initialOptions[key] ?? false
-      })
+    resetOptions()
+    if (newValue === 'workflow') {
+      form.options.importStoreProducts = true
+      form.options.enableStoreProducts = true
+      form.options.importLogisticsAttributes = true
+      form.options.addInventory = true
+      form.options.enableInventoryAllocation = true
+      form.options.enableJpSearch = true
     }
   }
 )
@@ -221,6 +258,11 @@ const manualTaskLabels = {
   enableJpSearch: '启用京配打标',
   addInventory: '添加库存',
   importProductNames: '导入商品简称'
+}
+
+function handleRowClick(task) {
+  selectedTask.value = task
+  state.activeTab = 'logs'
 }
 </script>
 

@@ -1531,67 +1531,48 @@ export async function getShopInfoByName(shopName) {
  * @returns {Promise<object>} 后端返回的响应数据，包含 sessionId
  */
 export const createSession = async (sessionData) => {
-  try {
-    // 后端现在通过cookie处理会话，不再返回sessionId
-    const response = await apiClient.post('/api/session', sessionData)
-    console.log('Session created on backend:', response.data.message)
-    return response.data // 可以直接返回后端的响应消息
-  } catch (error) {
-    console.error('Failed to create session:', error)
-    throw error
-  }
-}
+  const response = await apiClient.post('/api/session', sessionData);
+  return response.data;
+};
 
 /**
  * @description 调用后端的通用任务执行接口
  * @param {string} taskName 要执行的任务名称
  * @param {object} payload 任务需要的具体数据
- * @returns {Promise<object>} 任务执行结果
+ * @returns {Promise<string>} - 返回一个唯一的 taskId
  */
 export const executeTask = async (taskName, payload) => {
-  // sessionId 不再需要手动传递，它会通过cookie自动发送
-  try {
-    const response = await apiClient.post('/task', {
-      taskName,
-      payload
-    })
-    return response.data
-  } catch (error) {
-    console.error(`Failed to execute task ${taskName}:`, error)
-    throw error
+  console.log(`[apiService] 请求执行任务: ${taskName}`);
+  const response = await apiClient.post('/task', { taskName, payload });
+  if (response.data && response.data.taskId) {
+    return response.data.taskId;
   }
-}
+  throw new Error('未能从后端获取任务ID');
+};
 
 /**
  * 检查后端会话状态
  * @returns {Promise<object>}
  */
 export const getSessionStatus = async () => {
-  try {
-    const response = await apiClient.get('/api/session/status')
-    return response.data
-  } catch (error) {
-    console.error('Failed to get session status:', error)
-    // 即使出错，也返回一个表明未登录的状态，避免阻塞UI
-    return { success: false, loggedIn: false }
-  }
-}
+  const response = await apiClient.get('/api/session/status');
+  return response.data;
+};
 
 /**
  * 执行一个后端工作流
  * @param {string} flowName - 要执行的工作流名称
  * @param {object} payload - 工作流所需的负载
- * @returns {Promise<object>} 后端返回的完整结果，包含success, logs, 和 data/message
+ * @returns {Promise<string>} - 返回一个唯一的 taskId
  */
 export const executeFlow = async (flowName, payload) => {
-  try {
-    const response = await apiClient.post('/api/execute-flow', { flowName, payload })
-    return response.data
-  } catch (error) {
-    console.error(`Error executing flow ${flowName}:`, error.response?.data || error.message)
-    throw error.response?.data || new Error('服务器错误')
+  console.log(`[apiService] 请求执行工作流: ${flowName}`);
+  const response = await apiClient.post('/api/execute-flow', { flowName, payload });
+  if (response.data && response.data.taskId) {
+    return response.data.taskId;
   }
-}
+  throw new Error('未能从后端获取工作流ID');
+};
 
 /**
  * @description 调用后端 /api/init 接口

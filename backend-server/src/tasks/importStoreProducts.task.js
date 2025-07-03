@@ -44,13 +44,13 @@ async function execute(context, updateFn, sessionData) {
 
   try {
     console.log('importStoreProducts 任务开始执行');
-    console.log('接收到的 context 参数:', JSON.stringify({
-      skus: context.skus ? `${context.skus.length} 个SKU` : '无SKUs',
-      store: context.store ? { name: context.store.name, shopNo: context.store.shopNo, spShopNo: context.store.spShopNo } : '无店铺信息',
-      department: context.department ? { name: context.department.name, deptNo: context.department.deptNo } : '无事业部信息',
-      vendor: context.vendor ? { name: context.vendor.name, id: context.vendor.id } : '无供应商信息'
-    }, null, 2));
-    console.log('sessionData 状态:', sessionData ? '存在' : '不存在');
+    // console.log('接收到的 context 参数:', JSON.stringify({
+    //   skus: context.skus ? `${context.skus.length} 个SKU` : '无SKUs',
+    //   store: context.store ? { name: context.store.name, shopNo: context.store.shopNo, spShopNo: context.store.spShopNo } : '无店铺信息',
+    //   department: context.department ? { name: context.department.name, deptNo: context.department.deptNo } : '无事业部信息',
+    //   vendor: context.vendor ? { name: context.vendor.name, id: context.vendor.id } : '无供应商信息'
+    // }, null, 2));
+    // console.log('sessionData 状态:', sessionData ? '存在' : '不存在');
 
     const { skus, store, department, vendor } = context
 
