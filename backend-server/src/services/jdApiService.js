@@ -765,14 +765,19 @@ export async function fetchProductDetails(skus, sessionData) {
  * @returns {Promise<Object>}
  */
 export async function createPurchaseOrder(products, context, sessionData) {
-  const { warehouse, vendor, department, options } = context
+  const { warehouse, vendor, department } = context
   const { cookieString } = getAuthInfo(sessionData)
+
+  // console.log('createPurchaseOrder---1  context===>', context)
+  // console.log('createPurchaseOrder---2  products===>', products)
+
+  const applyInstoreQty = context.inventoryAmount || 1000
 
   const goodsArray = products.map((p) => ({
     poNo: undefined,
     goodsNo: p.goodsNo, // CMG
     goodsName: p.shopGoodsName,
-    applyInstoreQty: options.inventoryAmount || 1000,
+    applyInstoreQty: applyInstoreQty,
     customRecord: '',
     sellerRecord: '',
     goodsPrice: '0',
@@ -1183,7 +1188,8 @@ export async function startSessionOperation(sessionData) {
         { dataField: 'shopGoodsName', seq: 1 },
         { dataField: 'status', seq: 2 },
         { dataField: 'jdDeliver', seq: 3 },
-        { dataField: 'goodsNo', seq: 4 }
+        { dataField: 'goodsNo', seq: 4 },
+        { dataField: 'sellerGoodsSign', seq: 5 }
       ],
       reportSchemeConditionList: [
         { dataField: 'shopGoodsNo', seq: 0 },
@@ -1299,7 +1305,7 @@ export async function queryProductDataBySkus(skus, deptId, schemeId, sessionData
     }
   }
 
-  console.log('queryProductDataBySkus -- dataRequest ===>', dataRequest)
+  // console.log('queryProductDataBySkus -- dataRequest ===>', dataRequest)
 
   const aaData = [{ name: 'iDisplayStart', value: 0 }, { name: 'iDisplayLength', value: 100000 }]
 

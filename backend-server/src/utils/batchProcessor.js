@@ -7,9 +7,10 @@
  * @param {Function} options.batchFn - 对每批项目执行的异步函数。它接收批次项目作为参数。
  * @param {Function} options.log - 日志记录函数。
  * @param {object} options.isRunning - 包含'value'属性的对象，用于检查任务是否应继续执行。
+ * @param {object} [options.context={}] - 传递给batchFn的附加上下文对象
  * @returns {Promise<object>} 解析为聚合结果的Promise。
  */
-export async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunning }) {
+export async function executeInBatches({ items, batchSize, delay, batchFn, log, isRunning, context = {} }) {
   let successCount = 0
   let failureCount = 0
   const totalBatches = Math.ceil(items.length / batchSize)
@@ -25,7 +26,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
     const batch = items.slice(i, i + batchSize)
     log(`--- Starting batch ${batchNumber}/${totalBatches} ---`, 'info')
 
-    let result = await batchFn(batch)
+    let result = await batchFn(batch, context, i / batchSize, totalBatches)
 
     // If the batch fails with a rate-limiting error, wait and retry once.
     if (
@@ -36,7 +37,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
       log(`Batch ${batchNumber} failed due to rate limiting. Retrying in ${delay / 1000}s...`, 'warn')
       await new Promise((resolve) => setTimeout(resolve, delay))
       log(`--- Retrying batch ${batchNumber}/${totalBatches} ---`, 'info')
-      result = await batchFn(batch) // Retry the batch
+      result = await batchFn(batch, context, i / batchSize, totalBatches) // Retry the batch
     }
 
     if (result.success) {
