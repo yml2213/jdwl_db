@@ -272,5 +272,6 @@ function handleRowClick(task) {
 .warehouse-labeling-container {
   display: flex;
   height: 100%;
+  overflow: hidden; /* 防止内容溢出 */
 }
 </style>

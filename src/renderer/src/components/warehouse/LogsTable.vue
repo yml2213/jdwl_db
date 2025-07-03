@@ -10,11 +10,14 @@
     <div v-if="logs.length === 0 && !isRunning" class="no-logs">
       <p>暂无日志</p>
     </div>
+    <div class="log-bottom-space" ref="logBottom"></div>
   </div>
 </template>
 
 <script setup>
-defineProps({
+import { defineProps, ref, watch, onMounted, nextTick } from 'vue'
+
+const props = defineProps({
   logs: {
     type: Array,
     default: () => []
@@ -22,6 +25,28 @@ defineProps({
   isRunning: Boolean,
   taskError: String,
   taskResult: Object
+})
+
+const logBottom = ref(null)
+
+// 监听日志变化，自动滚动到底部
+watch(() => props.logs.length, async () => {
+  await nextTick()
+  scrollToBottom()
+})
+
+// 自动滚动到日志底部
+function scrollToBottom() {
+  if (logBottom.value) {
+    logBottom.value.scrollIntoView({ behavior: 'smooth' })
+  }
+}
+
+// 组件挂载后也尝试滚动到底部
+onMounted(() => {
+  if (props.logs.length > 0) {
+    scrollToBottom()
+  }
 })
 </script>
 
@@ -36,6 +61,7 @@ defineProps({
   border: 1px solid #dee2e6;
   border-radius: 4px;
   color: #343a40;
+  position: relative;
 }
 
 .log-status {
@@ -82,5 +108,11 @@ defineProps({
   text-align: center;
   padding-top: 20px;
   color: #6c757d;
+}
+
+/* 底部空间，确保最后一行内容完全可见 */
+.log-bottom-space {
+  height: 40px;
+  width: 1px;
 }
 </style>

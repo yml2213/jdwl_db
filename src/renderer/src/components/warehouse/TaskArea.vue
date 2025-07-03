@@ -69,6 +69,8 @@ const updateSelectedTasks = (ids) => {
   padding: 0 20px 20px 20px;
   background-color: #fff;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .actions-header {
@@ -110,5 +112,12 @@ const updateSelectedTasks = (ids) => {
 }
 .clear-btn:not(:disabled):hover {
   background-color: #fee2e2;
+}
+
+.task-area > :deep(.tab-container) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 </style>

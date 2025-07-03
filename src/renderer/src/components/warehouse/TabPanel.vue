@@ -107,15 +107,27 @@ const onEnableProducts = (products) => {
 .tab-content {
   flex: 1;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .tab-pane {
   display: none;
   height: 100%;
+  overflow: hidden;
 }
 
 .tab-pane.active {
   display: block;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 确保日志面板占满可用空间 */
+.tab-pane.active > .logs-container {
+  flex: 1;
+  min-height: 0; /* 重要：允许flex子项收缩 */
+  max-height: calc(100vh - 160px);
 }
 
 .badge {
