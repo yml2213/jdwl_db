@@ -5,11 +5,7 @@
  * 2. 根据 CLS 编号查询订单详情
  * 3. 提交退货入库请求
  */
-import {
-  queryClsNoByOrderNo,
-  queryOrderDetailsByClsNo,
-  submitReturnOrder
-} from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 
 async function execute(context, sessionData) {
   const { orderNumber, year, returnReason, store } = context
@@ -20,7 +16,7 @@ async function execute(context, sessionData) {
 
   // Step 1: Query CLS number by order number
   console.log(`[Task: returnStorage] 步骤1: 查询CLS编号...`)
-  const clsNo = await queryClsNoByOrderNo(orderNumber, year, sessionData)
+  const clsNo = await jdApiService.queryClsNoByOrderNo(orderNumber, year, sessionData)
   if (!clsNo) {
     throw new Error('未能根据订单号找到CLS编号。')
   }
@@ -28,7 +24,7 @@ async function execute(context, sessionData) {
 
   // Step 2: 根据 CLS 编号查询订单详情  https://o.jdl.com/rtw/getOrder.do?rand=0.25937037832834453
   console.log(`[Task: returnStorage] 步骤2: 查询订单详情...`)
-  const orderDetails = await queryOrderDetailsByClsNo(clsNo, sessionData)
+  const orderDetails = await jdApiService.queryOrderDetailsByClsNo(clsNo, sessionData)
 
   if (!orderDetails || !orderDetails.deptNo || orderDetails.aaData.length == 0) {
     throw new Error('未能获取订单详情或订单中没有商品。')
@@ -57,7 +53,7 @@ async function execute(context, sessionData) {
     ]
   }
 
-  const result = await submitReturnOrder(submissionPayload, sessionData)
+  const result = await jdApiService.submitReturnOrder(submissionPayload, sessionData)
   console.log(`[Task: returnStorage] 退货入库提交成功。`)
 
   console.log('提交退货入库 ===>', result)

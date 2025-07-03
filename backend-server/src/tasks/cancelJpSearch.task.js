@@ -7,19 +7,13 @@
  * 7.5 优化 优先使用会话中的方案ID，避免重复创建
  */
 import XLSX from 'xlsx'
-import {
-    uploadJpSearchFile,
-    getJpEnabledCsgsForStore,
-    startSessionOperation,
-    endSessionOperation
-} from '../services/jdApiService.js'
-import getProductData from './getProductData.task.js'
+import * as jdApiService from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 
 // 配置常量
 const BATCH_SIZE = 5000
-const BATCH_DELAY = 1 * 60 * 1000 // 1分钟
+const BATCH_DELAY = 1000
 const TEMP_DIR_NAME = '取消京配打标'
 
 /**
@@ -29,7 +23,6 @@ const TEMP_DIR_NAME = '取消京配打标'
  */
 function createJpSearchExcelBuffer(items) {
     const headers = ['店铺商品编号 (CSG编码)', '京配搜索 (0否, 1是)']
-    // Key change: Set the value to 0 to disable JP search.
     const dataRows = items.map((item) => [item, 0])
     const excelData = [headers, ...dataRows]
     const ws = XLSX.utils.aoa_to_sheet(excelData)
@@ -62,7 +55,7 @@ async function processInBatches(itemsToProcess, store, sessionData) {
                 console.log(`[Task: cancelJpSearch] 批处理文件已保存: ${filePath}`)
             }
 
-            const response = await uploadJpSearchFile(fileBuffer, sessionData)
+            const response = await jdApiService.uploadJpSearchFile(fileBuffer, sessionData)
             console.log('取消京配打标=======> response', response)
 
             if (response && response.resultCode === 1) {
@@ -103,98 +96,31 @@ async function processInBatches(itemsToProcess, store, sessionData) {
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, updateFn = () => { }, sessionData) {
-    const { skus, store, options } = context
-    let { csgList } = context
-
-    // console.log('cancelJpSearch.task.js -- context:', context)
-    // console.log('cancelJpSearch.task.js -- sessionData:', sessionData)
-
-    const isWholeStore = options?.cancelJpSearchScope === 'all'
+const execute = async (context, _updateFn, sessionData) => {
+    const { csgList, store } = context
 
     if (!sessionData || !sessionData.cookies) {
         throw new Error('缺少会话信息')
     }
 
+    if (!csgList || csgList.length === 0) {
+        return { success: true, message: '没有需要取消京配打标的商品。' }
+    }
+
+    const uniqueItems = [...new Set(csgList)]
     console.log(
-        `[Task: cancelJpSearch] "取消京配打标" 开始，店铺 [${store.shopName}], 模式: ${isWholeStore ? '整店' : '部分'}`
+        `[Task: cancelJpSearch] "取消京配打标" 开始，店铺 [${store.shopName}], 共 ${uniqueItems.length} 个独立商品。`
     )
 
-    let operationId = null
-    let needToCleanup = false // 标记是否需要清理临时方案ID
-
     try {
-
-        let itemsToProcess = []
-        if (isWholeStore) {
-            // 1. 获取整店已开启京配的商品
-            console.log('[Task: cancelJpSearch] 正在查询整店已开启京配的商品...')
-
-            // 使用查询方案获取已开启京配的商品
-            itemsToProcess = await getJpEnabledCsgsForStore(context, sessionData)
-        } else {
-            // 2. 如果只提供了SKU，先查询CSG
-            if (!csgList && skus && skus.length > 0) {
-                console.log(
-                    `[Task: cancelJpSearch] 未提供CSG列表，将通过SKU查询CSG...`
-                )
-                const payload = { skus }
-                const result = await getProductData.execute(
-                    payload,
-                    updateFn,
-                    sessionData  // 使用包含 operationId 的会话数据
-                )
-
-                if (!result || !result.data || result.data.length === 0) {
-                    throw new Error('获取商品数据失败，请检查SKU是否正确。')
-                }
-                csgList = result.data.map((p) => p.shopGoodsNo).filter(Boolean)
-            }
-            itemsToProcess = csgList || []
-        }
-
-        if (!itemsToProcess || itemsToProcess.length === 0) {
-            const message = isWholeStore
-                ? '店铺内没有已开启京配搜索的商品，无需操作。'
-                : '商品列表为空，无需操作。'
-            return { success: true, message }
-        }
-
-        // 对CSG列表去重
-        const uniqueItems = [...new Set(itemsToProcess)]
-        const duplicatesCount = itemsToProcess.length - uniqueItems.length
-        if (duplicatesCount > 0) {
-            console.log(
-                `[Task: cancelJpSearch] 已移除${duplicatesCount}个重复的CSG编码，去重后还剩${uniqueItems.length}个商品。`
-            )
-        }
-
-        console.log(
-            `[Task: cancelJpSearch] 查询到 ${uniqueItems.length} 个商品，将为它们取消京配打标。`
-        )
-
-        // 批量处理
         const batchResults = await processInBatches(uniqueItems, store, sessionData)
-
         if (!batchResults.success) {
-            throw new Error(`取消京配打标任务有失败的批次: ${batchResults.message}`)
+            throw new Error(`任务有失败的批次: ${batchResults.message}`)
         }
-
         return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
     } catch (error) {
         console.error('[Task: cancelJpSearch] 任务执行失败:', error)
         throw new Error(`取消京配打标失败: ${error.message}`)
-    } finally {
-        // 清理：仅当我们创建了临时查询方案时，才需要删除它
-        if (operationId && needToCleanup) {
-            try {
-                console.log(`[Task: cancelJpSearch] 清理临时查询方案 ID: ${operationId}`)
-                await endSessionOperation(operationId, sessionData)
-            } catch (cleanupError) {
-                console.error(`[Task: cancelJpSearch] 清理临时查询方案失败:`, cleanupError)
-                // 不抛出清理错误，避免掩盖主要错误
-            }
-        }
     }
 }
 

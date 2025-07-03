@@ -43,7 +43,7 @@ const tasks = {
   },
   enableInventoryAllocation: {
     name: '启用库存商品分配',
-    batchSize: 2000,
+    batchSize: 500,
     delayBetweenBatches: 5, // 5 秒
     shouldExecute: (context) => context.options.enableInventoryAllocation,
     execute: (context, session, log) =>
@@ -153,14 +153,32 @@ async function execute(context, session, log) {
     for (const taskDef of batchableTasksDefinition) {
       if (taskDef.task.shouldExecute(currentContext)) {
         log(`开始批量任务: ${taskDef.task.name}...`, 'info')
-        const batches = createBatches(csgList, taskDef.task.batchSize)
-        log(`商品列表已分为 ${batches.length} 个批次进行处理，每批次 ${taskDef.task.batchSize} 个。`)
+
+        // 根据任务需求选择分批的数据源
+        const itemsToBatch = ['addInventory', 'enableInventoryAllocation'].includes(taskDef.name)
+          ? allProductData
+          : csgList;
+
+        const batches = createBatches(itemsToBatch, taskDef.task.batchSize);
+        log(`商品列表已分为 ${batches.length} 个批次进行处理，每批次 ${taskDef.task.batchSize} 个。`);
 
         for (let i = 0; i < batches.length; i++) {
-          const batch = batches[i]
-          const batchContext = { ...currentContext, csgList: batch }
-          log(`处理批次 ${i + 1}/${batches.length} (共 ${batch.length} 个商品)...`)
-          await taskDef.task.execute(batchContext, session, log)
+          const batch = batches[i];
+
+          // 根据任务需求构建不同的上下文
+          const batchContext = { ...currentContext };
+          if (['addInventory', 'enableInventoryAllocation'].includes(taskDef.name)) {
+            // 这些任务需要完整的商品数据对象
+            batchContext.allProductData = batch;
+            // 同时，为了兼容性，也提供该批次对应的csgList
+            batchContext.csgList = batch.map(p => p.shopGoodsNo).filter(Boolean);
+          } else {
+            // 其他任务只需要 csgList
+            batchContext.csgList = batch;
+          }
+
+          log(`处理批次 ${i + 1}/${batches.length} (共 ${batch.length} 个商品)...`);
+          await taskDef.task.execute(batchContext, session, log);
 
           if (i < batches.length - 1 && taskDef.task.delayBetweenBatches > 0) {
             await delayWithCountdown(

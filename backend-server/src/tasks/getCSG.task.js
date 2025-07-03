@@ -8,9 +8,7 @@
  * - 增加了内置的智能重试机制，以应对京东后台处理延迟。
  */
 
-import {
-    getCsgBySkus
-} from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 
 /**
  * 延迟执行的辅助函数
@@ -48,7 +46,7 @@ async function execute(context, sessionData) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         console.log(`[Task: getCSG v3.0] 正在进行第 ${attempt} 次查询尝试...`)
         try {
-            const result = await getCsgBySkus(skus, sessionData)
+            const result = await jdApiService.getCsgBySkus(skus, sessionData)
 
             // console.log('getCSG 的getCsgBySkus---1  result===>', result)
 

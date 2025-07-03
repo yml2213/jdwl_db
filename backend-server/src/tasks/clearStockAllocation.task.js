@@ -4,11 +4,8 @@
  * 1. 上传Excel文件，清零指定SKU的库存。
  * 2. 调用API，清零整个店铺的库存。
  */
-import XLSX from 'xlsx'
-import {
-  clearStockForWholeStore,
-  uploadInventoryAllocationFile,
-} from '../services/jdApiService.js'
+import * as XLSX from 'xlsx'
+import * as jdApiService from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 
@@ -27,16 +24,18 @@ async function execute(context, _updateFn, sessionData) {
   console.log('库存分配清零  store ===>', store)
   console.log('库存分配清零  department===>', department)
 
-  if (!skus || skus.length === 0) throw new Error('SKU列表为空')
   if (!store || !department) throw new Error('缺少店铺或事业部信息')
 
-  // Mode selection: whole store or specific SKUs
   if (scope === 'whole_store') {
     // Whole store mode
     console.log(
       `[Task: clearStockAllocation] 整店库存清零模式，店铺: ${store.shopName}`
     )
-    const result = await clearStockForWholeStore(store.id, department.id, sessionData)
+    const result = await jdApiService.clearStockForWholeStore(
+      store.id,
+      department.id,
+      sessionData,
+    )
     //  {"resultCode":1,"resultMessage":"操作成功！","resultData":null}
     if (result && result.resultCode === 1) {
       return { success: true, message: result.resultMessage || '整店库存清零成功。' }
@@ -46,6 +45,7 @@ async function execute(context, _updateFn, sessionData) {
     }
   } else {
     // Specific SKUs mode with batching
+    if (!skus || skus.length === 0) throw new Error('SKU列表为空')
     console.log(
       `[Task: clearStockAllocation] 指定SKU库存清零模式，总SKU数量: ${skus.length}`
     )
@@ -58,18 +58,18 @@ async function execute(context, _updateFn, sessionData) {
         const fileBuffer = createExcelFile(skuBatch, department, store)
 
         // 临时文件保存到本地
-        const filePath = await saveExcelFile(fileBuffer, {
+        await saveExcelFile(fileBuffer, {
           dirName: TEMP_DIR_NAME,
           store: store,
           extension: 'xlsx'
         })
 
-        if (filePath) {
-          console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${filePath}`)
+        if (fileBuffer) {
+          console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${TEMP_DIR_NAME}`)
         }
 
         // 调用封装在 jdApiService 中的函数来上传文件
-        const result = await uploadInventoryAllocationFile(fileBuffer, sessionData)
+        const result = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData)
 
         console.log('库存分配清零 响应 result===>', result)
 
@@ -80,7 +80,7 @@ async function execute(context, _updateFn, sessionData) {
           return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
         } else {
           const errorMessage =
-            result?.resultMessage || JSON.stringify(result) || '上传失败但未返回有效错误信息'
+            result?.resultMessage || JSON.stringify(result) || '上传失败'
           return { success: false, message: errorMessage }
         }
       } catch (error) {

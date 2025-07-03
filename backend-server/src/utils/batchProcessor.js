@@ -14,7 +14,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
   let successCount = 0
   let failureCount = 0
   const totalBatches = Math.ceil(items.length / batchSize)
-  let overallMessage = ''
+  const messages = []
 
   for (let i = 0; i < items.length; i += batchSize) {
     if (!isRunning.value) {
@@ -42,7 +42,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
 
     if (result.success) {
       successCount++
-      overallMessage += `第 ${batchNumber} 批: ${result.message}\n`
+      if (result.message) messages.push(result.message);
       // If successful and not the last batch, wait before proceeding to the next one.
       if (i + batchSize < items.length) {
         log(`--- 第 ${batchNumber} 批完成。等待 ${delay / 1000} 秒... ---`, 'info')
@@ -50,7 +50,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
       }
     } else {
       failureCount++
-      overallMessage += `第 ${batchNumber} 批失败: ${result.message}\n`
+      if (result.message) messages.push(`第 ${batchNumber} 批失败: ${result.message}`);
       log(`第 ${batchNumber} 批失败。停止后续处理。`, 'error')
       break // Stop the entire process on a definitive failure.
     }
@@ -61,6 +61,7 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
     success: failureCount === 0,
     successCount,
     failureCount,
-    message: overallMessage.trim()
+    messages: messages,
+    message: messages.join('; ')
   }
 }

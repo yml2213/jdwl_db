@@ -1,7 +1,7 @@
 /**
  * 后端任务：获取商品详情 (包括CSG, CMG等)
  */
-import { fetchProductDetails } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 
 async function execute(context, sessionData) {
   const { skus } = context
@@ -11,16 +11,16 @@ async function execute(context, sessionData) {
   }
 
   try {
-    const result = await fetchProductDetails(skus, sessionData)
-    return result
+    const result = await jdApiService.fetchProductDetails(skus, sessionData)
+    return { success: true, data: result }
   } catch (error) {
-    console.error('[Task: getProductDetails] 任务执行失败:', error)
-    throw new Error(`获取商品详情失败: ${error.message}`)
+    console.error('获取商品详情时出错:', error)
+    throw error
   }
 }
 
 export default {
   name: 'getProductDetails',
   description: '获取商品详情 (CSG, CMG等)',
-  execute: execute
+  execute
 } 

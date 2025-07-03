@@ -1285,7 +1285,7 @@ export async function endSessionOperation(operationId, sessionData) {
 }
 
 /**
- * 根据SKU列表查询商品详细数据  通过报表API查询 -- 方案查询
+ * 根据SKU列表查询商品详细数据  通过报表API查询 -- 方案查询 
  * @param {string[]} skus - 商品的SKU数组 (sellerGoodsSign)
  * @param {string} deptId - 事业部ID
  * @param {string} schemeId - 查询方案ID (即 operationId)

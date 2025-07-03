@@ -2,7 +2,7 @@
  * 后端任务：检查并返回指定SKU列表中的停用商品。
  * 该任务旨在将前端的批处理逻辑迁移到后端，简化客户端操作。
  */
-import { getDisabledProducts } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 
 /**
  * 主执行函数 - 由任务调度器调用
@@ -36,7 +36,7 @@ async function execute(context, sessionData) {
     }
 
     // 3. 调用 jdApiService 中的核心逻辑
-    const { disabledProducts, enabledProducts } = await getDisabledProducts(
+    const { disabledProducts, enabledProducts } = await jdApiService.getDisabledProducts(
       skus,
       enrichedSessionData
     )

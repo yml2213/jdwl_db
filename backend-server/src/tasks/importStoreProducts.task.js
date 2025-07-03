@@ -1,8 +1,8 @@
 /**
  * 后端任务：导入店铺商品
  */
+import * as jdApiService from '../services/jdApiService.js'
 import * as XLSX from 'xlsx'
-import { uploadStoreProducts } from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 
@@ -101,7 +101,7 @@ async function execute(context, updateFn, sessionData) {
         const dataForUpload = { ...sessionData, store, department }
 
         console.log(`[Task: importStoreProducts] 调用jdApiService以上传文件...`)
-        const uploadResult = await uploadStoreProducts(fileBuffer, dataForUpload)
+        const uploadResult = await jdApiService.uploadStoreProducts(fileBuffer, dataForUpload)
         console.log(`[Task: importStoreProducts] 上传服务调用完成。`)
         console.log(`[Task: importStoreProducts] 结果======> ${JSON.stringify(uploadResult)}`)
 

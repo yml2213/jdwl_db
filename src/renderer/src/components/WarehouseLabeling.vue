@@ -149,7 +149,7 @@ function addTask() {
         Object.assign(stepPayload, form.payloads[optionKey]);
       }
       if (optionKey === 'importLogisticsAttributes') {
-        Object.assign(stepPayload, logisticsOptions);
+        stepPayload.logistics = { ...logisticsOptions };
       }
       if (optionKey === 'addInventory') {
         stepPayload.inventoryAmount = form.options.inventoryAmount || 0;

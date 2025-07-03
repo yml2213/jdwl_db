@@ -1,4 +1,4 @@
-import { queryProductDataBySkus } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 
 /**
  * @param {object} payload - 任务负载，需要包含 `skus` 数组
@@ -30,7 +30,12 @@ async function execute(payload, updateFn, sessionContext) {
     try {
         updateFn({ message: `正在查询 ${skus.length} 个SKU...` })
 
-        const allProductData = await queryProductDataBySkus(skus, deptId, operationId, sessionContext)
+        const allProductData = await jdApiService.queryProductDataBySkus(
+            skus,
+            deptId,
+            operationId,
+            sessionContext
+        )
 
         console.log(`任务完成，共获取到 ${allProductData.length} 条商品数据。`)
         updateFn({ message: '所有商品数据获取完毕。', isCompleted: true, data: allProductData })

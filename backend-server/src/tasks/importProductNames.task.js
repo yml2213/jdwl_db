@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { uploadProductNames } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 import { getFormattedChinaTime } from '../utils/timeUtils.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 import fs from 'fs'
@@ -8,86 +8,46 @@ import fs from 'fs'
 const TEMP_DIR_NAME = '导入商品简称'
 
 async function readExcelFile(filePath) {
-    try {
-        // 检查文件是否存在
-        if (!fs.existsSync(filePath)) {
-            throw new Error(`文件不存在: ${filePath}`)
-        }
-
-        // 从文件路径读取二进制数据
-        const fileData = fs.readFileSync(filePath)
-
-        // 使用 XLSX.read 而不是 XLSX.readFile
-        const workbook = XLSX.read(fileData, { type: 'buffer' })
-        const firstSheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[firstSheetName]
-        return XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-    } catch (error) {
-        console.error('解析Excel文件失败:', error)
-        throw new Error(`解析Excel文件失败: ${error.message}`)
-    }
+    const workbook = XLSX.readFile(filePath, { cellNF: false, cellText: true })
+    const sheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[sheetName]
+    return XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
 }
 
 function createNewExcelData(originalData, department) {
-    // console.log('originalData--->', originalData)
-    console.log('department--->', department)
-    const chineseHeaders = ['事业部编码', '商家商品标识', '商品名称']
-    const englishHeaders = ['deptNo', 'sellerGoodsSign', 'goodsName']
-    const rows = originalData
-        .slice(1) // 跳过1行表头
-        .map((row) => {
-            if (row && row.length >= 2) {
-                const sku = String(row[0] || '').trim() // SKU在第1列
-                const name = String(row[1] || '').trim() // 商品名称在第2列
-                if (sku && name) {
-                    return [department.deptNo, sku, name]
-                }
-            }
-            return null
-        })
-        .filter(Boolean)
-
-    return [chineseHeaders, englishHeaders, ...rows]
+    const headers1 = ['说明', '事业部编码', '商品编码', '商家SKU', '商品名称', '商品简称', '商品简称2', '商品简称3', '商品简称4']
+    const headers2 = ['必填', '必填', '二选一', '二选一', '必填', '非必填', '非必填', '非必填', '非必填']
+    const transformedRows = originalData.slice(1).map(row => [
+        '',
+        department.deptNo,
+        row[0] || '', // 商品编码
+        row[1] || '', // 商家SKU
+        row[2] || '', // 商品名称
+        row[3] || '', // 商品简称
+        '', '', ''
+    ])
+    return [headers1, headers2, ...transformedRows]
 }
 
-async function convertToExcelFile(data, fileName, sessionData) {
-    try {
-        const ws = XLSX.utils.aoa_to_sheet(data)
-        ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 30 }]
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xls' })
-
-        // 保存文件用于测试
-        // 从会话数据中获取店铺名称，如果没有则使用 'unknown-shop'
-        const shopName = sessionData?.shop?.shopName || 'unknown-shop'
-
-        // 保存文件
-        const filePath = await saveExcelFile(buffer, {
-            dirName: TEMP_DIR_NAME,
-            fileName: fileName.replace('.xls', ''),
-            store: { shopName },
-            extension: 'xls'
-        })
-
-        if (filePath) {
-            console.log(`测试文件已保存到: ${filePath}`)
-        }
-
-        return { buffer, fileName }
-    } catch (error) {
-        console.error('生成Excel文件失败:', error)
-        throw new Error(`生成Excel文件失败: ${error.message}`)
-    }
+async function convertToExcelFile(data, fileName, session) {
+    const worksheet = XLSX.utils.aoa_to_sheet(data)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'sheet1')
+    const buffer = XLSX.write(workbook, { bookType: 'xls', type: 'buffer' })
+    await saveExcelFile(buffer, {
+        dirName: TEMP_DIR_NAME,
+        store: { shopName: session.store?.name || '通用' },
+        extension: 'xls',
+        customName: fileName
+    })
+    return { buffer, fileName }
 }
 
 async function execute(payload, updateFn, sessionData) {
     const { filePath } = payload
     if (!filePath) throw new Error('未提供文件路径')
 
-
-    // 从会话中获取事业部信息
-    const department = sessionData.departmentInfo || { deptNo: '10' }  // 默认值
+    const department = sessionData.departmentInfo || { deptNo: '10' }
 
     try {
         updateFn({ status: 'processing', message: '正在读取Excel文件...' })
@@ -99,10 +59,9 @@ async function execute(payload, updateFn, sessionData) {
         updateFn({ message: `成功读取 ${excelData.length - 1} 行数据。` })
 
         const newExcelData = createNewExcelData(excelData, department)
-        const rowCount = newExcelData.length - 2 // 减去我们自己加的两行表头
+        const rowCount = newExcelData.length - 2
 
         const BATCH_SIZE = 2000
-        // 不再使用 JdService 类，直接使用导出的函数
 
         if (rowCount <= BATCH_SIZE) {
             updateFn({ message: '数据量较小，开始直接上传...' })
@@ -111,31 +70,21 @@ async function execute(payload, updateFn, sessionData) {
                 '商品批量修改自定义模板.xls',
                 sessionData
             )
-            const result = await uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
-
-            // 检查是否是任务进行中的特殊情况
-            if (result.status === 'pending') {
-                updateFn({
-                    status: 'pending',
-                    message: result.message
-                })
-                return { ...result, status: 'pending' }
-            }
-
+            const result = await jdApiService.uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
             updateFn({
                 status: result.success ? 'completed' : 'failed',
                 message: result.message,
-                data: result.data
+                data: result.data,
             })
             return result
         } else {
-            // 分批处理
+            // Batch processing logic
             updateFn({ message: `数据量大 (${rowCount}行)，将分批上传...` })
             const headers = newExcelData.slice(0, 2)
             const dataRows = newExcelData.slice(2)
             const totalBatches = Math.ceil(dataRows.length / BATCH_SIZE)
             let allSuccess = true
-            let finalMessage = '分批导入完成摘要:\\n'
+            let finalMessage = '分批导入完成摘要:\n'
 
             for (let i = 0; i < totalBatches; i++) {
                 const start = i * BATCH_SIZE
@@ -146,24 +95,13 @@ async function execute(payload, updateFn, sessionData) {
                 const batchFileName = `${timestamp}_商品批量修改自定义模板_批次${i + 1}.xls`
 
                 updateFn({
-                    message: `正在处理批次 ${i + 1}/${totalBatches} (${currentBatchRows.length}行)...`
+                    message: `正在处理批次 ${i + 1}/${totalBatches} (${currentBatchRows.length}行)...`,
                 })
 
                 const excelFile = await convertToExcelFile(batchData, batchFileName, sessionData)
-                const result = await uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
+                const result = await jdApiService.uploadProductNames(excelFile.buffer, excelFile.fileName, sessionData)
 
-                // 检查是否是任务进行中的特殊情况
-                if (result.status === 'pending') {
-                    finalMessage += `批次 ${i + 1}: ${result.message}\\n`
-                    allSuccess = false // 标记为非完全成功，但不是硬失败
-                    updateFn({
-                        status: 'pending', // 将任务状态设置为pending
-                        message: `批次 ${i + 1} 遇到重复任务，将停止后续操作。`
-                    })
-                    break // 遇到pending状态，中断后续批次
-                }
-
-                finalMessage += `批次 ${i + 1}: ${result.message}\\n`
+                finalMessage += `批次 ${i + 1}: ${result.message}\n`
                 if (!result.success) allSuccess = false
 
                 updateFn({ message: `批次 ${i + 1} 处理完成。` })
@@ -173,12 +111,10 @@ async function execute(payload, updateFn, sessionData) {
                     await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000))
                 }
             }
-
             updateFn({
                 status: allSuccess ? 'completed' : 'failed',
-                message: finalMessage
+                message: finalMessage,
             })
-
             return { success: allSuccess, message: finalMessage }
         }
     } catch (error) {
@@ -191,5 +127,5 @@ async function execute(payload, updateFn, sessionData) {
 export default {
     name: '导入商品简称',
     description: '通过Excel文件批量导入商品简称。',
-    execute
+    execute,
 } 

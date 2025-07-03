@@ -1,4 +1,4 @@
-import { startSessionOperation, endSessionOperation } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 import db from '../utils/db.js'
 
 /**
@@ -44,7 +44,7 @@ async function execute(payload, updateFn, sessionContext) {
         console.log(`未找到 ${decodedKeyForLogging} 的方案ID，开始创建新方案...`)
         updateFn({ message: '未找到方案ID，正在创建新方案...' })
 
-        const result = await startSessionOperation(sessionContext)
+        const result = await jdApiService.startSessionOperation(sessionContext)
 
         if (!result.success) {
             throw new Error('启动会话操作（创建新方案）失败。')
@@ -61,7 +61,7 @@ async function execute(payload, updateFn, sessionContext) {
         // 4. 立即从京东服务器删除该方案，但本地保留ID
         try {
             console.log(`立即从京东服务器删除方案ID: ${newSchemeId}...`)
-            await endSessionOperation(newSchemeId, sessionContext)
+            await jdApiService.endSessionOperation(newSchemeId, sessionContext)
             console.log(`方案ID ${newSchemeId} 已成功从京东服务器删除。`)
         } catch (deleteError) {
             // 如果删除失败，仅记录错误，不影响主流程，因为ID仍被视为可用

@@ -1,7 +1,7 @@
 /**
  * 后端任务：添加库存（通过api）
  */
-import { createPurchaseOrder } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
 import getProductDataTask from './getProductData.task.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
 
@@ -16,70 +16,61 @@ const BATCH_DELAY = 1000 // 1秒
  * @param {object} sessionData - 会话数据
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, updateFn, sessionData) {
+const execute = async (context, ...args) => {
     // 1. 兼容不同调用方式
-    if (typeof updateFn !== 'function') {
-        sessionData = updateFn
-        updateFn = () => { }
+    const [legacyUpdateFn, session] = args.length === 2 ? args : [args[0], context.session];
+    const updateFn = typeof legacyUpdateFn === 'function' ? legacyUpdateFn : () => { };
+    const sessionData = session || (args.length === 1 ? args[0] : context.session);
+
+    let { allProductData, csgList, warehouse, vendor, department } = context;
+    const inventoryAmount = context.options?.inventoryAmount || 1000; // 从options获取库存
+
+    // 打印重要信息
+    console.log('[Task: addInventory] 开始执行添加库存任务')
+
+    // 2. 验证核心参数
+    if (!warehouse?.id) throw new Error('未选择仓库，无法添加库存。')
+    if (!vendor?.id) throw new Error('供应商信息不完整，无法创建采购单。')
+    if (!sessionData?.cookies) throw new Error('缺少会话信息')
+
+    updateFn?.('正在准备商品信息...')
+
+    // 3. 区分模式准备商品数据
+    if (!allProductData || allProductData.length === 0) {
+        // --- 单任务模式 ---
+        const skus = context.skus || []
+        console.log(`[Task: addInventory] 单任务模式: 将为 ${skus.length} 个 SKU 查询商品详情...`)
+        if (skus.length === 0) return { success: true, message: 'SKU列表为空' }
+
+        const taskUpdateFn = (update) => updateFn?.(update?.message)
+        const detailsResult = await getProductDataTask.execute({ skus }, taskUpdateFn, sessionData)
+
+        if (!detailsResult.success || !detailsResult.data) {
+            throw new Error(`获取商品详情失败: ${detailsResult.message || '未知错误'}`)
+        }
+        allProductData = detailsResult.data
+    } else {
+        // --- 工作流模式 ---
+        console.log(`[Task: addInventory] 工作流模式: 使用上下文提供的 ${allProductData.length} 条商品数据。`)
     }
 
-    try {
-        // 从上下文中解构所需信息
-        let { allProductData, csgList, warehouse, vendor } = context
-        const inventoryAmount = context.options?.inventoryAmount || 1000; // 从options获取库存
-
-        // 打印重要信息
-        console.log('[Task: addInventory] 开始执行添加库存任务')
-
-        // 2. 验证核心参数
-        if (!warehouse?.id) throw new Error('未选择仓库，无法添加库存。')
-        if (!vendor?.id) throw new Error('供应商信息不完整，无法创建采购单。')
-        if (!sessionData?.cookies) throw new Error('缺少会话信息')
-
-        updateFn?.('正在准备商品信息...')
-
-        // 3. 区分模式准备商品数据
-        if (!allProductData || allProductData.length === 0) {
-            // --- 单任务模式 ---
-            const skus = context.skus || []
-            console.log(`[Task: addInventory] 单任务模式: 将为 ${skus.length} 个 SKU 查询商品详情...`)
-            if (skus.length === 0) return { success: true, message: 'SKU列表为空' }
-
-            const taskUpdateFn = (update) => updateFn?.(update?.message)
-            const detailsResult = await getProductDataTask.execute({ skus }, taskUpdateFn, sessionData)
-
-            if (!detailsResult.success || !detailsResult.data) {
-                throw new Error(`获取商品详情失败: ${detailsResult.message || '未知错误'}`)
-            }
-            allProductData = detailsResult.data
-        } else {
-            // --- 工作流模式 ---
-            console.log(`[Task: addInventory] 工作流模式: 使用上下文提供的 ${allProductData.length} 条商品数据。`)
-        }
-
-        if (!allProductData || allProductData.length === 0) {
-            return { success: false, message: '没有可处理的商品，任务结束。' }
-        }
-
-        // 4. 执行批处理
-        const itemsToProcess = csgList || allProductData.map(p => p.shopGoodsNo);
-        console.log(`[Task: addInventory] 总共将为 ${itemsToProcess.length} 个商品创建采购单。`)
-        updateFn?.(`将为 ${itemsToProcess.length} 个商品创建采购单...`)
-
-        // 注意：createPurchaseOrder 需要的是完整的商品对象，而不是CSG列表
-        const result = await processBatches(allProductData, { ...context, inventoryAmount }, sessionData, updateFn)
-
-        if (!result.success) {
-            throw new Error(`添加库存失败: ${result.message}`)
-        }
-
-        return { success: true, message: `所有采购单创建成功: ${result.message}` }
-    } catch (error) {
-        const errorMessage = `执行失败: ${error.message}`
-        console.error(`[Task: addInventory] ${errorMessage}`, error)
-        updateFn?.(errorMessage) // 直接发送错误消息字符串
-        throw error
+    if (!allProductData || allProductData.length === 0) {
+        return { success: false, message: '没有可处理的商品，任务结束。' }
     }
+
+    // 4. 执行批处理
+    const itemsToProcess = csgList || allProductData.map(p => p.shopGoodsNo);
+    console.log(`[Task: addInventory] 总共将为 ${itemsToProcess.length} 个商品创建采购单。`)
+    updateFn?.(`将为 ${itemsToProcess.length} 个商品创建采购单...`)
+
+    // 注意：createPurchaseOrder 需要的是完整的商品对象，而不是CSG列表
+    const result = await processBatches(allProductData, { ...context, inventoryAmount }, sessionData, updateFn)
+
+    if (!result.success) {
+        throw new Error(`添加库存失败: ${result.message}`)
+    }
+
+    return { success: true, message: `所有采购单创建成功: ${result.message}` }
 }
 
 /**
@@ -98,7 +89,7 @@ async function processBatches(products, context, sessionData, updateFn) {
             updateFn?.(`正在处理批次 ${batchNo}/${totalBatches}: ${productBatch.length} 个商品...`)
 
             const { vendor, inventoryAmount } = batchContext
-            const response = await createPurchaseOrder(
+            const response = await jdApiService.createPurchaseOrder(
                 productBatch,
                 { ...batchContext, vendor, inventoryAmount },
                 sessionData

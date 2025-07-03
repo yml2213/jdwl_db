@@ -1,8 +1,8 @@
 /**
  * 后端任务：导入物流属性
  */
-import XLSX from 'xlsx'
-import { uploadLogisticsAttributesFile } from '../services/jdApiService.js'
+import * as jdApiService from '../services/jdApiService.js'
+import * as XLSX from 'xlsx'
 import { executeInBatches } from '../utils/batchProcessor.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
 
@@ -17,17 +17,18 @@ const TEMP_DIR_NAME = '导入物流属性'
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, updateFn, sessionData) {
+const execute = async (context, ...args) => {
   // 兼容工作流和单任务调用
-  if (typeof updateFn !== 'function') {
-    sessionData = updateFn
-    updateFn = () => { }
-  }
+  const [legacyUpdateFn, session] = args.length === 2 ? args : [args[0], context.session];
+  const updateFn = typeof legacyUpdateFn === 'function' ? legacyUpdateFn : () => { };
+  const sessionData = session || (args.length === 1 ? args[0] : context.session);
 
-  const { department, store, logisticsOptions } = context
+  // 1. 统一获取物流参数，兼容工作流和单任务模式
+  const logisticsOptions = context.logisticsOptions || context.logistics;
+  const { csgList, department, store } = context;
 
   // 统一数据源：工作流使用csgList，单任务使用skus
-  const itemsToProcess = context.csgList || context.skus || []
+  const itemsToProcess = csgList || context.skus || []
 
   // 1. 参数校验
   if (itemsToProcess.length === 0) {
@@ -41,6 +42,9 @@ async function execute(context, updateFn, sessionData) {
   }
   if (!sessionData || !sessionData.cookies) {
     throw new Error('缺少会话信息')
+  }
+  if (!logisticsOptions) {
+    throw new Error('上下文中缺少有效的物流参数 (logisticsOptions 或 logistics)');
   }
 
   console.log(
@@ -67,8 +71,7 @@ async function execute(context, updateFn, sessionData) {
       }
 
       const dataForApi = { ...sessionData, store }
-      const result = await uploadLogisticsAttributesFile(fileBuffer, dataForApi)
-
+      const result = await jdApiService.uploadLogisticsAttributesFile(fileBuffer, dataForApi)
 
       if (result.success) {
         return { success: true, message: result.data || '物流属性导入成功' }
@@ -151,5 +154,5 @@ function createLogisticsExcelBuffer(skuList, department, logisticsOptions) {
 export default {
   name: 'importLogisticsAttributes',
   description: '导入物流属性',
-  execute: execute
+  execute
 }
