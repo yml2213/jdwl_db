@@ -1031,6 +1031,8 @@ export async function submitReturnOrder(payload, sessionData) {
   })
 }
 
+
+
 /**
  * 通过直接调用API清空整个店铺的库存分配   库存分配清零 --整店库存清零
  * @param {string} shopId - 店铺ID
@@ -1050,6 +1052,32 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData) {
     method: 'GET',
     url: '/goodsStockConfig/resetGoodsStockRatio.do',
     params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do'
+    }
+  })
+}
+
+
+/**
+ * 启用商品主数据 https://o.jdl.com/goods/batchOnGoods.do
+ * @param {string[]} cmgs_enableStoreProducts - 商品CMG数组  --- 去掉 CMG 开头 4422471628225 4422471628225
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function enableStoreProducts(cmgs_enableStoreProducts, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const params = {
+    csrfToken,
+    ids: JSON.stringify(cmgs_enableStoreProducts)
+  }
+  console.log('启用商品主数据 ===>', params)
+  return await requestJdApi({
+    method: 'POST',
+    url: '/goods/batchOnGoods.do',
+    data: params,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       Cookie: cookieString,

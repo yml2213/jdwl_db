@@ -7,7 +7,7 @@
  * 7.2 优化 查询csg使用 新方案查询  getProductData.task.js 查询
  */
 import XLSX from 'xlsx'
-import { getDisabledProducts, uploadStatusUpdateFile } from '../services/jdApiService.js'
+import { getDisabledProducts, uploadStatusUpdateFile, enableStoreProducts } from '../services/jdApiService.js'
 
 /**
  * 主执行函数 - 由任务调度器调用
@@ -62,10 +62,26 @@ async function execute(context, updateFn, sessionData) {
       return { success: true, message: '所有商品状态均正常，无需启用。' }
     }
 
-    // 3. 提取CSG编号并创建Excel文件 shopGoodsNo
+    console.log('enableStoreProducts.task.js -- disabledProducts:', disabledProducts)
+
+
+    // 3. 启用商品主数据 CMG 4422471628225  去掉 CMG 开头
+    const cmgs_enableStoreProducts = disabledProducts.map((p) => p.goodsNo.replace('CMG', ''))
+    const result_enableStoreProducts = await enableStoreProducts(cmgs_enableStoreProducts, dataForApi)
+    console.log('enableStoreProducts.task.js -- result_enableStoreProducts:', result_enableStoreProducts)
+
+    if (result_enableStoreProducts.resultCode !== 1) {
+      console.error('启用商品主数据失败:', result_enableStoreProducts)
+      throw new Error('启用商品主数据失败:' + result_enableStoreProducts.resultMessage)
+    }
+    console.log(`启用 ${cmgs_enableStoreProducts.length} 个商品, 启用商品主数据成功`)
+    const message_enableStoreProducts = `启用 ${cmgs_enableStoreProducts.length} 个商品, 启用商品主数据成功`
+
+
+    // 4. 提取CSG编号并创建Excel文件 shopGoodsNo
     const csgNumbers = disabledProducts.map((p) => p.shopGoodsNo)
     console.log(
-      `[Task: enableStoreProducts] 发现 ${csgNumbers.length} 个停用商品，准备通过上传文件启用...`
+      `[Task: enableStoreProducts]发现 ${csgNumbers.length} 个停用商品，准备通过上传文件启用...`
     )
 
     // 创建Excel数据
@@ -85,7 +101,7 @@ async function execute(context, updateFn, sessionData) {
     const match = result.message.match(/成功(?:导入|更新)\s*(\d+)\s*条/)
     const successCount = match ? match[1] : csgNumbers.length
 
-    return { success: true, message: `成功启用 ${successCount} 个商品。` }
+    return { success: true, message: `成功启用 ${successCount} 个商品, ${message_enableStoreProducts}` }
   } catch (error) {
     console.error('enableStoreProducts 任务执行出错:', error);
     throw error;
