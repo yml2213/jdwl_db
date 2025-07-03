@@ -1060,108 +1060,81 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData) {
 
 /**
  * 获取指定店铺中所有已开启京配搜索的商品
- * 该函数通过分页处理获取所有商品
+ * 7.5 使用新的 reportp API，不再分页查询
  * @param {object} sessionData - 完整的会话对象,包含店铺和部门信息
  * @returns {Promise<string[]>} 返回已开启商品的CSG编号(shopGoodsNo)列表
  */
-export async function getJpEnabledCsgsForStore(sessionData) {
-  const { cookieString, csrfToken } = getAuthInfo(sessionData)
-  const { store, department, departmentInfo } = sessionData
-
-  const allCsgs = []
-  let page = 0
-  const pageSize = 100 // Set a larger page size
-  let hasMore = true
-  let sEcho = 1
-
-  while (hasMore) {
-    const iDisplayStart = page * pageSize
-    const aoData = [
-      { name: 'sEcho', value: 3 },
-      { name: 'iColumns', value: 14 },
-      { name: 'sColumns', value: ',,,,,,,,,,,,,' },
-      { name: 'iDisplayStart', value: iDisplayStart },
-      { name: 'iDisplayLength', value: pageSize },
-      { name: 'mDataProp_0', value: 0 },
-      { name: 'bSortable_0', value: false },
-      { name: 'mDataProp_1', value: 1 },
-      { name: 'bSortable_1', value: false },
-      { name: 'mDataProp_2', value: 'shopGoodsName' },
-      { name: 'bSortable_2', value: false },
-      { name: 'mDataProp_3', value: 'goodsNo' },
-      { name: 'bSortable_3', value: false },
-      { name: 'mDataProp_4', value: 'spGoodsNo' },
-      { name: 'bSortable_4', value: false },
-      { name: 'mDataProp_5', value: 'isvGoodsNo' },
-      { name: 'bSortable_5', value: false },
-      { name: 'mDataProp_6', value: 'shopGoodsNo' },
-      { name: 'bSortable_6', value: false },
-      { name: 'mDataProp_7', value: 'barcode' },
-      { name: 'bSortable_7', value: false },
-      { name: 'mDataProp_8', value: 'shopName' },
-      { name: 'bSortable_8', value: false },
-      { name: 'mDataProp_9', value: 'createTime' },
-      { name: 'bSortable_9', value: false },
-      { name: 'mDataProp_10', value: 10 },
-      { name: 'bSortable_10', value: false },
-      { name: 'mDataProp_11', value: 'isCombination' },
-      { name: 'bSortable_11', value: false },
-      { name: 'mDataProp_12', value: 'status' },
-      { name: 'bSortable_12', value: false },
-      { name: 'mDataProp_13', value: 13 },
-      { name: 'bSortable_13', value: false },
-      { name: 'iSortCol_0', value: 9 },
-      { name: 'sSortDir_0', value: 'desc' },
-      { name: 'iSortingCols', value: 1 }
-    ]
-    const form = new URLSearchParams()
-    form.append('csrfToken', csrfToken)
-    form.append('ids', '')
-    form.append('shopId', department.id)
-    form.append('sellerId', departmentInfo.sellerId)
-    form.append('deptId', departmentInfo.id)
-    form.append('sellerNo', departmentInfo.sellerNo)
-    form.append('deptNo', departmentInfo.deptNo)
-    form.append('shopNo', store.shopNo)
-    form.append('jdDeliver', '1') // 1 for JP search enabled
-    form.append('status', '1')
-    form.append('aoData', JSON.stringify(aoData))
-    //  https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=0.19411635434208996
-    try {
-      const data = await requestJdApi({
-        method: 'POST',
-        url: `https://o.jdl.com/shopGoods/queryShopGoodsList.do?rand=${Math.random()}`,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          Cookie: cookieString,
-          'X-Requested-With': 'XMLHttpRequest',
-          Referer: 'https://o.jdl.com/goToMainIframe.do',
-          Origin: 'https://o.jdl.com'
-        },
-        data: form.toString(),
-        responseType: 'json'
-      })
-
-      // console.log(data)
+export async function getJpEnabledCsgsForStore(context, sessionData) {
+  const { cookieString } = getAuthInfo(sessionData)
+  const { store, department } = context
+  const { operationId } = sessionData
 
 
-      if (data && data.aaData && data.aaData.length > 0) {
-        const csgs = data.aaData.map((item) => item.shopGoodsNo)
-        allCsgs.push(...csgs)
-        // Check if there are more items to fetch
-        hasMore = data.iTotalRecords > allCsgs.length
-        page++
-      } else {
-        hasMore = false
-      }
-    } catch (error) {
-      console.error('Error fetching JP enabled CSGs:', error)
-      // Stop pagination on error
-      hasMore = false
+  // console.log('getJpEnabledCsgsForStore -- context:', context)
+  // console.log('getJpEnabledCsgsForStore -- sessionData:', sessionData)
+
+  // 验证必要的数据
+  if (!store || !department || !department.id || !store.shopName) {
+    const errorMsg = '获取京配开启商品列表失败：缺少店铺或事业部信息。'
+    console.error(`[getJpEnabledCsgsForStore] ${errorMsg}`, {
+      store,
+      department
+    })
+    throw new Error(errorMsg)
+  }
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+  }
+
+  const dataRequest = {
+    source: 2,
+    menuId: 'gs',
+    querySchemaID: operationId, // 查询京配开启商品的特定 Schema ID
+    condition: {
+      shopName: store.shopName,
+      jdDeliver: '1', // '1' 代表京配搜索已开启
+      deptId: String(department.id) // 事业部ID
     }
   }
 
-  return allCsgs
+  const aaData = [
+    { name: 'iDisplayStart', value: 0 },
+    { name: 'iDisplayLength', value: 100000 } // 设置一个足够大的值以获取所有结果
+  ]
+
+  const form = new URLSearchParams()
+  form.append('dataRequest', JSON.stringify(dataRequest))
+  form.append('aaData', JSON.stringify(aaData))
+
+  try {
+    const data = await requestReportApi({
+      method: 'POST',
+      url: '/report/scheme/queryByPage.do',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://reportp.jclps.com/reportIndex',
+        Origin: 'https://reportp.jclps.com'
+      },
+      data: form.toString(),
+      responseType: 'json'
+    })
+
+    if (data && data.resultCode === 1 && data.resultData && data.resultData.aaData) {
+      if (data.resultData.aaData.length > 0) {
+        return data.resultData.aaData.map((item) => item.shopGoodsNo)
+      }
+      return [] // 没有找到商品
+    } else {
+      const errorMessage = data?.resultMessage || '查询京配开启商品列表时，API返回错误。'
+      console.error('[getJpEnabledCsgsForStore] Failed to fetch JP enabled CSGs:', data)
+      throw new Error(errorMessage)
+    }
+  } catch (error) {
+    console.error('[getJpEnabledCsgsForStore] Error fetching JP enabled CSGs:', error)
+    // 将原始错误再次抛出，以便上层调用者可以捕获
+    throw error
+  }
 }
 
 /**

@@ -18,7 +18,7 @@ const BATCH_DELAY = 5 * 60 * 1000 // 5分钟
 const TEMP_DIR_NAME = '库存分配清零'
 
 
-async function execute(context, sessionData) {
+async function execute(context, _updateFn, sessionData) {
   const { skus, store, department, scope } = context
 
   console.log('库存分配清零 的 context ===>', context)
