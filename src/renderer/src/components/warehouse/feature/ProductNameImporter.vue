@@ -41,7 +41,7 @@
 import { ref, watch } from 'vue'
 import FileUploader from '../FileUploader.vue'
 import importProductNamesFeature from '../../../features/warehouseLabeling/importProductNames.js'
-import { ElNotification } from 'element-plus'
+import { ElNotification, ElMessageBox } from 'element-plus'
 
 const props = defineProps({
   modelValue: Boolean, // 控制显示/隐藏
@@ -104,33 +104,45 @@ const startImport = async () => {
           type: 'success'
         })
       } else {
-        ElNotification({
-          title: '导入失败',
-          message: taskResult.message,
+        ElMessageBox.alert(taskResult.message, '导入失败', {
           type: 'error',
-          duration: 0
+          center: true,
+          showClose: false,
+          customClass: 'no-close-message-box',
+          callback: () => {}
         })
+        setTimeout(() => {
+          ElMessageBox.close()
+        }, 3000)
       }
     } else {
       // Handle cases where the /task endpoint itself failed
       const errorMessage = result.message || '与后端通信失败。'
       addLog(`导入失败: ${errorMessage}`, 'error')
-      ElNotification({
-        title: '导入失败',
-        message: errorMessage,
+      ElMessageBox.alert(errorMessage, '导入失败', {
         type: 'error',
-        duration: 0
+        center: true,
+        showClose: false,
+        customClass: 'no-close-message-box',
+        callback: () => {}
       })
+      setTimeout(() => {
+        ElMessageBox.close()
+      }, 3000)
     }
   } catch (error) {
     const errorMessage = `出现未预料的错误: ${error.message}`
     addLog(errorMessage, 'error')
-    ElNotification({
-      title: '执行出错',
-      message: errorMessage,
+    ElMessageBox.alert(errorMessage, '执行出错', {
       type: 'error',
-      duration: 0
+      center: true,
+      showClose: false,
+      customClass: 'no-close-message-box',
+      callback: () => {}
     })
+    setTimeout(() => {
+      ElMessageBox.close()
+    }, 3000)
   } finally {
     isProcessing.value = false
   }
@@ -140,6 +152,13 @@ const clearLogs = () => {
   logs.value = []
 }
 </script>
+
+<style>
+/* 定义一个全局样式来隐藏特定MessageBox的关闭按钮 */
+.no-close-message-box .el-message-box__headerbtn {
+  display: none !important;
+}
+</style>
 
 <style scoped>
 .importer-container {

@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { uploadProductNames } from '../services/jdApiService.js'
 import { getFormattedChinaTime } from '../utils/timeUtils.js'
 import { saveExcelFile } from '../utils/fileUtils.js'
+import fs from 'fs'
 
 // 配置常量
 const TEMP_DIR_NAME = '导入商品简称'
@@ -123,7 +124,8 @@ async function execute(payload, updateFn, sessionData) {
 
             updateFn({
                 status: result.success ? 'completed' : 'failed',
-                message: result.message
+                message: result.message,
+                data: result.data
             })
             return result
         } else {
