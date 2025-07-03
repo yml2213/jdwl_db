@@ -18,14 +18,20 @@ const TEMP_DIR_NAME = '导入物流属性'
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, updateFn, sessionData) {
-  const { skus, department, store } = context
-  console.log('importLogisticsAttributes.task.js -- context:', context)
-  console.log('importLogisticsAttributes.task.js -- sessionData:', sessionData)
+  // 兼容工作流和单任务调用
+  if (typeof updateFn !== 'function') {
+    sessionData = updateFn
+    updateFn = () => { }
+  }
+
+  const { department, store, logisticsOptions } = context
+
+  // 统一数据源：工作流使用csgList，单任务使用skus
+  const itemsToProcess = context.csgList || context.skus || []
 
   // 1. 参数校验
-  const itemsToProcess = skus
-  if (!itemsToProcess || itemsToProcess.length === 0) {
-    return { success: false, message: 'sku为空，无需操作。' }
+  if (itemsToProcess.length === 0) {
+    return { success: true, message: '商品列表为空，无需操作。' }
   }
   if (!department || !department.deptNo) {
     throw new Error('缺少有效的事业部信息。')
@@ -35,12 +41,6 @@ async function execute(context, updateFn, sessionData) {
   }
   if (!sessionData || !sessionData.cookies) {
     throw new Error('缺少会话信息')
-  }
-  const logisticsOptions = {
-    length: context.length,
-    width: context.width,
-    height: context.height,
-    grossWeight: context.grossWeight
   }
 
   console.log(

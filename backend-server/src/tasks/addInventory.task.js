@@ -10,77 +10,64 @@ const BATCH_SIZE = 500
 const BATCH_DELAY = 1000 // 1秒
 
 /**
- * 主执行函数 - 由工作流调用
- * @param {object} context - 包含 skus, products, warehouse, vendor, inventoryAmount 等信息
+ * 主执行函数 - 由工作流或单任务调用
+ * @param {object} context - 上下文
  * @param {Function} updateFn - 更新进度的回调函数 
- * @param {object} sessionData - 包含会话全部信息的对象
+ * @param {object} sessionData - 会话数据
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, updateFn, sessionData) {
+    // 1. 兼容不同调用方式
+    if (typeof updateFn !== 'function') {
+        sessionData = updateFn
+        updateFn = () => { }
+    }
+
     try {
-        let { skus, products, warehouse, vendor, inventoryAmount } = context
+        // 从上下文中解构所需信息
+        let { allProductData, csgList, warehouse, vendor } = context
+        const inventoryAmount = context.options?.inventoryAmount || 1000; // 从options获取库存
 
-        // 打印重要信息用于调试
+        // 打印重要信息
         console.log('[Task: addInventory] 开始执行添加库存任务')
-        console.log('[Task: addInventory] 仓库信息:', warehouse?.warehouseName || '未指定仓库')
-        console.log('[Task: addInventory] 供应商信息:', vendor?.name || '未指定供应商')
-        console.log('[Task: addInventory] SKU数量:', skus?.length || 0)
-        console.log('[Task: addInventory] 库存数量:', inventoryAmount || '未指定数量')
 
-        // 验证输入参数
-        if (!skus || !Array.isArray(skus) || skus.length === 0) {
-            return { success: false, message: '请提供有效的SKU列表' }
-        }
+        // 2. 验证核心参数
+        if (!warehouse?.id) throw new Error('未选择仓库，无法添加库存。')
+        if (!vendor?.id) throw new Error('供应商信息不完整，无法创建采购单。')
+        if (!sessionData?.cookies) throw new Error('缺少会话信息')
 
-        if (!warehouse || !warehouse.id) {
-            throw new Error('未选择仓库，无法添加库存。')
-        }
-
-        if (!vendor || !vendor.id) {
-            throw new Error('供应商信息不完整，无法创建采购单。')
-        }
-
-        if (!sessionData || !sessionData.cookies) {
-            throw new Error('缺少会话信息')
-        }
-
-        // 进度更新
         updateFn?.('正在准备商品信息...')
 
-        // 获取商品详情
-        if (!products || products.length === 0) {
-            console.log('[Task: addInventory] 未在上下文中找到商品详情，将自动执行查询...')
-            // 适配 updateFn, 因为 getProductDataTask 的 updateFn 需要接收一个对象
-            const taskUpdateFn = (update) => {
-                if (update && typeof update.message === 'string') {
-                    updateFn?.(update.message)
-                }
-            }
-            const detailsResult = await getProductDataTask.execute(context, taskUpdateFn, sessionData)
+        // 3. 区分模式准备商品数据
+        if (!allProductData || allProductData.length === 0) {
+            // --- 单任务模式 ---
+            const skus = context.skus || []
+            console.log(`[Task: addInventory] 单任务模式: 将为 ${skus.length} 个 SKU 查询商品详情...`)
+            if (skus.length === 0) return { success: true, message: 'SKU列表为空' }
+
+            const taskUpdateFn = (update) => updateFn?.(update?.message)
+            const detailsResult = await getProductDataTask.execute({ skus }, taskUpdateFn, sessionData)
 
             if (!detailsResult.success || !detailsResult.data) {
-                throw new Error(`自动获取商品详情失败: ${detailsResult.message || '未知错误'}`)
+                throw new Error(`获取商品详情失败: ${detailsResult.message || '未知错误'}`)
             }
-            products = detailsResult.data
-        } else if (products.length !== skus.length) {
-            console.warn(
-                `[Task: addInventory] 警告: 查找到的商品(${products.length})与输入的SKU(${skus.length})数量不匹配。将只处理匹配到的商品。`
-            )
+            allProductData = detailsResult.data
+        } else {
+            // --- 工作流模式 ---
+            console.log(`[Task: addInventory] 工作流模式: 使用上下文提供的 ${allProductData.length} 条商品数据。`)
         }
 
-        if (!products || products.length === 0) {
+        if (!allProductData || allProductData.length === 0) {
             return { success: false, message: '没有可处理的商品，任务结束。' }
         }
 
-        console.log(`[Task: addInventory] "添加库存" 开始，仓库 [${warehouse.warehouseName}]...`)
-        console.log(`[Task: addInventory] 总共将为 ${products.length} 个商品创建采购单。`)
+        // 4. 执行批处理
+        const itemsToProcess = csgList || allProductData.map(p => p.shopGoodsNo);
+        console.log(`[Task: addInventory] 总共将为 ${itemsToProcess.length} 个商品创建采购单。`)
+        updateFn?.(`将为 ${itemsToProcess.length} 个商品创建采购单...`)
 
-        // 更新进度
-        updateFn?.(`将为 ${products.length} 个商品创建采购单...`)
-
-        // console.log('[Task: addInventory] --- products ======>', products)
-        // 执行批处理
-        const result = await processBatches(products, context, sessionData, updateFn)
+        // 注意：createPurchaseOrder 需要的是完整的商品对象，而不是CSG列表
+        const result = await processBatches(allProductData, { ...context, inventoryAmount }, sessionData, updateFn)
 
         if (!result.success) {
             throw new Error(`添加库存失败: ${result.message}`)
@@ -88,15 +75,16 @@ async function execute(context, updateFn, sessionData) {
 
         return { success: true, message: `所有采购单创建成功: ${result.message}` }
     } catch (error) {
-        console.error(`[Task: addInventory] 执行失败:`, error)
-        updateFn?.(`执行失败: ${error.message}`)
-        return { success: false, message: `执行失败: ${error.message}` }
+        const errorMessage = `执行失败: ${error.message}`
+        console.error(`[Task: addInventory] ${errorMessage}`, error)
+        updateFn?.(errorMessage) // 直接发送错误消息字符串
+        throw error
     }
 }
 
 /**
  * 批量处理商品列表创建采购单
- * @param {Array} products - 商品列表
+ * @param {Array} products - 完整的商品对象列表
  * @param {object} context - 任务上下文
  * @param {object} sessionData - 会话数据
  * @param {Function} updateFn - 更新进度的回调函数
