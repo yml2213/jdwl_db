@@ -35,6 +35,7 @@ async function execute(context, updateFn, sessionData) {
       sessionData,
       updateFn
     )
+    updateFn(`[clearStockAllocation] API 返回结果: ${JSON.stringify(result)}`)
     //  {"resultCode":1,"resultMessage":"操作成功！","resultData":null}
     if (result && result.resultCode === 1) {
       const message = result.resultMessage || '整店库存清零成功。'
