@@ -52,6 +52,21 @@ const currentShopInfo = computed(() =>
 )
 
 // --- 方法 ---
+const handleFormUpdate = (newForm) => {
+  console.log('父组件接收到表单更新事件:', newForm)
+
+  // 如果切换到整店模式，清空SKU
+  if (newForm.mode === 'whole_store' && form.value.mode !== 'whole_store') {
+    newForm.sku = ''
+  }
+
+  form.value = newForm
+}
+
+const handleStoreUpdate = (newStore) => {
+  selectedStore.value = newStore
+}
+
 const handleAddTask = () => {
   if (!currentShopInfo.value) return alert('请选择店铺')
   if (!form.value.options.clearStockAllocation && !form.value.options.cancelJpSearch)
@@ -153,11 +168,13 @@ onMounted(() => {
 <template>
   <div v-if="isLoggedIn" class="inventory-clearance-container">
     <ClearStorageOperationArea
-      v-model:form="form"
+      :form="form"
       :shops-list="shopsList"
       :is-loading-shops="isLoadingShops"
       :shop-load-error="shopLoadError"
-      v-model:selected-store="selectedStore"
+      :selected-store="selectedStore"
+      @update:form="handleFormUpdate"
+      @update:selected-store="handleStoreUpdate"
       @add-task="handleAddTask"
     />
     <TaskArea

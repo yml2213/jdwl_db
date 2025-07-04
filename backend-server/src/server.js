@@ -12,7 +12,9 @@ const app = express()
 const port = 2333
 
 const FileStore = sessionFileStore(session)
-const sessionTTL = 24 * 60 * 60 * 1000 * 30  // 30天
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const sessionTTL = 24 * 60 * 60 * 30  // 30天 (单位: 秒)
 
 // 存储每个客户端ID对应的响应对象，用于服务器发送事件
 const clients = {}
@@ -33,24 +35,23 @@ app.use(express.json()) // 解析JSON格式的请求体
 
 // Session middleware - 使用文件存储实现持久化
 app.use(
-
   session({
     store: new FileStore({
-      path: './sessions', // 会话文件存储路径
-      ttl: sessionTTL, // 会话有效期（秒），这里是 30天
-      reapInterval: -1, // 禁用自动清理过期的会话文件，可根据需要调整
-      logFn: function () { } // 禁用默认的日志输出，保持控制台干净
+      path: path.join(__dirname, 'sessions'), // 修正路径
+      ttl: sessionTTL,
+      reapInterval: -1,
+      logFn: function () { }
     }),
-    secret: 'a_secret_key_for_jdwl_db_session', // 在生产环境中应使用更安全的密钥，并从环境变量中读取
-    resave: true, // 改为true，确保会话被保存到存储中
-    saveUninitialized: true, // 改为true，初始化未初始化的会话
+    secret: 'a_secret_key_for_jdwl_db_session',
+    resave: true,
+    saveUninitialized: true,
     cookie: {
-      secure: false, // 如果是https，应设为true
+      secure: false,
       httpOnly: true,
-      maxAge: sessionTTL, // 30天
-      sameSite: 'lax' // 添加sameSite设置，提高安全性并允许跨源请求
+      maxAge: sessionTTL * 1000, // cookie 的 maxAge 需要毫秒
+      sameSite: 'lax'
     },
-    name: 'jdwl.sid' // 自定义会话cookie名称
+    name: 'jdwl.sid'
   })
 )
 

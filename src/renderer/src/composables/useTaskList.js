@@ -114,6 +114,7 @@ export function useTaskList() {
     try {
       // 创建一个干净的payload对象，只包含需要的数据
       const payload = {
+        scope: task.executionData.scope,
         skus: Array.isArray(task.executionData.skus) ? [...task.executionData.skus] : [],
         store: task.executionData.store ? {
           id: task.executionData.store.id,

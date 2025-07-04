@@ -5,28 +5,39 @@
         <label class="form-label">模式选择</label>
         <div class="radio-group">
           <label class="radio-label">
-            <input type="radio" v-model="mode" value="sku" />
+            <input
+              type="radio"
+              :checked="form.mode === 'sku'"
+              value="sku"
+              @change="updateMode('sku')"
+            />
             按SKU
           </label>
           <label class="radio-label">
-            <input type="radio" v-model="mode" value="whole_store" />
+            <input
+              type="radio"
+              :checked="form.mode === 'whole_store'"
+              value="whole_store"
+              @change="updateMode('whole_store')"
+            />
             按整店
           </label>
         </div>
       </div>
 
-      <div v-if="mode === 'sku'" class="form-group sku-input-container">
+      <div v-if="form.mode === 'sku'" class="form-group sku-input-container">
         <div class="sku-header">
           <label class="form-label">输入SKU</label>
           <FileUploader @file-change="handleFileChange" />
         </div>
         <div class="textarea-wrapper">
           <textarea
-            v-model="sku"
+            :value="form.sku"
+            @input="updateSku"
             placeholder="请输入SKU (多个SKU请每行一个)"
             class="sku-textarea"
           ></textarea>
-          <button v-if="sku" class="clear-sku-btn" @click="sku = ''">清空</button>
+          <button v-if="form.sku" class="clear-sku-btn" @click="clearSku">清空</button>
         </div>
       </div>
 
@@ -34,11 +45,19 @@
         <label class="form-label">功能选项 <span class="required-tip">(必选至少一项)</span></label>
         <div class="checkbox-group">
           <label class="checkbox-label">
-            <input type="checkbox" v-model="clearStockAllocation" />
+            <input
+              type="checkbox"
+              :checked="form.options.clearStockAllocation"
+              @change="updateOption('clearStockAllocation', $event.target.checked)"
+            />
             库存分配清零
           </label>
           <label class="checkbox-label">
-            <input type="checkbox" v-model="cancelJpSearch" />
+            <input
+              type="checkbox"
+              :checked="form.options.cancelJpSearch"
+              @change="updateOption('cancelJpSearch', $event.target.checked)"
+            />
             取消京配打标
           </label>
         </div>
@@ -46,7 +65,8 @@
 
       <div class="form-group">
         <StoreSelector
-          v-model="storeVModel"
+          :model-value="selectedStore"
+          @update:model-value="$emit('update:selectedStore', $event)"
           :shops="props.shopsList"
           :loading="props.isLoadingShops"
           :error="props.shopLoadError"
@@ -61,7 +81,6 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
 import StoreSelector from './StoreSelector.vue'
 import FileUploader from './FileUploader.vue'
 
@@ -75,48 +94,30 @@ const props = defineProps({
 
 const emit = defineEmits(['update:form', 'update:selectedStore', 'addTask'])
 
-// 使用 computed 来处理与父组件的双向绑定，避免直接修改 props
-const mode = computed({
-  get: () => props.form.mode,
-  set: (value) => emit('update:form', { ...props.form, mode: value })
-})
+const updateMode = (newMode) => {
+  emit('update:form', { ...props.form, mode: newMode })
+}
 
-const sku = computed({
-  get: () => props.form.sku,
-  set: (value) => emit('update:form', { ...props.form, sku: value })
-})
+const updateSku = (event) => {
+  emit('update:form', { ...props.form, sku: event.target.value })
+}
 
-const clearStockAllocation = computed({
-  get: () => props.form.options.clearStockAllocation,
-  set: (value) => {
-    emit('update:form', {
-      ...props.form,
-      options: { ...props.form.options, clearStockAllocation: value }
-    })
-  }
-})
+const clearSku = () => {
+  emit('update:form', { ...props.form, sku: '' })
+}
 
-const cancelJpSearch = computed({
-  get: () => props.form.options.cancelJpSearch,
-  set: (value) => {
-    emit('update:form', {
-      ...props.form,
-      options: { ...props.form.options, cancelJpSearch: value }
-    })
-  }
-})
-
-// 为StoreSelector创建v-model
-const storeVModel = computed({
-  get: () => props.selectedStore,
-  set: (value) => emit('update:selectedStore', value)
-})
+const updateOption = (optionName, value) => {
+  emit('update:form', {
+    ...props.form,
+    options: { ...props.form.options, [optionName]: value }
+  })
+}
 
 const handleFileChange = (file) => {
   if (file && file.name.endsWith('.txt')) {
     const reader = new FileReader()
     reader.onload = (e) => {
-      sku.value = e.target.result
+      emit('update:form', { ...props.form, sku: e.target.result })
     }
     reader.readAsText(file)
   }
