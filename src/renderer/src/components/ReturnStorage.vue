@@ -3,7 +3,6 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
 import TaskArea from './warehouse/TaskArea.vue'
-import StoreSelector from './warehouse/StoreSelector.vue'
 import { ElButton } from 'element-plus'
 
 const props = defineProps({
@@ -19,17 +18,7 @@ const form = ref({
 })
 
 // --- 组合式函数 ---
-const {
-  shopsList,
-  isLoadingShops,
-  shopLoadError,
-  selectedStore,
-  loadShops,
-  persistSelectedShop,
-  selectedVendor,
-  selectedDepartment
-} = useShopAndWarehouse()
-
+const { selectedStore, selectedVendor, selectedDepartment } = useShopAndWarehouse()
 const {
   taskList,
   addTask,
@@ -42,13 +31,9 @@ const {
 } = useTaskList()
 
 // --- 计算属性 ---
-const currentShopInfo = computed(() =>
-  shopsList.value.find((shop) => shop.shopNo === selectedStore.value)
-)
 
 // --- 方法 ---
 const handleAddTask = () => {
-  if (!currentShopInfo.value) return alert('请选择店铺')
   if (!form.value.orderNumber) return alert('请输入订单号')
 
   const orderNumbers = form.value.orderNumber.split(/[\n,，\\s]+/).filter((s) => s.trim())
@@ -58,7 +43,6 @@ const handleAddTask = () => {
     addTask({
       sku: `订单: ${orderNum}`,
       name: '退货入库',
-      store: currentShopInfo.value,
       warehouse: { warehouseName: 'N/A' },
       executionFeature: 'returnStorage',
       executionType: 'task',
@@ -66,7 +50,7 @@ const handleAddTask = () => {
         orderNumber: orderNum,
         year: form.value.year,
         returnReason: form.value.returnReason,
-        store: currentShopInfo.value,
+        store: selectedStore.value,
         vendor: selectedVendor.value,
         department: selectedDepartment.value
       }
@@ -87,23 +71,6 @@ const pasteFromClipboard = async () => {
 }
 
 // --- 侦听器和生命周期 ---
-watch(
-  () => props.isLoggedIn,
-  (newVal) => {
-    if (newVal) loadShops()
-  },
-  { immediate: true }
-)
-
-watch(selectedStore, (newShopNo) => {
-  if (newShopNo) persistSelectedShop(newShopNo)
-})
-
-onMounted(() => {
-  if (props.isLoggedIn) {
-    loadShops()
-  }
-})
 </script>
 
 <template>
@@ -132,15 +99,6 @@ onMounted(() => {
         <div class="form-group">
           <label class="form-label" for="return-reason">退货原因 (选填)</label>
           <input id="return-reason" v-model="form.returnReason" type="text" class="form-input" />
-        </div>
-
-        <div class="form-group">
-          <StoreSelector
-            v-model="selectedStore"
-            :shops="shopsList"
-            :loading="isLoadingShops"
-            :error="shopLoadError"
-          />
         </div>
       </div>
 
