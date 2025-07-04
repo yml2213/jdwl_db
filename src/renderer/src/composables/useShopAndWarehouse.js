@@ -12,7 +12,7 @@ import {
   getSelectedDepartment,
   getSelectedVendor,
   getLastSelectedStoreAndWarehouse,
-  saveSelectedStoreAndWarehouse
+  saveLastSelectedStoreAndWarehouse as saveSelectedStoreAndWarehouse
 } from '@/utils/storageHelper'
 
 /**

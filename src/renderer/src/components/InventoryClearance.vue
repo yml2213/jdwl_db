@@ -6,10 +6,6 @@ import { saveInventoryClearanceForm, getInventoryClearanceForm } from '@/utils/s
 import ClearStorageOperationArea from './warehouse/ClearStorageOperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 
-const props = defineProps({
-  isLoggedIn: Boolean
-})
-
 // --- 状态管理 ---
 const activeTab = ref('tasks')
 const form = ref({
@@ -142,14 +138,6 @@ watch(
   { deep: true }
 )
 
-watch(
-  () => props.isLoggedIn,
-  (newVal) => {
-    if (newVal) loadShops()
-  },
-  { immediate: true }
-)
-
 watch(selectedStore, (newShopNo) => {
   if (newShopNo) persistSelectedShop(newShopNo)
 })
@@ -159,14 +147,12 @@ onMounted(() => {
   if (savedForm) {
     form.value = savedForm
   }
-  if (props.isLoggedIn) {
-    loadShops()
-  }
+  loadShops()
 })
 </script>
 
 <template>
-  <div v-if="isLoggedIn" class="inventory-clearance-container">
+  <div class="inventory-clearance-container">
     <ClearStorageOperationArea
       :form="form"
       :shops-list="shopsList"

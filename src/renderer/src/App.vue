@@ -118,7 +118,6 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
     <div v-else-if="appState === 'main'" class="main-layout">
       <header class="app-header">
         <div class="header-left">
-          <img :src="electronLogo" alt="Logo" class="logo" />
           <h1>京东仓储一体化工具</h1>
         </div>
         <div class="header-right">

@@ -2,12 +2,9 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShopAndWarehouse } from '@/composables/useShopAndWarehouse'
 import { useTaskList } from '@/composables/useTaskList'
+import { saveReturnStorageForm, getReturnStorageForm } from '@/utils/storageHelper'
 import TaskArea from './warehouse/TaskArea.vue'
 import { ElButton } from 'element-plus'
-
-const props = defineProps({
-  isLoggedIn: Boolean
-})
 
 // --- 状态管理 ---
 const activeTab = ref('tasks')
@@ -71,10 +68,17 @@ const pasteFromClipboard = async () => {
 }
 
 // --- 侦听器和生命周期 ---
+onMounted(() => {
+  const savedForm = getReturnStorageForm()
+  if (savedForm) {
+    form.value = savedForm
+  }
+  loadShops()
+})
 </script>
 
 <template>
-  <div v-if="isLoggedIn" class="return-storage-container">
+  <div class="return-storage-container">
     <div class="operation-area">
       <div class="scrollable-content">
         <div class="form-group">
