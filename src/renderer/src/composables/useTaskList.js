@@ -110,13 +110,45 @@ export function useTaskList() {
     selectedTask.value = task
 
     try {
+      // 创建一个干净的payload对象，只包含需要的数据
       const payload = {
-        ...task.executionData,
-        skus: task.executionData.skus || [],
-        store: task.executionData.store || {},
-        vendor: task.executionData.vendor || {},
-        department: task.executionData.department || {},
-        logistics: task.executionData.logistics || {},
+        skus: Array.isArray(task.executionData.skus) ? [...task.executionData.skus] : [],
+        store: task.executionData.store ? {
+          id: task.executionData.store.id,
+          shopNo: task.executionData.store.shopNo,
+          shopName: task.executionData.store.shopName,
+          spShopNo: task.executionData.store.spShopNo || task.executionData.store.shopNo,
+          name: task.executionData.store.name || task.executionData.store.shopName
+        } : {},
+        warehouse: task.executionData.warehouse ? {
+          id: task.executionData.warehouse.id,
+          warehouseId: task.executionData.warehouse.warehouseId,
+          warehouseNo: task.executionData.warehouse.warehouseNo,
+          warehouseName: task.executionData.warehouse.warehouseName
+        } : {},
+        vendor: task.executionData.vendor ? {
+          id: task.executionData.vendor.id,
+          supplierNo: task.executionData.vendor.supplierNo,
+          supplierName: task.executionData.vendor.supplierName
+        } : {},
+        department: task.executionData.department ? {
+          id: task.executionData.department.id,
+          deptNo: task.executionData.department.deptNo,
+          name: task.executionData.department.name
+        } : {}
+      }
+
+      // 添加其他可能的属性
+      if (task.executionData.logistics) {
+        payload.logistics = { ...task.executionData.logistics }
+      }
+
+      if (task.executionData.options) {
+        payload.options = { ...task.executionData.options }
+      }
+
+      if (task.executionData.inventoryAmount) {
+        payload.inventoryAmount = task.executionData.inventoryAmount
       }
 
       let taskId
