@@ -85,19 +85,19 @@ function sendRequest(url, options = {}) {
 
       // 处理响应
       request.on('response', (response) => {
-        console.log(`[Main Process] 收到响应状态: ${response.statusCode}`)
+        // console.log(`[Main Process] 收到响应状态: ${response.statusCode}`)
 
         // 记录并保存Set-Cookie头，以便在后续请求中使用
         const setCookieHeaders = response.headers['set-cookie']
         if (setCookieHeaders) {
-          console.log(`[Main Process] 收到Set-Cookie头`, setCookieHeaders)
+          // console.log(`[Main Process] 收到Set-Cookie头`, setCookieHeaders)
 
           // 解析和存储cookies
           try {
             sessionCookies = []  // 清空之前的cookie
             setCookieHeaders.forEach(cookieStr => {
               const mainCookie = cookieStr.split(';')[0]
-              console.log(`[Main Process] 保存cookie: ${mainCookie}`)
+              // console.log(`[Main Process] 保存cookie: ${mainCookie}`)
               sessionCookies.push(mainCookie)
             })
           } catch (e) {
@@ -115,9 +115,9 @@ function sendRequest(url, options = {}) {
             let parsedData = responseData
             if (responseData && response.headers['content-type'] && response.headers['content-type'].includes('application/json')) {
               parsedData = JSON.parse(responseData)
-              console.log(`[Main Process] 解析响应JSON数据成功`)
+              // console.log(`[Main Process] 解析响应JSON数据成功`)
             } else {
-              console.log(`[Main Process] 收到非JSON数据，长度: ${responseData.length}`)
+              // console.log(`[Main Process] 收到非JSON数据，长度: ${responseData.length}`)
             }
 
             resolve({
@@ -141,7 +141,7 @@ function sendRequest(url, options = {}) {
 
       // 发送请求体
       if (options.body) {
-        console.log('[Main Process] 发送请求体数据')
+        // console.log('[Main Process] 发送请求体数据')
         const data = typeof options.body === 'string' ? options.body : JSON.stringify(options.body)
         request.write(data)
       }
