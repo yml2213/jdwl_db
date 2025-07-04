@@ -30,10 +30,18 @@ function createLogger(taskId, taskName = 'global') {
 
     // 创建一个通用的日志函数，它会同时写入日志并发送到前端
     const log = (message, type = 'info', data = {}) => {
-        // 使用 Pino logger 记录结构化日志
-        childLogger[type]({ ...data, msg: message })
+        // 将 'success' 映射到 'info'，因为 pino 没有 success 级别
+        const pinoLevel = type === 'success' ? 'info' : type
 
-        // 准备要发送到前端的日志数据
+        // 确保 pinoLevel 是一个有效的 pino 方法，以防传入其他无效类型
+        if (typeof childLogger[pinoLevel] === 'function') {
+            childLogger[pinoLevel]({ ...data, msg: message })
+        } else {
+            // 对于任何其他未知的类型，默认使用 'info' 级别记录
+            childLogger.info({ ...data, msg: message, originalType: type })
+        }
+
+        // 准备要发送到前端的日志数据，这里我们保留原始的 'type'
         const logData = {
             message,
             type,
