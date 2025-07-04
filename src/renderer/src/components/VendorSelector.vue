@@ -88,7 +88,7 @@ const filterVendors = () => {
 }
 
 // 加载供应商列表
-const fetchVendors = async () => {
+const fetchVendors = async (retryCount = 0) => {
   loading.value = true
   error.value = ''
 
@@ -105,16 +105,45 @@ const fetchVendors = async () => {
     const response = await getVendorList()
     vendors.value = response || []
     console.log('获取到的供应商数据:', vendors.value)
-    filterVendors() // 初始化过滤后的供应商列表
 
+    // 检查是否获取到数据
     if (vendors.value.length === 0) {
-      error.value = '未找到供应商数据'
+      if (retryCount < 3) {
+        // 如果尝试次数小于3次，等待2秒后重试
+        console.log(`未获取到供应商数据，${retryCount + 1}/3 次尝试，2秒后重试...`)
+        error.value = `未找到供应商数据，正在重试 (${retryCount + 1}/3)...`
+        setTimeout(() => {
+          fetchVendors(retryCount + 1)
+        }, 2000)
+        return
+      } else {
+        // 如果已经尝试3次，显示错误信息
+        console.error('多次尝试后仍未获取到供应商数据')
+        error.value = '多次尝试后仍未获取到供应商数据，请检查网络连接或重新登录'
+      }
+    } else {
+      // 成功获取数据
+      filterVendors() // 初始化过滤后的供应商列表
+      error.value = ''
     }
   } catch (err) {
     console.error('获取供应商失败:', err)
-    error.value = `获取供应商失败: ${err.message || '未知错误'}`
+
+    if (retryCount < 3) {
+      // 如果尝试次数小于3次，等待2秒后重试
+      console.log(`获取供应商失败，${retryCount + 1}/3 次尝试，2秒后重试...`)
+      error.value = `获取供应商失败，正在重试 (${retryCount + 1}/3)...`
+      setTimeout(() => {
+        fetchVendors(retryCount + 1)
+      }, 2000)
+    } else {
+      // 如果已经尝试3次，显示详细错误信息
+      error.value = `获取供应商失败: ${err.message || '未知错误'}。可能是登录状态失效，请尝试重新登录。`
+    }
   } finally {
-    loading.value = false
+    if (retryCount >= 3 || vendors.value.length > 0) {
+      loading.value = false
+    }
   }
 }
 

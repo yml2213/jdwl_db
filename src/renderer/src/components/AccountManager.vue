@@ -235,17 +235,51 @@ const handleLoginSuccess = async () => {
   console.log('登录成功事件被触发！')
   await updateUsername() // 更新用户名
   loadSavedSelections() // 加载已保存的选择
+  console.log('登录成功后，用户名更新为:', username.value)
+  console.log('本地存储中是否有已选择的供应商和事业部:', hasUserSelected())
 
   // 如果用户已经选择过供应商和事业部
   if (hasUserSelected()) {
     console.log('用户已选择供应商和事业部，尝试直接创建会话。')
     try {
+      // 获取所有必要数据
       const cookies = await getAllCookies()
+      console.log('获取到cookie数量:', cookies?.length || 0)
+
+      // 检查cookies是否有效
+      if (!cookies || cookies.length === 0) {
+        console.error('未获取到有效的cookies，无法创建会话')
+        throw new Error('未获取到有效的cookies，请尝试重新登录')
+      }
+
+      // 检查必要的cookie是否存在
+      const requiredCookieNames = ['pin', 'thor', 'csrfToken']
+      const missingCookies = requiredCookieNames.filter(
+        (name) => !cookies.some((cookie) => cookie.name === name)
+      )
+
+      if (missingCookies.length > 0) {
+        console.error('缺少必要的cookie:', missingCookies.join(', '))
+        throw new Error(`缺少必要的cookie: ${missingCookies.join(', ')}，请重新登录`)
+      }
+
       const vendorInfo = getSelectedVendor()
+      console.log('本地保存的供应商信息:', vendorInfo?.name || '无')
+
       const departmentInfo = getSelectedDepartment()
+      console.log('本地保存的事业部信息:', departmentInfo?.name || '无')
+
       const pinCookie = cookies?.find((c) => c.name === 'pin')
+      console.log('找到pin cookie:', pinCookie?.value || '未找到')
 
       if (!pinCookie || !cookies || !vendorInfo || !departmentInfo) {
+        console.error(
+          '缺少会话创建所需的关键数据:',
+          !pinCookie ? 'pin cookie缺失' : '',
+          !cookies ? 'cookies缺失' : '',
+          !vendorInfo ? '供应商信息缺失' : '',
+          !departmentInfo ? '事业部信息缺失' : ''
+        )
         throw new Error('无法从本地存储恢复关键信息，请重新登录并选择。')
       }
 
@@ -255,19 +289,65 @@ const handleLoginSuccess = async () => {
         supplierInfo: vendorInfo,
         departmentInfo
       }
+      console.log('准备创建后端会话，唯一标识:', sessionData.uniqueKey)
+      console.log('会话数据包含cookies数量:', cookies.length)
+      console.log('会话数据包含供应商:', vendorInfo.name)
+      console.log('会话数据包含事业部:', departmentInfo.name)
 
       // Re-create session on the backend
+      console.log('正在创建后端会话...')
       const response = await createSession(sessionData)
+      console.log('后端会话创建响应:', response ? '成功' : '失败')
+
       if (response) {
         console.log('后端会话已成功重建。')
         // Emit event to notify App.vue to fetch the new session state
+        console.log('发送session-created事件到App.vue')
         emit('session-created')
+
+        // 添加延迟刷新页面机制，确保UI状态更新
+        console.log('设置一个延时，如果3秒内UI没有切换，将强制刷新页面...')
+        const refreshTimeout = setTimeout(() => {
+          console.log('检测到可能的UI更新问题，正在尝试强制刷新页面...')
+          window.location.reload()
+        }, 3000)
+
+        // 创建一个MutationObserver来监控DOM变化
+        // 如果检测到UI已经切换到主界面，则取消刷新
+        const observer = new MutationObserver((mutations) => {
+          // 检查是否已经显示了主界面的某些元素
+          if (
+            document.querySelector('.main-body') &&
+            document.querySelector('.tabs') &&
+            !document.querySelector('.login-prompt')
+          ) {
+            console.log('已检测到UI成功切换到主界面，取消刷新计时器')
+            clearTimeout(refreshTimeout)
+            observer.disconnect()
+          }
+        })
+
+        // 开始观察文档变化
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        })
       } else {
-        throw new Error('后端会话重建失败。')
+        throw new Error('后端会话重建失败，服务器没有返回有效响应。')
       }
     } catch (error) {
       console.error('自动创建会话失败:', error)
-      alert(`自动恢复会话失败: ${error.message}`)
+
+      // 提供更详细的错误信息
+      let errorMessage = error.message || '未知错误'
+      if (errorMessage.includes('Network Error')) {
+        errorMessage = '网络连接失败，请检查网络连接并重试'
+      } else if (errorMessage.includes('timeout')) {
+        errorMessage = '请求超时，服务器响应时间过长'
+      }
+
+      alert(`自动恢复会话失败: ${errorMessage}\n\n请尝试重新登录或刷新页面。`)
+
       // Fallback to showing selection modal if session creation fails
       showSelectionModal.value = true
     }

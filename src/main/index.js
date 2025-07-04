@@ -3,11 +3,12 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { setupLoginHandlers, createLoginWindow, isLoggedIn } from './loginManager'
-import { setupRequestHandlers } from './requestHandler'
+import { setupRequestHandlers, clearSessionCookies } from './requestHandler'
 import { setupFileHandlers } from './fileHandler'
 import fs from 'fs'
 
 function createWindow() {
+  console.log('创建主窗口...')
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 1600,
@@ -26,6 +27,11 @@ function createWindow() {
   mainWindow.on('ready-to-show', () => {
     mainWindow.maximize()
     mainWindow.show()
+    // 在开发模式下自动打开开发者工具
+    if (is.dev) {
+      console.log('Open dev tool...')
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -49,6 +55,11 @@ function createWindow() {
 
   // 统一设置所有IPC事件处理器
   function setupIPCHandlers() {
+    console.log('设置主进程IPC事件处理器...')
+
+    // 先清除之前的cookie，确保会话干净
+    clearSessionCookies()
+
     setupLoginHandlers(mainWindow)
     setupFileHandlers()
     setupRequestHandlers()
@@ -92,6 +103,8 @@ function createWindow() {
         mainWindow.webContents.send('session-status-changed')
       }
     })
+
+    console.log('主进程IPC事件处理器设置完毕。')
   }
 
   // 调用IPC设置

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, provide } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, provide, watch } from 'vue'
 import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
@@ -24,7 +24,21 @@ const sessionContext = ref(null)
 const isInitialized = ref(false) // 添加初始化状态标记
 
 // 登录状态现在是一个计算属性，更可靠
-const isLoggedIn = computed(() => !!sessionContext.value)
+const isLoggedIn = computed(() => {
+  const loggedIn = !!sessionContext.value
+  console.log(
+    '计算 isLoggedIn 状态:',
+    loggedIn,
+    '会话上下文:',
+    sessionContext.value ? '有值' : '无值'
+  )
+  return loggedIn
+})
+
+// 添加 watch 来监控 isLoggedIn 的变化
+watch(isLoggedIn, (newVal) => {
+  console.log('登录状态发生变化:', newVal)
+})
 
 // 将会话上下文提供给所有子组件
 provide('sessionContext', sessionContext)
@@ -35,8 +49,8 @@ provide('sessionContext', sessionContext)
  */
 const performInit = async () => {
   if (isInitialized.value) return // 防止重入
-  
-  console.log('开始执行应用初始化流程...');
+
+  console.log('开始执行应用初始化流程...')
   try {
     isInitialized.value = true // 立即设置状态，防止重入
     const result = await initSession()
@@ -56,11 +70,21 @@ const performInit = async () => {
  * @description 检查服务器上的会话状态，并在会话有效时恢复它
  */
 const checkSessionStatus = async () => {
+  console.log('开始检查后端会话状态...')
   try {
     const status = await getSessionStatus()
+    console.log('收到会话状态响应:', status)
+
     if (status.loggedIn && status.context) {
+      console.log('后端会话有效，准备恢复会话上下文...', status.context)
       handleSessionRestored(status.context)
     } else {
+      console.log(
+        '后端会话无效或未登录, status.loggedIn =',
+        status.loggedIn,
+        ', status.context =',
+        !!status.context
+      )
       sessionContext.value = null
     }
   } catch (error) {
@@ -70,11 +94,15 @@ const checkSessionStatus = async () => {
 }
 
 const handleSessionCreated = async () => {
-  console.log('会话创建/重建成功，正在从服务器获取最新会话状态...')
+  console.log('handleSessionCreated: 会话创建/重建成功事件被触发，正在从服务器获取最新会话状态...')
   await checkSessionStatus()
   // 检查通过后，sessionContext 会被设置，此时可以进行初始化
+  console.log('handleSessionCreated: 会话检查完成，当前登录状态:', isLoggedIn.value)
   if (isLoggedIn.value) {
+    console.log('handleSessionCreated: 已登录，开始执行初始化...')
     await performInit()
+  } else {
+    console.warn('handleSessionCreated: 会话创建后检查状态，但未登录，请排查问题')
   }
 }
 
@@ -83,8 +111,9 @@ const handleSessionCreated = async () => {
  * @param {object} context - 从后端获取的会话上下文
  */
 const handleSessionRestored = (context) => {
+  console.log('handleSessionRestored: 设置会话上下文...', context)
   sessionContext.value = context
-  console.log('会话已恢复:', context)
+  console.log('handleSessionRestored: 会话已恢复，设置后的登录状态:', isLoggedIn.value)
   performInit() // 恢复会话后也执行初始化
 }
 
@@ -101,9 +130,9 @@ const handleLogout = () => {
 const activeTab = ref('入仓打标')
 
 const tabComponents = {
-  '入仓打标': WarehouseLabeling,
-  '清库下标': InventoryClearance,
-  '退货入库': ReturnStorage
+  入仓打标: WarehouseLabeling,
+  清库下标: InventoryClearance,
+  退货入库: ReturnStorage
 }
 
 const currentComponent = computed(() => tabComponents[activeTab.value])
@@ -167,64 +196,87 @@ const handleClearCacheAndReload = () => {
 
 // 组件挂载时检查会话状态
 onMounted(async () => {
-  console.log('App 组件挂载，开始会话检查流程...');
-  await checkSessionStatus();
-  console.log('会话状态检查完成，当前登录状态:', isLoggedIn.value);
-  
+  console.log('App 组件挂载，开始会话检查流程...')
+  console.log('初始 isLoggedIn 状态:', isLoggedIn.value)
+  await checkSessionStatus()
+  console.log(
+    '会话状态检查完成，当前登录状态:',
+    isLoggedIn.value,
+    '会话上下文:',
+    sessionContext.value ? '有值' : '无值'
+  )
+
   // 如果没有登录，但本地有 cookies 和 vendor/department 信息，尝试自动创建会话
   if (!isLoggedIn.value) {
     try {
-      console.log('尝试自动恢复会话...');
-      const cookies = await getAllCookies();
-      console.log('获取到 cookies:', cookies?.length || 0);
-      const vendorInfo = getSelectedVendor();
-      console.log('本地存储中的供应商信息:', vendorInfo?.name);
-      const departmentInfo = getSelectedDepartment();
-      console.log('本地存储中的事业部信息:', departmentInfo?.name);
-      
+      console.log('尝试自动恢复会话...')
+      const cookies = await getAllCookies()
+      console.log('获取到 cookies:', cookies?.length || 0)
+      const vendorInfo = getSelectedVendor()
+      console.log('本地存储中的供应商信息:', vendorInfo?.name)
+      const departmentInfo = getSelectedDepartment()
+      console.log('本地存储中的事业部信息:', departmentInfo?.name)
+
       if (cookies && cookies.length > 0 && vendorInfo && departmentInfo) {
-        const pinCookie = cookies.find(c => c.name === 'pin');
+        const pinCookie = cookies.find((c) => c.name === 'pin')
         if (pinCookie) {
-          console.log('找到 pin cookie:', pinCookie.value);
+          console.log('找到 pin cookie:', pinCookie.value)
           const sessionData = {
             uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
             cookies,
             supplierInfo: vendorInfo,
             departmentInfo
-          };
-          
-          console.log('发现本地凭据，尝试创建会话...');
-          const sessionResult = await createSession(sessionData);
-          console.log('会话创建结果:', sessionResult);
-          
+          }
+
+          console.log('发现本地凭据，尝试创建会话...')
+          const sessionResult = await createSession(sessionData)
+          console.log('会话创建结果:', sessionResult)
+
           // 重新检查会话状态
-          await checkSessionStatus();
-          console.log('会话恢复后检查登录状态:', isLoggedIn.value);
-          
+          await checkSessionStatus()
+          console.log('会话恢复后检查登录状态:', isLoggedIn.value)
+
           if (isLoggedIn.value) {
-            console.log('会话自动恢复成功, 开始执行初始化...');
-            await performInit();
-            console.log('应用初始化完成');
+            console.log('会话自动恢复成功, 开始执行初始化...')
+            await performInit()
+            console.log('应用初始化完成')
           } else {
-            console.warn('会话恢复后仍未登录，可能需要重新登录');
+            console.warn('会话恢复后仍未登录，可能需要重新登录')
           }
         } else {
-          console.warn('未找到 pin cookie，无法自动恢复会话');
+          console.warn('未找到 pin cookie，无法自动恢复会话')
         }
       } else {
-        console.warn('缺少自动恢复会话所需的数据:',
-                    cookies ? '有cookies' : '无cookies',
-                    vendorInfo ? '有供应商' : '无供应商', 
-                    departmentInfo ? '有事业部' : '无事业部');
+        console.warn(
+          '缺少自动恢复会话所需的数据:',
+          cookies ? '有cookies' : '无cookies',
+          vendorInfo ? '有供应商' : '无供应商',
+          departmentInfo ? '有事业部' : '无事业部'
+        )
       }
     } catch (error) {
-      console.error('自动恢复会话失败:', error);
+      console.error('自动恢复会话失败:', error)
     }
   } else {
-    console.log('已经登录，执行应用初始化');
-    await performInit();
+    console.log('已经登录，执行应用初始化')
+    await performInit()
   }
-});
+
+  // 添加额外检查，用于排查问题
+  console.log('App挂载完成后的最终状态检查:')
+  console.log('- isLoggedIn:', isLoggedIn.value)
+  console.log('- sessionContext存在:', !!sessionContext.value)
+  console.log('- 显示的界面:', isLoggedIn.value ? '主界面' : '登录界面')
+
+  // 如果日志显示后端会话已创建但UI未更新，尝试再次检查会话状态
+  if (!isLoggedIn.value) {
+    console.log('UI显示未登录，但可能后端会话已创建。尝试再次检查会话状态...')
+    setTimeout(async () => {
+      await checkSessionStatus()
+      console.log('延迟检查会话状态结果:', isLoggedIn.value ? '已登录' : '未登录')
+    }, 1000) // 延迟1秒检查，以便所有异步操作完成
+  }
+})
 
 onBeforeUnmount(() => {
   // 不再需要监听任何事件

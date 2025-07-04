@@ -1,41 +1,75 @@
 import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
-import axios from 'axios'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
 
 const API_BASE_URL = 'http://47.93.132.204:2333' // 后端服务器地址
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  withCredentials: true, // 允许跨域请求携带cookie
-  headers: {
-    'Content-Type': 'application/json'
+/**
+ * 通过Electron主进程发送请求
+ * @param {string} method - 请求方法
+ * @param {string} endpoint - API端点
+ * @param {Object} data - 请求数据
+ * @param {Object} headers - 请求头
+ * @returns {Promise<any>} - 响应数据
+ */
+const sendRequest = async (method, endpoint, data = null, headers = {}) => {
+  try {
+    console.log(`发送${method}请求到: ${API_BASE_URL}${endpoint}`)
+
+    const options = {
+      method: method,
+      headers: headers
+    }
+
+    // 添加请求体
+    if (data) {
+      if (method.toLowerCase() === 'get') {
+        // 对于GET请求，将数据转换为URL参数
+        const params = new URLSearchParams(data).toString()
+        endpoint = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${params}`
+      } else {
+        // 对于其他请求，添加请求体
+        options.body = data
+      }
+    }
+
+    // 通过IPC发送请求到主进程
+    const response = await window.api.sendRequest(`${API_BASE_URL}${endpoint}`, options)
+    console.log(`响应: ${method} ${endpoint} - 成功`)
+    return response
+  } catch (error) {
+    console.error(`请求失败 ${method} ${endpoint}:`, error)
+    throw error
   }
-})
+}
 
 // 添加拦截器记录请求和响应
-apiClient.interceptors.request.use(config => {
-  console.log(`请求: ${config.method.toUpperCase()} ${config.baseURL}${config.url}`,
-    config.data ? JSON.stringify(config.data).substring(0, 200) + '...' : '无数据')
-  return config
-}, error => {
-  console.error('请求拦截器错误:', error)
-  return Promise.reject(error)
-})
+let lastRequestTime = 0
+const MIN_REQUEST_INTERVAL = 100 // 最小请求间隔(毫秒)
 
-apiClient.interceptors.response.use(response => {
-  console.log(`响应: ${response.config.method.toUpperCase()} ${response.config.url} - ${response.status}`,
-    response.data ? '有数据' : '无数据')
-  return response
-}, error => {
-  console.error('响应拦截器错误:', error.response?.status, error.response?.data || error.message)
-  return Promise.reject(error)
-})
+/**
+ * 节流请求发送，确保请求之间有最小间隔
+ */
+const throttledSendRequest = async (method, endpoint, data, headers) => {
+  const now = Date.now()
+  const timeSinceLastRequest = now - lastRequestTime
+
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    // 如果距离上次请求时间小于最小间隔，则等待
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
+  }
+
+  lastRequestTime = Date.now()
+  return sendRequest(method, endpoint, data, headers)
+}
+
+// 存储后端返回的会话ID，用于手动维护会话状态
+let backendSessionID = null
 
 // 从主进程发送请求的辅助函数
-async function sendRequest(url, options) {
+async function sendRequestFromMain(url, options) {
   return await window.electron.ipcRenderer.invoke('sendRequest', url, options)
 }
 
@@ -230,9 +264,22 @@ export async function getShopList(deptId) {
  */
 export async function getVendorList() {
   const url = `${BASE_URL}/supplier/querySupplierList.do?rand=${Math.random()}`
+
+  // 先获取 cookies 并检查登录状态
+  const cookies = await getAllCookies()
+  if (!cookies || cookies.length === 0) {
+    console.error('获取供应商列表失败: 未找到有效的 cookies，可能未登录')
+    return []
+  }
+
   const csrfToken = await getCsrfToken()
+  if (!csrfToken) {
+    console.error('获取供应商列表失败: 未找到 csrfToken，可能登录状态无效')
+    return []
+  }
 
   console.log('获取供应商列表开始, csrfToken:', csrfToken ? '已获取' : '未获取')
+  console.log('当前 cookies 数量:', cookies.length)
 
   // 构建请求数据
   const data = qs.stringify({
@@ -248,18 +295,30 @@ export async function getVendorList() {
 
   try {
     console.log('发送供应商列表请求')
+
+    // 获取完整的 Cookie 字符串
+    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+    console.log('使用完整的 Cookie 字符串，长度:', cookieString.length)
+
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest'
+        'Origin': BASE_URL,
+        'Referer': `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Cookie': cookieString // 直接设置完整的 Cookie 字符串
       },
       body: data
     })
 
     console.log('供应商列表响应:', response ? '获取成功' : '未获取数据')
+
+    // 检查错误响应
+    if (response && response.error === 'NotLogin') {
+      console.error('获取供应商列表失败: 未登录或会话已过期')
+      return []
+    }
 
     // 处理响应数据，提取供应商列表
     if (response && response.aaData) {
@@ -283,7 +342,7 @@ export async function getVendorList() {
     }
   } catch (error) {
     console.error('获取供应商列表失败:', error)
-    throw error
+    return [] // 返回空数组而不是抛出错误，以避免UI崩溃
   }
 }
 
@@ -295,9 +354,22 @@ export async function getVendorList() {
 export async function getDepartmentsByVendor(vendorName) {
   console.log('开始获取事业部列表, 供应商名称:', vendorName)
   const url = `${BASE_URL}/dept/queryDeptList.do?rand=${Math.random()}`
+
+  // 先获取 cookies 并检查登录状态
+  const cookies = await getAllCookies()
+  if (!cookies || cookies.length === 0) {
+    console.error('获取事业部列表失败: 未找到有效的 cookies，可能未登录')
+    return []
+  }
+
   const csrfToken = await getCsrfToken()
+  if (!csrfToken) {
+    console.error('获取事业部列表失败: 未找到 csrfToken，可能登录状态无效')
+    return []
+  }
 
   console.log('获取事业部列表, csrfToken:', csrfToken ? '已获取' : '未获取')
+  console.log('当前 cookies 数量:', cookies.length)
 
   // 构建请求数据
   const data = qs.stringify({
@@ -311,18 +383,30 @@ export async function getDepartmentsByVendor(vendorName) {
 
   try {
     console.log('发送事业部列表请求')
+
+    // 获取完整的 Cookie 字符串
+    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+    console.log('使用完整的 Cookie 字符串，长度:', cookieString.length)
+
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest'
+        'Origin': BASE_URL,
+        'Referer': `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Cookie': cookieString // 直接设置完整的 Cookie 字符串
       },
       body: data
     })
 
     console.log('事业部列表响应:', response ? '获取成功' : '未获取数据')
+
+    // 检查错误响应
+    if (response && response.error === 'NotLogin') {
+      console.error('获取事业部列表失败: 未登录或会话已过期')
+      return []
+    }
 
     // 处理响应数据，提取事业部列表
     if (response && response.aaData) {
@@ -369,7 +453,7 @@ export async function getDepartmentsByVendor(vendorName) {
     }
   } catch (error) {
     console.error('获取事业部列表失败:', error)
-    throw error
+    return [] // 返回空数组而不是抛出错误，以避免UI崩溃
   }
 }
 
@@ -387,34 +471,48 @@ export async function getWarehouseList(sellerId, deptId) {
 
   console.log('开始获取仓库列表, 供应商ID:', sellerId, '事业部ID:', deptId)
   const url = `${BASE_URL}/warehouseOpen/queryWarehouseOpenList.do?rand=${Math.random()}`
+
+  // 先获取 cookies 并检查登录状态
+  const cookies = await getAllCookies()
+  if (!cookies || cookies.length === 0) {
+    console.error('获取仓库列表失败: 未找到有效的 cookies，可能未登录')
+    return []
+  }
+
   const csrfToken = await getCsrfToken()
+  if (!csrfToken) {
+    console.error('获取仓库列表失败: 未找到 csrfToken，可能登录状态无效')
+    return []
+  }
 
   console.log('获取仓库列表, csrfToken:', csrfToken ? '已获取' : '未获取')
+  console.log('当前 cookies 数量:', cookies.length)
 
   // 构建请求数据
   const data = qs.stringify({
     csrfToken: csrfToken,
     sellerId: sellerId,
     deptId: deptId,
-    warehouseNo: '',
-    warehouseName: '',
-    warehouseType: '',
-    isSalesReturn: '',
-    effectTimeStart: '',
-    effectTimeEnd: '',
+    status: '1', // 启用状态
     aoData:
-      '[{"name":"sEcho","value":5},{"name":"iColumns","value":10},{"name":"sColumns","value":",,,,,,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":"deptName"},{"name":"bSortable_1","value":true},{"name":"mDataProp_2","value":"warehouseNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"warehouseName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"warehouseTypeStr"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"isSalesReturn"},{"name":"bSortable_5","value":true},{"name":"mDataProp_6","value":"effectTime"},{"name":"bSortable_6","value":true},{"name":"mDataProp_7","value":"effectOperateUser"},{"name":"bSortable_7","value":true},{"name":"mDataProp_8","value":"updateTime"},{"name":"bSortable_8","value":true},{"name":"mDataProp_9","value":"updateUser"},{"name":"bSortable_9","value":true},{"name":"iSortCol_0","value":6},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
+      '[{"name":"sEcho","value":1},{"name":"iColumns","value":5},{"name":"sColumns","value":",,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":"warehouseNo"},{"name":"bSortable_1","value":true},{"name":"mDataProp_2","value":"warehouseName"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"warehouseAddress"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"statusStr"},{"name":"bSortable_4","value":true},{"name":"iSortCol_0","value":1},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
   })
 
   try {
     console.log('发送仓库列表请求')
+
+    // 获取完整的 Cookie 字符串
+    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+    console.log('使用完整的 Cookie 字符串，长度:', cookieString.length)
+
     const response = await fetchApi(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: BASE_URL,
-        Referer: `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest'
+        'Origin': BASE_URL,
+        'Referer': `${BASE_URL}/goToMainIframe.do`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Cookie': cookieString // 直接设置完整的 Cookie 字符串
       },
       body: data
     })
@@ -453,8 +551,25 @@ export async function getWarehouseList(sellerId, deptId) {
  * @returns {Promise<object>} 后端返回的响应数据，包含 sessionId
  */
 export const createSession = async (sessionData) => {
-  const response = await apiClient.post('/api/session', sessionData)
-  return response.data
+  console.log('调用createSession API，数据:', {
+    uniqueKey: sessionData.uniqueKey ? `${sessionData.uniqueKey.substring(0, 10)}...` : '无',
+    hasCookies: sessionData.cookies && sessionData.cookies.length > 0,
+    supplierName: sessionData.supplierInfo?.name || '未提供',
+    departmentName: sessionData.departmentInfo?.name || '未提供'
+  })
+
+  try {
+    // 通过主进程发送请求
+    const response = await throttledSendRequest('POST', '/api/session', sessionData, {
+      'Content-Type': 'application/json'
+    })
+
+    console.log('createSession API响应数据:', response)
+    return response
+  } catch (error) {
+    console.error('createSession API错误:', error)
+    throw error
+  }
 }
 
 /**
@@ -465,9 +580,12 @@ export const createSession = async (sessionData) => {
  */
 export const executeTask = async (taskName, payload) => {
   console.log(`[apiService] 请求执行任务: ${taskName}`)
-  const response = await apiClient.post('/task', { taskName, payload })
-  if (response.data && response.data.taskId) {
-    return response.data.taskId
+  const response = await throttledSendRequest('POST', '/task', { taskName, payload }, {
+    'Content-Type': 'application/json'
+  })
+
+  if (response && response.taskId) {
+    return response.taskId
   }
   throw new Error('未能从后端获取任务ID')
 }
@@ -477,8 +595,25 @@ export const executeTask = async (taskName, payload) => {
  * @returns {Promise<object>}
  */
 export const getSessionStatus = async () => {
-  const response = await apiClient.get('/api/session/status')
-  return response.data
+  console.log('调用getSessionStatus API检查会话状态')
+
+  try {
+    const response = await throttledSendRequest('GET', '/api/session/status', null, {
+      'Content-Type': 'application/json'
+    })
+
+    console.log('getSessionStatus API响应数据:', {
+      success: response.success,
+      loggedIn: response.loggedIn,
+      hasContext: !!response.context,
+      sessionID: response.sessionID
+    })
+
+    return response
+  } catch (error) {
+    console.error('getSessionStatus API错误:', error)
+    throw error
+  }
 }
 
 /**
@@ -489,9 +624,12 @@ export const getSessionStatus = async () => {
  */
 export const executeFlow = async (flowName, payload) => {
   console.log(`[apiService] 请求执行工作流: ${flowName}`)
-  const response = await apiClient.post('/api/execute-flow', { flowName, payload })
-  if (response.data && response.data.taskId) {
-    return response.data.taskId
+  const response = await throttledSendRequest('POST', '/api/execute-flow', { flowName, payload }, {
+    'Content-Type': 'application/json'
+  })
+
+  if (response && response.taskId) {
+    return response.taskId
   }
   throw new Error('未能从后端获取工作流ID')
 }
@@ -502,11 +640,14 @@ export const executeFlow = async (flowName, payload) => {
 export const initSession = async () => {
   try {
     console.log('调用 /api/init 初始化会话...')
-    const response = await apiClient.post('/api/init')
-    console.log('/api/init 响应:', response.data)
-    return response.data
+    const response = await throttledSendRequest('POST', '/api/init', null, {
+      'Content-Type': 'application/json'
+    })
+
+    console.log('/api/init 响应:', response)
+    return response
   } catch (error) {
-    console.error('初始化会话失败:', error.response?.data || error.message)
-    throw error.response?.data || new Error('服务器错误')
+    console.error('初始化会话失败:', error)
+    throw error
   }
 }

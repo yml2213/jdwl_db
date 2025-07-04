@@ -42,13 +42,15 @@ app.use(
       logFn: function () { } // 禁用默认的日志输出，保持控制台干净
     }),
     secret: 'a_secret_key_for_jdwl_db_session', // 在生产环境中应使用更安全的密钥，并从环境变量中读取
-    resave: false,
-    saveUninitialized: false, // 改为false，仅在会话被修改时才创建文件
+    resave: true, // 改为true，确保会话被保存到存储中
+    saveUninitialized: true, // 改为true，初始化未初始化的会话
     cookie: {
       secure: false, // 如果是https，应设为true
       httpOnly: true,
-      maxAge: sessionTTL // 30天
-    }
+      maxAge: sessionTTL, // 30天
+      sameSite: 'lax' // 添加sameSite设置，提高安全性并允许跨源请求
+    },
+    name: 'jdwl.sid' // 自定义会话cookie名称
   })
 )
 
@@ -101,7 +103,8 @@ app.post('/api/session', async (req, res) => {
     uniqueKey: uniqueKey ? `${uniqueKey.substring(0, 10)}...` : '无',
     hasCookies: cookies && cookies.length > 0,
     hasSupplierInfo: !!req.body.supplierInfo,
-    hasDepartmentInfo: !!req.body.departmentInfo
+    hasDepartmentInfo: !!req.body.departmentInfo,
+    sessionID: req.sessionID
   })
 
   if (!uniqueKey || !cookies) {
@@ -112,6 +115,8 @@ app.post('/api/session', async (req, res) => {
   // 将会话数据存储在 req.session 中
   // express-session 会自动处理 cookie 和 session ID
   req.session.context = req.body
+  req.session.authenticated = true // 显式设置认证状态
+  req.session.created_at = new Date().toISOString()
 
   // 保存会话
   req.session.save((err) => {
@@ -120,7 +125,11 @@ app.post('/api/session', async (req, res) => {
       return res.status(500).json({ message: 'Failed to save session.' })
     }
     console.log('会话创建成功，Session ID:', req.sessionID)
-    res.status(200).json({ message: 'Session initialized successfully.' })
+    // 返回会话ID，便于调试
+    res.status(200).json({
+      message: 'Session initialized successfully.',
+      sessionID: req.sessionID
+    })
   })
 })
 
@@ -129,20 +138,53 @@ app.post('/api/session', async (req, res) => {
  */
 app.get('/api/session/status', (req, res) => {
   console.log('检查会话状态, Session ID:', req.sessionID)
+  console.log('会话对象存在:', !!req.session)
   console.log('会话上下文存在:', !!req.session?.context)
+  console.log('会话认证状态:', !!req.session?.authenticated)
+  console.log('会话创建时间:', req.session?.created_at || '未知')
+  console.log('请求的Cookie头:', req.headers.cookie)
 
-  if (req.session && req.session.context) {
+  // 找出当前请求中是否包含会话ID cookie
+  let foundSessionCookie = false
+  if (req.headers.cookie) {
+    const cookies = req.headers.cookie.split(';').map(c => c.trim())
+    foundSessionCookie = cookies.some(c => c.startsWith('jdwl.sid='))
+    console.log('请求中包含会话Cookie:', foundSessionCookie)
+  }
+
+  if (req.session && req.session.authenticated && req.session.context) {
     console.log('会话有效，用户已登录')
     res.status(200).json({
       success: true,
       loggedIn: true,
-      context: req.session.context
+      context: req.session.context,
+      sessionID: req.sessionID
     })
   } else {
-    console.log('会话无效或用户未登录')
+    console.log('会话无效或用户未登录，详情:', {
+      hasSession: !!req.session,
+      isAuthenticated: !!req.session?.authenticated,
+      hasContext: !!req.session?.context,
+      cookieHeader: !!req.headers.cookie,
+      foundSessionCookie
+    })
+
+    // 如果会话存在但不完整，在日志中显示更多信息
+    if (req.session) {
+      console.log('会话存在但不完整，会话ID:', req.sessionID)
+      // 尝试打印出会话内容，但限制大小以避免日志过大
+      const sessionKeys = Object.keys(req.session)
+      console.log('会话包含的键:', sessionKeys)
+      // 如果存在context但不完整，查看是什么原因
+      if (req.session.context && !req.session.authenticated) {
+        console.log('会话有context但未认证')
+      }
+    }
+
     res.status(200).json({
       success: true,
-      loggedIn: false
+      loggedIn: false,
+      sessionID: req.sessionID
     })
   }
 })

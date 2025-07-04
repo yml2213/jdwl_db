@@ -5,24 +5,43 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   // 打开登录窗口
   openLoginWindow: () => {
+    console.log('[Preload] 打开登录窗口')
     ipcRenderer.send('open-login-window')
   },
   // 检查登录状态
   checkLoginStatus: () => {
+    console.log('[Preload] 检查登录状态')
     return ipcRenderer.invoke('check-login-status')
   },
   // 清除登录Cookie
   clearCookies: () => {
+    console.log('[Preload] 清除Cookies')
     ipcRenderer.send('clear-cookies')
   },
   // 获取存储的Cookie
   getCookies: () => {
+    console.log('[Preload] 获取Cookies')
     return ipcRenderer.invoke('get-cookies')
   },
 
   // 网络请求相关
   sendRequest: (url, options) => {
+    console.log('[Preload] 发送请求:', url, options?.method || 'GET')
     return ipcRenderer.invoke('sendRequest', url, options)
+      .then(response => {
+        console.log('[Preload] 请求成功')
+        return response
+      })
+      .catch(error => {
+        console.error('[Preload] 请求失败:', error)
+        throw error
+      })
+  },
+
+  // 清除会话
+  clearSession: () => {
+    console.log('[Preload] 清除会话')
+    ipcRenderer.send('clearSession')
   },
 
   // 保存文件到本地
