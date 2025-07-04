@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 const server = http.createServer(app)
-const wss = new WebSocketServer({ server })
+const wss = new WebSocketServer({ noServer: true })
 
 // --- 会话管理 ---
 const AppFileStore = FileStore(session)
@@ -83,7 +83,7 @@ const clients = new Map()
 // 升级HTTP连接到WebSocket时，注入会话信息
 server.on('upgrade', (request, socket, head) => {
     sessionMiddleware(request, {}, () => {
-        if (!request.session.id) {
+        if (!request.session || !request.session.id) {
             socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
             socket.destroy()
             return
