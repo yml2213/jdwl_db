@@ -22,6 +22,8 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 // 统一的会话上下文
 const sessionContext = ref(null)
 const isInitialized = ref(false) // 添加初始化状态标记
+// 添加应用启动状态管理
+const appState = ref('loading') // 'loading', 'login', 'main'
 
 // 登录状态现在是一个计算属性，更可靠
 const isLoggedIn = computed(() => {
@@ -38,6 +40,12 @@ const isLoggedIn = computed(() => {
 // 添加 watch 来监控 isLoggedIn 的变化
 watch(isLoggedIn, (newVal) => {
   console.log('登录状态发生变化:', newVal)
+  // 登录状态变化时更新应用状态
+  if (newVal) {
+    appState.value = 'main'
+  } else if (appState.value !== 'loading') {
+    appState.value = 'login'
+  }
 })
 
 // 将会话上下文提供给所有子组件
@@ -78,6 +86,7 @@ const checkSessionStatus = async () => {
     if (status.loggedIn && status.context) {
       console.log('后端会话有效，准备恢复会话上下文...', status.context)
       handleSessionRestored(status.context)
+      return true
     } else {
       console.log(
         '后端会话无效或未登录, status.loggedIn =',
@@ -86,11 +95,70 @@ const checkSessionStatus = async () => {
         !!status.context
       )
       sessionContext.value = null
+      return false
     }
   } catch (error) {
     console.error('检查会话状态失败:', error)
     sessionContext.value = null
+    return false
   }
+}
+
+/**
+ * 尝试使用本地存储的数据自动恢复会话
+ */
+const tryAutoRestoreSession = async () => {
+  console.log('尝试自动恢复会话...')
+  try {
+    const cookies = await getAllCookies()
+    console.log('获取到 cookies:', cookies?.length || 0)
+    const vendorInfo = getSelectedVendor()
+    console.log('本地存储中的供应商信息:', vendorInfo?.name)
+    const departmentInfo = getSelectedDepartment()
+    console.log('本地存储中的事业部信息:', departmentInfo?.name)
+
+    if (cookies && cookies.length > 0 && vendorInfo && departmentInfo) {
+      const pinCookie = cookies.find((c) => c.name === 'pin')
+      if (pinCookie) {
+        console.log('找到 pin cookie:', pinCookie.value)
+        const sessionData = {
+          uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
+          cookies,
+          supplierInfo: vendorInfo,
+          departmentInfo
+        }
+
+        console.log('发现本地凭据，尝试创建会话...')
+        const sessionResult = await createSession(sessionData)
+        console.log('会话创建结果:', sessionResult)
+
+        // 重新检查会话状态
+        const restored = await checkSessionStatus()
+        console.log('会话恢复后检查登录状态:', isLoggedIn.value)
+
+        if (restored) {
+          console.log('会话自动恢复成功, 开始执行初始化...')
+          await performInit()
+          console.log('应用初始化完成')
+          return true
+        } else {
+          console.warn('会话恢复后仍未登录，可能需要重新登录')
+        }
+      } else {
+        console.warn('未找到 pin cookie，无法自动恢复会话')
+      }
+    } else {
+      console.warn(
+        '缺少自动恢复会话所需的数据:',
+        cookies ? '有cookies' : '无cookies',
+        vendorInfo ? '有供应商' : '无供应商',
+        departmentInfo ? '有事业部' : '无事业部'
+      )
+    }
+  } catch (error) {
+    console.error('自动恢复会话失败:', error)
+  }
+  return false
 }
 
 const handleSessionCreated = async () => {
@@ -124,6 +192,7 @@ const handleLogout = () => {
   isInitialized.value = false // 重置初始化状态
   clearSelections()
   console.log('前端登出完成。')
+  appState.value = 'login'
 }
 
 // 当前活动标签
@@ -197,85 +266,32 @@ const handleClearCacheAndReload = () => {
 // 组件挂载时检查会话状态
 onMounted(async () => {
   console.log('App 组件挂载，开始会话检查流程...')
-  console.log('初始 isLoggedIn 状态:', isLoggedIn.value)
-  await checkSessionStatus()
-  console.log(
-    '会话状态检查完成，当前登录状态:',
-    isLoggedIn.value,
-    '会话上下文:',
-    sessionContext.value ? '有值' : '无值'
-  )
+  appState.value = 'loading' // 确保应用初始状态为加载中
 
-  // 如果没有登录，但本地有 cookies 和 vendor/department 信息，尝试自动创建会话
-  if (!isLoggedIn.value) {
-    try {
-      console.log('尝试自动恢复会话...')
-      const cookies = await getAllCookies()
-      console.log('获取到 cookies:', cookies?.length || 0)
-      const vendorInfo = getSelectedVendor()
-      console.log('本地存储中的供应商信息:', vendorInfo?.name)
-      const departmentInfo = getSelectedDepartment()
-      console.log('本地存储中的事业部信息:', departmentInfo?.name)
+  // 首先尝试检查现有会话状态
+  const hasSession = await checkSessionStatus()
 
-      if (cookies && cookies.length > 0 && vendorInfo && departmentInfo) {
-        const pinCookie = cookies.find((c) => c.name === 'pin')
-        if (pinCookie) {
-          console.log('找到 pin cookie:', pinCookie.value)
-          const sessionData = {
-            uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
-            cookies,
-            supplierInfo: vendorInfo,
-            departmentInfo
-          }
+  // 如果没有现有会话，尝试自动恢复
+  if (!hasSession) {
+    const restored = await tryAutoRestoreSession()
 
-          console.log('发现本地凭据，尝试创建会话...')
-          const sessionResult = await createSession(sessionData)
-          console.log('会话创建结果:', sessionResult)
-
-          // 重新检查会话状态
-          await checkSessionStatus()
-          console.log('会话恢复后检查登录状态:', isLoggedIn.value)
-
-          if (isLoggedIn.value) {
-            console.log('会话自动恢复成功, 开始执行初始化...')
-            await performInit()
-            console.log('应用初始化完成')
-          } else {
-            console.warn('会话恢复后仍未登录，可能需要重新登录')
-          }
-        } else {
-          console.warn('未找到 pin cookie，无法自动恢复会话')
-        }
-      } else {
-        console.warn(
-          '缺少自动恢复会话所需的数据:',
-          cookies ? '有cookies' : '无cookies',
-          vendorInfo ? '有供应商' : '无供应商',
-          departmentInfo ? '有事业部' : '无事业部'
-        )
-      }
-    } catch (error) {
-      console.error('自动恢复会话失败:', error)
+    // 如果仍然没有恢复成功，显示登录界面
+    if (!restored) {
+      console.log('无法自动恢复会话，显示登录界面')
+      appState.value = 'login'
     }
   } else {
+    // 已有会话，直接执行初始化
     console.log('已经登录，执行应用初始化')
     await performInit()
+    appState.value = 'main'
   }
 
   // 添加额外检查，用于排查问题
   console.log('App挂载完成后的最终状态检查:')
   console.log('- isLoggedIn:', isLoggedIn.value)
   console.log('- sessionContext存在:', !!sessionContext.value)
-  console.log('- 显示的界面:', isLoggedIn.value ? '主界面' : '登录界面')
-
-  // 如果日志显示后端会话已创建但UI未更新，尝试再次检查会话状态
-  if (!isLoggedIn.value) {
-    console.log('UI显示未登录，但可能后端会话已创建。尝试再次检查会话状态...')
-    setTimeout(async () => {
-      await checkSessionStatus()
-      console.log('延迟检查会话状态结果:', isLoggedIn.value ? '已登录' : '未登录')
-    }, 1000) // 延迟1秒检查，以便所有异步操作完成
-  }
+  console.log('- 显示的界面:', appState.value)
 })
 
 onBeforeUnmount(() => {
@@ -306,7 +322,7 @@ const selectJsonContent = (event) => {
       </div>
       <div class="header-right">
         <AccountManager
-          v-if="isLoggedIn"
+          v-if="appState === 'main'"
           @session-created="handleSessionCreated"
           @logout="handleLogout"
         />
@@ -392,8 +408,14 @@ const selectJsonContent = (event) => {
       </div>
     </div>
 
+    <!-- 加载中状态 -->
+    <div v-if="appState === 'loading'" class="loading-container">
+      <div class="spinner"></div>
+      <p>正在加载应用数据...</p>
+    </div>
+
     <!-- 主体内容区 -->
-    <div class="main-body" v-if="isLoggedIn">
+    <div class="main-body" v-else-if="appState === 'main'">
       <div class="tabs">
         <button
           v-for="(_, tabName) in tabComponents"
@@ -414,7 +436,7 @@ const selectJsonContent = (event) => {
     </div>
 
     <!-- 登录界面 -->
-    <div v-else class="login-prompt">
+    <div v-else-if="appState === 'login'" class="login-prompt">
       <img :src="electronLogo" alt="Electron logo" class="logo" />
       <div class="login-card">
         <div class="card-header">
@@ -664,5 +686,33 @@ const selectJsonContent = (event) => {
   color: #8bc34a;
   font-size: 12px;
   font-weight: bold;
+}
+
+/* 新增加载动画样式 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 80vh;
+}
+
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border-left-color: #2d8cf0;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>

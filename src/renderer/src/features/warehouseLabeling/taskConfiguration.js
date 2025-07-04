@@ -46,7 +46,7 @@ export function getWorkflows() {
 export function getInitialFormState() {
     return {
         quickSelect: 'manual', // 'manual' or a workflow key
-        sku: '',
+        skus: '',
         options: { ...workflows.manual.options },
         payloads: {
             importProductNames: null

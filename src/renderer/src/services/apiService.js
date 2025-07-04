@@ -7,6 +7,45 @@ const BASE_URL = 'https://o.jdl.com'
 const API_BASE_URL = 'http://47.93.132.204:2333' // 后端服务器地址
 
 /**
+ * 安全序列化对象，移除无法克隆的元素
+ * @param {Object} obj - 需要序列化的对象
+ * @returns {Object} - 经过处理的可安全序列化的对象
+ */
+const safeSerialize = (obj) => {
+  try {
+    // 使用JSON序列化再反序列化来创建深拷贝，同时去除不可序列化的内容
+    return JSON.parse(JSON.stringify(obj))
+  } catch (error) {
+    console.error('对象序列化失败，尝试进行清理:', error)
+
+    // 如果是基本类型或null，直接返回
+    if (obj === null || typeof obj !== 'object') {
+      return obj
+    }
+
+    // 处理数组
+    if (Array.isArray(obj)) {
+      return obj.map(item => safeSerialize(item))
+    }
+
+    // 处理对象
+    const cleanObj = {}
+    for (const key in obj) {
+      try {
+        // 测试这个属性是否可以被JSON序列化
+        JSON.stringify(obj[key])
+        cleanObj[key] = safeSerialize(obj[key])
+      } catch (e) {
+        console.warn(`属性 ${key} 无法序列化，已跳过`)
+        // 对于无法序列化的属性，可以用一个占位符替代
+        cleanObj[key] = '[不可序列化的数据]'
+      }
+    }
+    return cleanObj
+  }
+}
+
+/**
  * 通过Electron主进程发送请求
  * @param {string} method - 请求方法
  * @param {string} endpoint - API端点
@@ -30,8 +69,9 @@ const sendRequest = async (method, endpoint, data = null, headers = {}) => {
         const params = new URLSearchParams(data).toString()
         endpoint = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${params}`
       } else {
-        // 对于其他请求，添加请求体
-        options.body = data
+        // 对于其他请求，添加请求体，确保进行安全序列化
+        const safeData = safeSerialize(data)
+        options.body = safeData
       }
     }
 
