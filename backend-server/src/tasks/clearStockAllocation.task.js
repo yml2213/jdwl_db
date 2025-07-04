@@ -1,5 +1,5 @@
 /**
- * 后端任务：库存分配清零
+ * 后端任务： 库存分配清零
  * 支持两种模式：
  * 1. 上传Excel文件，清零指定SKU的库存。
  * 2. 调用API，清零整个店铺的库存。
@@ -19,7 +19,7 @@ async function execute(context, updateFn, sessionData) {
   const { skus, store, department, scope } = context
 
   updateFn('库存分配清零任务开始...')
-  // console.log('清空整个店铺的库存分配 ===>', sessionData)
+  updateFn(`操作范围: ${scope === 'whole_store' ? '整店' : '指定SKU'}`)
   updateFn(`输入SKU数量: ${skus?.length || 'N/A'}`)
   updateFn(`店铺: ${store?.shopName}`)
   updateFn(`事业部: ${department?.name}`)
@@ -28,9 +28,7 @@ async function execute(context, updateFn, sessionData) {
 
   if (scope === 'whole_store') {
     // Whole store mode
-    updateFn(
-      `[Task: clearStockAllocation] 整店库存清零模式，店铺: ${store.shopName}`
-    )
+    updateFn(`[Task: clearStockAllocation] 整店库存清零模式，店铺: ${store.shopName}`)
     const result = await jdApiService.clearStockForWholeStore(
       store.id,
       department.id,
@@ -46,69 +44,58 @@ async function execute(context, updateFn, sessionData) {
       const errorMessage = result ? JSON.stringify(result) : '整店库存清零失败'
       throw new Error(errorMessage)
     }
-  } else {
-    // Specific SKUs mode with batching
-    if (!skus || skus.length === 0) throw new Error('SKU列表为空')
-    updateFn(
-      `[Task: clearStockAllocation] 指定SKU库存清零模式，总SKU数量: ${skus.length}`
-    )
-
-    const batchFn = async (skuBatch) => {
-      try {
-        updateFn(
-          `正在为 ${skuBatch.length} 个SKU创建批处理文件...`
-        )
-        const fileBuffer = createExcelFile(skuBatch, department, store)
-
-        // 临时文件保存到本地
-        await saveExcelFile(fileBuffer, {
-          dirName: TEMP_DIR_NAME,
-          store: store,
-          extension: 'xlsx'
-        })
-
-        if (fileBuffer) {
-          updateFn(`批处理文件已保存: ${TEMP_DIR_NAME}`)
-        }
-
-        // 调用封装在 jdApiService 中的函数来上传文件
-        const result = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn)
-
-        updateFn(`响应结果: ${JSON.stringify(result)}`)
-
-        // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360515796.csv","resultCode":"1"}
-        // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360063858.csv","resultCode":"2"}
-        // uploadInventoryAllocationFile 已经处理了重试逻辑，这里只需检查最终结果
-        if (result && (result.resultCode == 1 || result.resultCode == 2)) {
-          return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
-        } else {
-          const errorMessage =
-            result?.resultMessage || JSON.stringify(result) || '上传失败'
-          return { success: false, message: errorMessage }
-        }
-      } catch (error) {
-        updateFn(`批处理执行时发生严重错误: ${error.message}`, 'error')
-        return { success: false, message: `批处理失败: ${error.message}` }
-      }
-    }
-
-    const batchResults = await executeInBatches({
-      items: skus,
-      batchSize: BATCH_SIZE,
-      delay: BATCH_DELAY,
-      batchFn,
-      log: (message, level = 'info') => updateFn(`[批处理]: ${message}`, level),
-      isRunning: { value: true } // 假设任务总是在运行
-    })
-
-    if (!batchResults.success) {
-      throw new Error(`库存清零任务有失败的批次: ${batchResults.message}`)
-    }
-
-    const finalMessage = `所有批次成功完成。 ${batchResults.message}`
-    updateFn(finalMessage, 'success')
-    return { success: true, message: finalMessage }
   }
+
+  // Specific SKUs mode
+  if (!skus || skus.length === 0) {
+    throw new Error('SKU列表为空，无法执行按SKU清零的操作。')
+  }
+
+  updateFn(`[Task: clearStockAllocation] 指定SKU库存清零模式，总SKU数量: ${skus.length}`)
+
+  const batchFn = async (skuBatch) => {
+    try {
+      updateFn(`正在为 ${skuBatch.length} 个SKU创建批处理文件...`)
+      const fileBuffer = createExcelFile(skuBatch, department, store)
+
+      await saveExcelFile(fileBuffer, {
+        dirName: TEMP_DIR_NAME,
+        store: store,
+        extension: 'xlsx'
+      })
+      updateFn(`批处理文件已保存: ${TEMP_DIR_NAME}`)
+
+      const result = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn)
+      updateFn(`响应结果: ${JSON.stringify(result)}`)
+
+      if (result && (result.resultCode == 1 || result.resultCode == 2)) {
+        return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
+      } else {
+        const errorMessage = result?.resultMessage || JSON.stringify(result) || '上传失败'
+        return { success: false, message: errorMessage }
+      }
+    } catch (error) {
+      updateFn(`批处理执行时发生严重错误: ${error.message}`, 'error')
+      return { success: false, message: `批处理失败: ${error.message}` }
+    }
+  }
+
+  const batchResults = await executeInBatches({
+    items: skus,
+    batchSize: BATCH_SIZE,
+    delay: BATCH_DELAY,
+    batchFn,
+    log: (message, level = 'info') => updateFn(`[批处理]: ${message}`, level),
+    isRunning: { value: true }
+  })
+
+  if (!batchResults.success) {
+    throw new Error(`库存清零任务有失败的批次: ${batchResults.message}`)
+  }
+
+  const finalMessage = `所有批次成功完成。 ${batchResults.message}`
+  updateFn(finalMessage, 'success')
+  return { success: true, message: finalMessage }
 }
 
 

@@ -61,9 +61,8 @@ const handleAddTask = () => {
   let skus = []
 
   if (isWholeStore) {
-    // 整店模式使用特殊标识，但后端任务需要一个非空的sku列表来启动批处理
-    // 使用一个明确的标识符，而不是空数组
-    skus = ['WHOLE_STORE_IDENTIFIER']
+    // 整店模式，skus 列表应为空
+    skus = []
   } else {
     skus = form.value.sku.split(/[\n,，\\s]+/).filter((s) => s.trim())
     if (skus.length === 0) {

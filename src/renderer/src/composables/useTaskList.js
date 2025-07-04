@@ -45,10 +45,14 @@ export function useTaskList() {
         if (data.event === 'end') {
           console.log(`[SSE] 任务 ${task.name} 完成。`, data)
           task.status = data.success ? '成功' : '失败'
-          task.result = data.message || (data.data ? (data.data.message || '执行完毕') : '未知结果')
 
-          if (data.data?.message && data.data.message.length > (task.result || '').length) {
-            task.result = data.data.message
+          // 简化版的结果处理逻辑
+          if (data.success) {
+            // 成功的任务，结果优先从 data.data.message 获取
+            task.result = data.data?.message || '执行成功'
+          } else {
+            // 失败的任务，结果直接从 data.message 获取
+            task.result = data.message || '执行失败，但未提供详细信息'
           }
 
           eventSource.close()
