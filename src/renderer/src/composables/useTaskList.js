@@ -1,6 +1,6 @@
-import { ref, watch } from 'vue'
-import { executeFlow, executeTask as apiExecuteTask, API_BASE_URL } from '@/services/apiService'
-import { getSelectedDepartment, getSelectedVendor } from '@/utils/storageHelper'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { executeFlow as apiExecuteFlow } from '@/services/apiService'
+import webSocketService from '@/services/webSocketService'
 
 /**
  * @description 这是一个Vue组合式函数，用于封装和管理任务队列的所有逻辑。
@@ -12,72 +12,44 @@ export function useTaskList() {
   const activeTaskLogs = ref([])
   const selectedTask = ref(null)
 
-  let eventSource = null
+  const handleWebSocketMessage = (message) => {
+    const { event, taskId, data, ...rest } = message
+    if (!taskId) return
 
-  // 监听 selectedTask 的变化，自动更新日志视图
-  watch(selectedTask, (newTask) => {
-    if (newTask) {
-      activeTaskLogs.value = newTask.logs
-    } else {
-      activeTaskLogs.value = []
-    }
-  })
+    const task = taskList.value.find((t) => t.id === taskId)
+    if (!task) return
 
-  const listenForLogs = (task) => {
-    if (eventSource) {
-      eventSource.close()
-    }
-
-    if (!task.taskId) {
-      console.error('任务缺少 taskId，无法监听日志。')
-      task.status = '失败'
-      task.result = '内部错误：缺少任务ID。'
-      return
-    }
-
-    eventSource = new EventSource(`${API_BASE_URL}/api/log-stream/${task.taskId}`)
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-
-        // 检查是否是任务结束信号
-        if (data.event === 'end') {
-          console.log(`[SSE] 任务 ${task.name} 完成。`, data)
-          task.status = data.success ? '成功' : '失败'
-
-          // 简化版的结果处理逻辑
-          if (data.success) {
-            // 成功的任务，结果优先从 data.data.message 获取
-            task.result = data.data?.message || '执行成功'
-          } else {
-            // 失败的任务，结果直接从 data.message 获取
-            task.result = data.message || '执行失败，但未提供详细信息'
-          }
-
-          eventSource.close()
-          eventSource = null
-        } else {
-          // 普通日志消息
-          task.logs.push(data)
-          // 如果当前任务被选中，则实时更新日志视图
-          if (selectedTask.value && selectedTask.value.id === task.id) {
-            activeTaskLogs.value = [...task.logs]
-          }
+    switch (event) {
+      case 'log':
+        task.logs.push(data)
+        if (selectedTask.value && selectedTask.value.id === taskId) {
+          activeTaskLogs.value = [...task.logs]
         }
-      } catch (error) {
-        console.error('[SSE] 解析日志数据失败:', error)
-      }
-    }
-
-    eventSource.onerror = (error) => {
-      console.error('[SSE] 连接发生错误:', error)
-      task.status = '失败'
-      task.result = '与服务器的日志连接中断。'
-      eventSource.close()
-      eventSource = null
+        break
+      case 'end':
+        task.status = rest.success ? '成功' : '失败'
+        task.result = rest.success
+          ? rest.data?.message || '执行成功'
+          : rest.message || '执行失败'
+        break
+      case 'error':
+        task.status = '失败'
+        task.result = rest.message || '任务执行出错'
+        break
     }
   }
+
+  onMounted(() => {
+    webSocketService.on('message', handleWebSocketMessage)
+  })
+
+  onBeforeUnmount(() => {
+    webSocketService.off('message', handleWebSocketMessage)
+  })
+
+  watch(selectedTask, (newTask) => {
+    activeTaskLogs.value = newTask ? newTask.logs : []
+  })
 
   /**
    * @description 向队列中添加一个新任务。
@@ -90,7 +62,6 @@ export function useTaskList() {
       status: '等待中',
       result: '',
       logs: [],
-      taskId: null,
       createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     }
     taskList.value.push(newTask)
@@ -107,74 +78,33 @@ export function useTaskList() {
     task.status = '运行中'
     task.logs = []
     task.result = ''
-
-    // 选中当前执行的任务，以显示日志
     selectedTask.value = task
 
     try {
-      // 创建一个干净的payload对象，首先复制所有 executionData
       const payload = { ...task.executionData }
 
-      // 然后可以安全地覆盖或规范化特定字段
-      payload.skus = Array.isArray(task.executionData.skus) ? [...task.executionData.skus] : []
-      payload.store = task.executionData.store
-        ? {
-          id: task.executionData.store.id,
-          shopNo: task.executionData.store.shopNo,
-          shopName: task.executionData.store.shopName,
-          spShopNo: task.executionData.store.spShopNo || task.executionData.store.shopNo,
-          name: task.executionData.store.name || task.executionData.store.shopName
-        }
-        : {}
-      payload.warehouse = task.executionData.warehouse
-        ? {
-          id: task.executionData.warehouse.id,
-          warehouseId: task.executionData.warehouse.warehouseId,
-          warehouseNo: task.executionData.warehouse.warehouseNo,
-          warehouseName: task.executionData.warehouse.warehouseName
-        }
-        : {}
-      payload.vendor = task.executionData.vendor
-        ? {
-          id: task.executionData.vendor.id,
-          supplierNo: task.executionData.vendor.supplierNo,
-          supplierName: task.executionData.vendor.supplierName
-        }
-        : {}
-      payload.department = task.executionData.department
-        ? {
-          id: task.executionData.department.id,
-          deptNo: task.executionData.department.deptNo,
-          name: task.executionData.department.name
-        }
-        : {}
+      // 注意：这里我们假设 executionType 决定了是调用旧的 flow 还是新的 task
+      // 未来可以统一为一种 WebSocket 消息
+      if (task.executionType === 'flow') {
+        // 旧的工作流执行方式（如果还需要保留）
+        const result = await apiExecuteFlow(task.executionFeature, payload)
+        // 假设旧的 flow 执行完后也需要某种方式更新状态
+        task.status = result.success ? '成功' : '失败'
+        task.result = result.message || '工作流执行完毕'
 
-      // 添加其他可能的属性
-      if (task.executionData.logistics) {
-        payload.logistics = { ...task.executionData.logistics }
-      }
-
-      if (task.executionData.options) {
-        payload.options = { ...task.executionData.options }
-      }
-
-      if (task.executionData.inventoryAmount) {
-        payload.inventoryAmount = task.executionData.inventoryAmount
-      }
-
-      let taskId
-      if (task.executionType === 'task') {
-        taskId = await apiExecuteTask(task.executionFeature, payload)
       } else {
-        taskId = await executeFlow(task.executionFeature, payload)
+        // 新的、通过 WebSocket 执行任务的方式
+        webSocketService.send({
+          action: 'start_task',
+          taskId: task.id,
+          taskName: task.executionFeature,
+          payload: payload
+        })
       }
-      task.taskId = taskId
-      listenForLogs(task)
-
     } catch (error) {
-      console.error('启动任务执行出错:', error)
+      console.error(`启动任务 ${task.name} 出错:`, error)
       task.status = '失败'
-      task.result = error.message || '启动任务失败，请检查网络或后端服务。'
+      task.result = error.message || '启动任务时发生未知错误。'
     }
   }
 
@@ -185,10 +115,6 @@ export function useTaskList() {
     for (const task of taskList.value) {
       if (task.status === '等待中') {
         await executeTask(task)
-        // 在新的模型中，我们不等待任务完成，所以移除await
-        // 注意：这会导致所有任务几乎同时启动。如果需要顺序执行，
-        // 则需要一个更复杂的队列管理机制，监听每个任务的'end'事件。
-        // 目前，我们保持并行启动。
       }
     }
   }
@@ -197,25 +123,27 @@ export function useTaskList() {
    * @description 从队列中清除所有已完成（成功或失败）的任务。
    */
   const clearFinishedTasks = () => {
-    taskList.value = taskList.value.filter((t) => t.status === '等待中' || t.status === '运行中')
+    taskList.value = taskList.value.filter(
+      (t) => t.status === '等待中' || t.status === '运行中'
+    )
   }
 
   /**
    * @description 清空整个任务队列。
    */
   const clearAllTasks = () => {
-    if (eventSource) eventSource.close()
     taskList.value = []
     selectedTask.value = null
   }
 
   const deleteTask = (taskId) => {
-    const taskToDelete = taskList.value.find((t) => t.id === taskId)
-    if (taskToDelete && selectedTask.value && selectedTask.value.id === taskId) {
-      if (eventSource) eventSource.close()
-      selectedTask.value = null
+    const taskIndex = taskList.value.findIndex((t) => t.id === taskId)
+    if (taskIndex !== -1) {
+      if (selectedTask.value && selectedTask.value.id === taskId) {
+        selectedTask.value = null
+      }
+      taskList.value.splice(taskIndex, 1)
     }
-    taskList.value = taskList.value.filter((t) => t.id !== taskId)
   }
 
   const setSelectedTask = (task) => {

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import session from 'express-session'
 import sessionFileStore from 'session-file-store'
 import crypto from 'crypto'
+import { WebSocketServer } from 'ws'
 import logService, { events as logEvents } from './utils/logService.js'
 
 
@@ -54,40 +55,6 @@ app.use(
     name: 'jdwl.sid'
   })
 )
-
-// --- 新增：SSE日志流端点 ---
-app.get('/api/log-stream/:taskId', (req, res) => {
-  const { taskId } = req.params
-  console.log(`[SSE] 客户端已连接，订阅任务ID: ${taskId}`)
-
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  res.setHeader('Connection', 'keep-alive')
-  res.flushHeaders() //
-
-  const logListener = (logData) => {
-    // 这里的 console.log 是用于在后端调试 SSE 连接本身，可以保留
-    console.log(`[SSE] 发送日志给 ${taskId}:`, logData.message)
-    res.write(`data: ${JSON.stringify(logData)}\n\n`)
-  }
-
-  const endListener = (resultData) => {
-    console.log(`[SSE] 任务 ${taskId} 完成，发送最终结果并关闭连接。`)
-    res.write(`data: ${JSON.stringify({ event: 'end', ...resultData })}\n\n`)
-    res.end()
-    // 清理监听器
-    logEvents.off(taskId, logListener)
-  }
-
-  logEvents.on(taskId, logListener)
-  logEvents.once(`${taskId}-end`, endListener)
-
-  req.on('close', () => {
-    console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`)
-    logEvents.off(taskId, logListener)
-    logEvents.off(`${taskId}-end`, endListener)
-  })
-})
 
 // 根路由，用于测试服务器是否运行
 app.get('/', (req, res) => {
@@ -226,127 +193,143 @@ app.post('/api/init', async (req, res) => {
   }
 })
 
-/**
- * @description 新的、简化的工作流执行接口
- */
-app.post('/api/execute-flow', async (req, res) => {
-  const { flowName, payload } = req.body
-
-  if (!req.session.context) {
-    return res.status(401).json({ message: '无效的会话，请先登录' })
-  }
-
-  const taskId = crypto.randomUUID()
-
-  // 立即返回任务ID，让前端可以开始监听日志
-  res.status(202).json({ success: true, taskId })
-
-  // 异步执行工作流
-  setTimeout(async () => {
-    const { log } = logService.createLogger(taskId, flowName)
-
-    try {
-      const __dirname = path.dirname(fileURLToPath(import.meta.url))
-      const flowPath = path.join(__dirname, 'flows', `${flowName}.flow.js`)
-      const flowModule = await import(flowPath)
-
-      if (!flowModule.default || typeof flowModule.default.execute !== 'function') {
-        throw new Error(`工作流 ${flowName} 或其 execute 方法未找到`)
-      }
-
-      const sessionData = {
-        ...req.session.context,
-        store: payload.store,
-        department: payload.department,
-        vendor: payload.vendor,
-        session: req.session,
-      }
-
-      if (req.session.operationId) {
-        sessionData.operationId = req.session.operationId
-      }
-
-      const result = await flowModule.default.execute(payload, sessionData, log)
-      logEvents.emit(`${taskId}-end`, { success: true, data: result })
-
-    } catch (error) {
-      const logger = logService.createLogger(taskId, flowName)
-      const errorMessage = error.message || '工作流执行时发生未知错误'
-      logger.error(errorMessage, { stack: error.stack })
-      logEvents.emit(`${taskId}-end`, { success: false, message: errorMessage })
-    }
-  }, 0)
-})
-
-/**
- * @description 执行单个任务的端点
- */
-app.post('/task', async (req, res) => {
-  const { taskName, payload, mode } = req.body
-
-  if (!req.session.context) {
-    return res.status(401).json({ message: '无效的会话，请先登录' })
-  }
-
-  if (!taskName) {
-    return res.status(400).json({ success: false, message: '必须提供 taskName' })
-  }
-
-  const taskId = crypto.randomUUID()
-  // 立即返回任务ID
-  res.status(202).json({ success: true, taskId })
-
-  // 将 mode 添加到 payload，以兼容旧的前端请求结构
-  if (mode) {
-    payload.mode = mode
-  }
-
-  // 异步执行任务
-  setTimeout(async () => {
-    const { updateFn, error: logError } = logService.createLogger(taskId, taskName)
-
-    const sessionData = {
-      ...req.session.context,
-      store: payload.store,
-      department: payload.department,
-      vendor: payload.vendor,
-      session: req.session,
-    }
-    if (req.session.operationId) {
-      sessionData.operationId = req.session.operationId
-    }
-
-    try {
-      const __dirname = path.dirname(fileURLToPath(import.meta.url))
-      const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
-      const taskModule = await import(taskPath)
-
-      const taskFunction = taskModule.default?.execute
-
-      if (!taskFunction) {
-        throw new Error(`任务 ${taskName} 未找到或其导出格式不正确`)
-      }
-
-      updateFn(`开始执行任务 ${taskName}...`)
-      const result = await taskFunction(payload, updateFn, sessionData)
-      updateFn(`任务 ${taskName} 执行完成。`)
-
-      if (result && result.success === false) {
-        logEvents.emit(`${taskId}-end`, { success: false, message: result.message })
-      } else {
-        logEvents.emit(`${taskId}-end`, { success: true, data: result })
-      }
-    } catch (error) {
-      console.error(`执行任务 ${taskName} 时出错:`, error)
-      const errorMessage = error.message || '任务执行时发生未知错误'
-      logError(errorMessage, { stack: error.stack })
-      logEvents.emit(`${taskId}-end`, { success: false, message: errorMessage })
-    }
-  }, 0)
-})
-
-// --- Start Server ---
-app.listen(port, '0.0.0.0', () => {
+// --- 启动服务器 ---
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`服务已启动，监听所有地址，端口：${port}`)
   console.log(`可通过 http://localhost:${port} 或本机IP地址访问`)
 })
+
+// --- WebSocket 服务器实现 ---
+const wss = new WebSocketServer({ server })
+
+// 用于追踪与单个WebSocket连接关联的所有任务ID
+const wsTasks = new Map()
+
+wss.on('connection', (ws, req) => {
+  console.log('[WebSocket] 客户端已连接')
+  wsTasks.set(ws, new Set())
+
+  // 从http请求中恢复session
+  // 注意：这依赖于 express-session 和 session-file-store 的工作方式
+  const fakeReq = {
+    headers: req.headers,
+    sessionStore: app.get('sessionStore'), // 我们需要将session store暴露出来
+    sessionID: null
+  }
+
+  // 从cookie中解析sessionID
+  const cookies = req.headers.cookie?.split(';').reduce((acc, cookie) => {
+    const [key, value] = cookie.trim().split('=')
+    acc[key] = value
+    return acc
+  }, {})
+
+  const sidCookie = cookies?.['jdwl.sid']
+  if (sidCookie) {
+    // express-session 会对 session ID 进行签名，我们需要去掉 's:' 前缀
+    fakeReq.sessionID = sidCookie.split(':')[1].split('.')[0]
+  }
+
+  ws.on('message', async (message) => {
+    let msg
+    try {
+      msg = JSON.parse(message)
+      console.log('[WebSocket] 收到格式化消息:', msg)
+    } catch (e) {
+      console.error('[WebSocket] 无法解析消息:', message)
+      return
+    }
+
+    if (msg.action === 'start_task') {
+      const { taskName, taskId, payload, mode } = msg
+
+      if (!taskId || !taskName) {
+        ws.send(JSON.stringify({ event: 'error', message: 'start_task 消息缺少 taskId 或 taskName' }))
+        return
+      }
+
+      // 追踪这个任务ID
+      wsTasks.get(ws).add(taskId)
+
+      // 为这个特定的任务设置事件监听器
+      const logListener = (logData) => {
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ event: 'log', taskId, data: logData }))
+        }
+      }
+      const endListener = (resultData) => {
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ event: 'end', taskId, ...resultData }))
+        }
+        // 任务结束，清理监听器
+        logEvents.off(taskId, logListener)
+        logEvents.off(`${taskId}-end`, endListener)
+        wsTasks.get(ws)?.delete(taskId)
+      }
+
+      logEvents.on(taskId, logListener)
+      logEvents.once(`${taskId}-end`, endListener)
+
+      // 使用 setTimeout 异步执行任务，与旧实现保持一致
+      setTimeout(async () => {
+        app.get('sessionStore').get(fakeReq.sessionID, async (err, session) => {
+          if (err || !session) {
+            console.error('[WebSocket] 无法获取会话:', err)
+            logEvents.emit(`${taskId}-end`, { success: false, message: '无法获取会话，请重新登录' })
+            return
+          }
+
+          if (mode) payload.mode = mode
+
+          const { updateFn, error: logError } = logService.createLogger(taskId, taskName)
+          const sessionData = { ...session.context, ...payload, session }
+          if (session.operationId) sessionData.operationId = session.operationId
+
+          try {
+            const taskPath = path.join(__dirname, 'tasks', `${taskName}.task.js`)
+            const taskModule = await import(taskPath)
+            const taskFunction = taskModule.default?.execute
+            if (!taskFunction) throw new Error(`任务 ${taskName} 未找到或其导出格式不正确`)
+
+            updateFn(`开始执行任务 ${taskName}...`)
+            const result = await taskFunction(payload, updateFn, sessionData)
+            updateFn(`任务 ${taskName} 执行完成。`)
+
+            if (result && result.success === false) {
+              logEvents.emit(`${taskId}-end`, { success: false, message: result.message })
+            } else {
+              logEvents.emit(`${taskId}-end`, { success: true, data: result })
+            }
+          } catch (error) {
+            const errorMessage = error.message || '任务执行时发生未知错误'
+            logError(errorMessage, { stack: error.stack })
+            logEvents.emit(`${taskId}-end`, { success: false, message: errorMessage })
+          }
+        })
+      }, 0)
+    }
+  })
+
+  ws.on('close', () => {
+    console.log('[WebSocket] 客户端已断开连接')
+    // 清理该连接关联的所有任务的监听器
+    if (wsTasks.has(ws)) {
+      const tasks = wsTasks.get(ws)
+      tasks.forEach(taskId => {
+        // 这里的清理比较棘手，因为监听器函数是在另一个作用域中定义的
+        // 这是一个简化版，更好的实现需要一个全局的监听器管理器
+        logEvents.removeAllListeners(taskId)
+        logEvents.removeAllListeners(`${taskId}-end`)
+        console.log(`[WebSocket] 清理了任务 ${taskId} 的监听器`)
+      })
+      wsTasks.delete(ws)
+    }
+  })
+
+  ws.on('error', (error) => {
+    console.error('[WebSocket] 发生错误:', error)
+  })
+})
+
+// 为了让websocket能访问session store
+app.set('sessionStore', app.get('store'))

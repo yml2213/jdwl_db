@@ -15,6 +15,7 @@ import {
   getSelectedWarehouse
 } from './utils/storageHelper'
 import { getAllCookies } from '@/utils/cookieHelper'
+import webSocketService from './services/webSocketService'
 
 // 开发模式标志
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -265,37 +266,24 @@ const handleClearCacheAndReload = () => {
 
 // 组件挂载时检查会话状态
 onMounted(async () => {
-  console.log('App 组件挂载，开始会话检查流程...')
-  appState.value = 'loading' // 确保应用初始状态为加载中
+  console.log('App.vue onMounted: 应用已挂载')
+  webSocketService.connect() // 建立 WebSocket 连接
 
-  // 首先尝试检查现有会话状态
-  const hasSession = await checkSessionStatus()
+  appState.value = 'loading'
+  console.log('开始时应用状态:', appState.value)
 
-  // 如果没有现有会话，尝试自动恢复
-  if (!hasSession) {
-    const restored = await tryAutoRestoreSession()
-
-    // 如果仍然没有恢复成功，显示登录界面
-    if (!restored) {
-      console.log('无法自动恢复会话，显示登录界面')
-      appState.value = 'login'
-    }
+  const restored = await tryAutoRestoreSession()
+  if (!restored) {
+    console.log('无法自动恢复会话，显示登录界面')
+    appState.value = 'login'
   } else {
-    // 已有会话，直接执行初始化
-    console.log('已经登录，执行应用初始化')
-    await performInit()
-    appState.value = 'main'
+    // tryAutoRestoreSession 内部会在成功后将状态设置为 'main'
+    console.log('App.vue onMounted: 会话恢复成功，当前状态:', appState.value)
   }
-
-  // 添加额外检查，用于排查问题
-  console.log('App挂载完成后的最终状态检查:')
-  console.log('- isLoggedIn:', isLoggedIn.value)
-  console.log('- sessionContext存在:', !!sessionContext.value)
-  console.log('- 显示的界面:', appState.value)
 })
 
 onBeforeUnmount(() => {
-  // 不再需要监听任何事件
+  webSocketService.close()
 })
 
 // 选择JSON内容

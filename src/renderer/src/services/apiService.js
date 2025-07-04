@@ -611,24 +611,6 @@ export const createSession = async (sessionData) => {
 }
 
 /**
- * @description 调用后端的通用任务执行接口
- * @param {string} taskName 要执行的任务名称
- * @param {object} payload 任务需要的具体数据
- * @returns {Promise<string>} - 返回一个唯一的 taskId
- */
-export const executeTask = async (taskName, payload) => {
-  console.log(`[apiService] 请求执行任务: ${taskName}`)
-  const response = await throttledSendRequest('POST', '/task', { taskName, payload }, {
-    'Content-Type': 'application/json'
-  })
-
-  if (response && response.taskId) {
-    return response.taskId
-  }
-  throw new Error('未能从后端获取任务ID')
-}
-
-/**
  * 检查后端会话状态
  * @returns {Promise<object>}
  */
@@ -655,24 +637,6 @@ export const getSessionStatus = async () => {
 }
 
 /**
- * 执行一个后端工作流
- * @param {string} flowName - 要执行的工作流名称
- * @param {object} payload - 工作流所需的负载
- * @returns {Promise<string>} - 返回一个唯一的 taskId
- */
-export const executeFlow = async (flowName, payload) => {
-  console.log(`[apiService] 请求执行工作流: ${flowName}`)
-  const response = await throttledSendRequest('POST', '/api/execute-flow', { flowName, payload }, {
-    'Content-Type': 'application/json'
-  })
-
-  if (response && response.taskId) {
-    return response.taskId
-  }
-  throw new Error('未能从后端获取工作流ID')
-}
-
-/**
  * @description 调用后端 /api/init 接口
  */
 export const initSession = async () => {
@@ -688,4 +652,31 @@ export const initSession = async () => {
     console.error('初始化会话失败:', error)
     throw error
   }
+}
+
+/**
+ * @description 获取文件内容的函数
+ * @param {string} filePath - 文件路径
+ * @returns {Promise<string>}
+ */
+export async function getFileContent(filePath) {
+  return await window.electron.ipcRenderer.invoke('get-file-content', filePath)
+}
+
+/**
+ * @description 保存文件内容的函数
+ * @param {string} filePath - 文件路径
+ * @param {string} content - 文件内容
+ * @returns {Promise<void>}
+ */
+export async function saveFileContent(filePath, content) {
+  return await window.electron.ipcRenderer.invoke('save-file-content', filePath, content)
+}
+
+/**
+ * @description 打开文件选择对话框
+ * @returns {Promise<string|null>} - 返回文件路径或null
+ */
+export async function openFileDialog() {
+  return await window.electron.ipcRenderer.invoke('open-file-dialog')
 }
