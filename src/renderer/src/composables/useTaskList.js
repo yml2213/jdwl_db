@@ -1,5 +1,4 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { executeFlow as apiExecuteFlow } from '@/services/apiService'
 import webSocketService from '@/services/webSocketService'
 
 /**
@@ -83,24 +82,14 @@ export function useTaskList() {
     try {
       const payload = { ...task.executionData }
 
-      // 注意：这里我们假设 executionType 决定了是调用旧的 flow 还是新的 task
-      // 未来可以统一为一种 WebSocket 消息
-      if (task.executionType === 'flow') {
-        // 旧的工作流执行方式（如果还需要保留）
-        const result = await apiExecuteFlow(task.executionFeature, payload)
-        // 假设旧的 flow 执行完后也需要某种方式更新状态
-        task.status = result.success ? '成功' : '失败'
-        task.result = result.message || '工作流执行完毕'
-
-      } else {
-        // 新的、通过 WebSocket 执行任务的方式
-        webSocketService.send({
-          action: 'start_task',
-          taskId: task.id,
-          taskName: task.executionFeature,
-          payload: payload
-        })
-      }
+      // 统一通过 WebSocket 执行任务，后端会根据 taskName 区分是 task 还是 flow
+      webSocketService.send({
+        action: 'start_task',
+        taskId: task.id,
+        taskName: task.executionFeature,
+        isFlow: task.executionType === 'flow', // 传递类型给后端
+        payload: payload
+      })
     } catch (error) {
       console.error(`启动任务 ${task.name} 出错:`, error)
       task.status = '失败'

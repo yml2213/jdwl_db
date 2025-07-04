@@ -145,7 +145,7 @@ app.whenReady().then(() => {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.jdl.com https://*.jd.com; connect-src 'self' http://localhost:2333 http://localhost:3000 http://47.93.132.204:2333 https://*.jdl.com https://*.jd.com; worker-src blob: data:;"
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.jdl.com https://*.jd.com; connect-src 'self' http://localhost:2333 http://localhost:3000 http://47.93.132.204:2333 ws://localhost:2333 https://*.jdl.com https://*.jd.com; worker-src blob: data:;"
         ]
       }
     })

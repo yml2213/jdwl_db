@@ -1,11 +1,36 @@
-import { EventEmitter } from 'events'
+// A simple, browser-compatible EventEmitter.
+class BrowserEventEmitter {
+    constructor() {
+        this.callbacks = {}
+    }
+
+    on(event, cb) {
+        if (!this.callbacks[event]) this.callbacks[event] = []
+        this.callbacks[event].push(cb)
+    }
+
+    off(event, cb) {
+        const callbacks = this.callbacks[event]
+        if (callbacks) {
+            this.callbacks[event] = callbacks.filter((c) => c !== cb)
+        }
+    }
+
+    emit(event, ...args) {
+        const callbacks = this.callbacks[event]
+        if (callbacks) {
+            callbacks.forEach((cb) => cb(...args))
+        }
+    }
+}
+
 import { API_BASE_URL } from './apiService' // 引入统一的 API 地址
 
 // 根据 API_BASE_URL 动态生成 WebSocket URL
 // 这会自动处理 http -> ws 和 https -> wss 的转换
 const WS_URL = API_BASE_URL.replace(/^http/, 'ws')
 
-class WebSocketService extends EventEmitter {
+class WebSocketService extends BrowserEventEmitter {
     constructor() {
         super()
         this.connection = null
