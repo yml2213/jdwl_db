@@ -15,30 +15,33 @@ const BATCH_DELAY = 5 * 60 * 1000 // 5分钟
 const TEMP_DIR_NAME = '库存分配清零'
 
 
-async function execute(context, _updateFn, sessionData) {
+async function execute(context, updateFn, sessionData) {
   const { skus, store, department, scope } = context
 
-  console.log('库存分配清零 的 context ===>', context)
+  updateFn('库存分配清零任务开始...')
   // console.log('清空整个店铺的库存分配 ===>', sessionData)
-  console.log('库存分配清零 输入的 skus ===>', skus)
-  console.log('库存分配清零  store ===>', store)
-  console.log('库存分配清零  department===>', department)
+  updateFn(`输入SKU数量: ${skus?.length || 'N/A'}`)
+  updateFn(`店铺: ${store?.shopName}`)
+  updateFn(`事业部: ${department?.name}`)
 
   if (!store || !department) throw new Error('缺少店铺或事业部信息')
 
   if (scope === 'whole_store') {
     // Whole store mode
-    console.log(
+    updateFn(
       `[Task: clearStockAllocation] 整店库存清零模式，店铺: ${store.shopName}`
     )
     const result = await jdApiService.clearStockForWholeStore(
       store.id,
       department.id,
       sessionData,
+      updateFn
     )
     //  {"resultCode":1,"resultMessage":"操作成功！","resultData":null}
     if (result && result.resultCode === 1) {
-      return { success: true, message: result.resultMessage || '整店库存清零成功。' }
+      const message = result.resultMessage || '整店库存清零成功。'
+      updateFn(message)
+      return { success: true, message: message }
     } else {
       const errorMessage = result ? JSON.stringify(result) : '整店库存清零失败'
       throw new Error(errorMessage)
@@ -46,14 +49,14 @@ async function execute(context, _updateFn, sessionData) {
   } else {
     // Specific SKUs mode with batching
     if (!skus || skus.length === 0) throw new Error('SKU列表为空')
-    console.log(
+    updateFn(
       `[Task: clearStockAllocation] 指定SKU库存清零模式，总SKU数量: ${skus.length}`
     )
 
     const batchFn = async (skuBatch) => {
       try {
-        console.log(
-          `[Task: clearStockAllocation] 正在为 ${skuBatch.length} 个SKU创建批处理文件...`
+        updateFn(
+          `正在为 ${skuBatch.length} 个SKU创建批处理文件...`
         )
         const fileBuffer = createExcelFile(skuBatch, department, store)
 
@@ -65,13 +68,13 @@ async function execute(context, _updateFn, sessionData) {
         })
 
         if (fileBuffer) {
-          console.log(`[Task: clearStockAllocation] 批处理文件已保存: ${TEMP_DIR_NAME}`)
+          updateFn(`批处理文件已保存: ${TEMP_DIR_NAME}`)
         }
 
         // 调用封装在 jdApiService 中的函数来上传文件
-        const result = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData)
+        const result = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn)
 
-        console.log('库存分配清零 响应 result===>', result)
+        updateFn(`响应结果: ${JSON.stringify(result)}`)
 
         // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360515796.csv","resultCode":"1"}
         // {"resultData":"report/goodsStockConfig/goodsStockConfigImportLog-威名2-1751360063858.csv","resultCode":"2"}
@@ -84,7 +87,7 @@ async function execute(context, _updateFn, sessionData) {
           return { success: false, message: errorMessage }
         }
       } catch (error) {
-        console.error('[Task: clearStockAllocation] 批处理执行时发生严重错误:', error)
+        updateFn(`批处理执行时发生严重错误: ${error.message}`, 'error')
         return { success: false, message: `批处理失败: ${error.message}` }
       }
     }
@@ -94,8 +97,7 @@ async function execute(context, _updateFn, sessionData) {
       batchSize: BATCH_SIZE,
       delay: BATCH_DELAY,
       batchFn,
-      log: (message, level = 'info') =>
-        console.log(`[batchProcessor] [${level.toUpperCase()}]: ${message}`),
+      log: (message, level = 'info') => updateFn(`[批处理]: ${message}`, level),
       isRunning: { value: true } // 假设任务总是在运行
     })
 
@@ -103,7 +105,9 @@ async function execute(context, _updateFn, sessionData) {
       throw new Error(`库存清零任务有失败的批次: ${batchResults.message}`)
     }
 
-    return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
+    const finalMessage = `所有批次成功完成。 ${batchResults.message}`
+    updateFn(finalMessage, 'success')
+    return { success: true, message: finalMessage }
   }
 }
 

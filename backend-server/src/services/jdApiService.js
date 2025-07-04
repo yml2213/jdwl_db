@@ -154,7 +154,7 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
  * @param {object} sessionData - 完整的会话对象
  * @returns {Promise<object>} - 操作结果
  */
-export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
+export async function uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn = () => { }) {
   const { cookieString } = getAuthInfo(sessionData)
 
   const url = '/goodsStockConfig/importGoodsStockConfig.do'
@@ -171,7 +171,7 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
   const RETRY_DELAY = 5 * 60 * 1000 + 5000 // 5 minutes and 5 seconds
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    console.log(`[jdApiService] 尝试上传库存分配文件... (第 ${attempt} 次)`)
+    updateFn(`[jdApiService] 尝试上传库存分配文件... (第 ${attempt} 次)`)
     // requestJdApi 已经包含了 try-catch，会抛出网络或HTTP层面的错误
     const result = await requestJdApi({
       method: 'POST',
@@ -183,7 +183,7 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData) {
     // 检查业务层面的频率限制错误
     if (result && result.resultMessage && result.resultMessage.includes('频繁操作')) {
       if (attempt < MAX_RETRIES) {
-        console.log(
+        updateFn(
           `[jdApiService] 触发频率限制，将在约5分钟后重试... (响应: ${result.resultMessage})`
         )
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY))
@@ -1040,13 +1040,14 @@ export async function submitReturnOrder(payload, sessionData) {
  * @param {object} sessionData - 完整的会话对象
  * @returns {Promise<object>} - 操作结果
  */
-export async function clearStockForWholeStore(shopId, deptId, sessionData) {
+export async function clearStockForWholeStore(shopId, deptId, sessionData, updateFn = () => { }) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
   const params = {
     csrfToken,
     shopId,
     deptId
   }
+  updateFn('准备执行整店库存清零操作...')
   console.log('清空整个店铺的库存分配 ===>', params)
   return await requestJdApi({
     method: 'GET',

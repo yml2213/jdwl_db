@@ -205,6 +205,10 @@ export function useTaskList() {
     taskList.value = taskList.value.filter((t) => t.id !== taskId)
   }
 
+  const setSelectedTask = (task) => {
+    selectedTask.value = task
+  }
+
   // 返回状态和方法
   return {
     taskList,
@@ -215,6 +219,7 @@ export function useTaskList() {
     deleteTask,
     runAllTasks,
     clearFinishedTasks,
-    clearAllTasks
+    clearAllTasks,
+    setSelectedTask
   }
 }

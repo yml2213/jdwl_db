@@ -11,6 +11,7 @@ const props = defineProps({
 })
 
 // --- 状态管理 ---
+const activeTab = ref('tasks')
 const form = ref({
   orderNumber: '',
   year: new Date().getFullYear().toString(),
@@ -29,7 +30,16 @@ const {
   selectedDepartment
 } = useShopAndWarehouse()
 
-const { taskList, addTask, executeTask, runAllTasks, clearAllTasks, deleteTask } = useTaskList()
+const {
+  taskList,
+  addTask,
+  executeTask,
+  runAllTasks,
+  clearAllTasks,
+  deleteTask,
+  setSelectedTask,
+  activeTaskLogs
+} = useTaskList()
 
 // --- 计算属性 ---
 const currentShopInfo = computed(() =>
@@ -51,6 +61,7 @@ const handleAddTask = () => {
       store: currentShopInfo.value,
       warehouse: { warehouseName: 'N/A' },
       executionFeature: 'returnStorage',
+      executionType: 'task',
       executionData: {
         orderNumber: orderNum,
         year: form.value.year,
@@ -139,13 +150,15 @@ onMounted(() => {
     </div>
 
     <TaskArea
+      v-model:active-tab="activeTab"
       :task-list="taskList"
+      :logs="activeTaskLogs"
       :is-any-task-running="false"
-      active-tab="tasks"
       @execute-tasks="runAllTasks"
       @clear-tasks="clearAllTasks"
       @execute-one="executeTask"
       @delete-task="deleteTask"
+      @select-task="setSelectedTask"
     />
   </div>
 </template>

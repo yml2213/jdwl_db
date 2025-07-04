@@ -32,6 +32,7 @@
           @delete-task="$emit('delete-task', $event)"
           @execute-one="$emit('execute-one', $event)"
           @update:selected="$emit('update:selected', $event)"
+          @select-task="$emit('select-task', $event)"
         />
       </div>
       <div :class="['tab-pane', { active: activeTab === 'logs' }]">
@@ -69,7 +70,14 @@ defineProps({
   activeTab: String
 })
 
-const emit = defineEmits(['update:active-tab', 'delete-task', 'execute-one', 'enable-products', 'update:selected'])
+const emit = defineEmits([
+  'update:active-tab',
+  'delete-task',
+  'execute-one',
+  'enable-products',
+  'update:selected',
+  'select-task'
+])
 
 const onEnableProducts = (products) => {
   emit('enable-products', products)

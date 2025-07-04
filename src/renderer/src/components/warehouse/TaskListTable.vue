@@ -20,7 +20,12 @@
         <tr v-if="tasks.length === 0">
           <td colspan="9" class="no-tasks-row">暂无任务</td>
         </tr>
-        <tr v-for="task in tasks" :key="task.id" class="task-row">
+        <tr
+          v-for="task in tasks"
+          :key="task.id"
+          class="task-row"
+          @click="$emit('select-task', task)"
+        >
           <td class="task-cell checkbox-cell">
             <input type="checkbox" v-model="selectedTasks" :value="task.id" />
           </td>
@@ -62,7 +67,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete-task', 'execute-one', 'update:selected'])
+const emit = defineEmits(['delete-task', 'execute-one', 'update:selected', 'select-task'])
 
 const selectedTasks = ref([])
 

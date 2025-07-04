@@ -24,6 +24,7 @@
       @delete-task="$emit('delete-task', $event)"
       @execute-one="$emit('execute-one', $event)"
       @update:selected="updateSelectedTasks"
+      @select-task="$emit('select-task', $event)"
     />
   </div>
 </template>
@@ -51,7 +52,14 @@ defineProps({
   }
 })
 
-defineEmits(['execute-tasks', 'clear-tasks', 'delete-task', 'update:active-tab', 'execute-one'])
+defineEmits([
+  'execute-tasks',
+  'clear-tasks',
+  'delete-task',
+  'update:active-tab',
+  'execute-one',
+  'select-task'
+])
 
 const selectedTaskIds = ref([])
 

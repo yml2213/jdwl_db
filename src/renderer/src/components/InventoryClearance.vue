@@ -11,6 +11,7 @@ const props = defineProps({
 })
 
 // --- 状态管理 ---
+const activeTab = ref('tasks')
 const form = ref({
   mode: 'sku', // 'sku' or 'whole_store'
   sku: '',
@@ -34,7 +35,16 @@ const {
 } = useShopAndWarehouse()
 
 // 任务列表管理 (全局共享)
-const { taskList, addTask, executeTask, runAllTasks, clearAllTasks, deleteTask } = useTaskList()
+const {
+  taskList,
+  addTask,
+  executeTask,
+  runAllTasks,
+  clearAllTasks,
+  deleteTask,
+  setSelectedTask,
+  activeTaskLogs
+} = useTaskList()
 
 // --- 计算属性 ---
 const currentShopInfo = computed(() =>
@@ -51,7 +61,9 @@ const handleAddTask = () => {
   let skus = []
 
   if (isWholeStore) {
-    skus = ['WHOLE_STORE'] // 整店模式使用特殊标识
+    // 整店模式使用特殊标识，但后端任务需要一个非空的sku列表来启动批处理
+    // 使用一个明确的标识符，而不是空数组
+    skus = ['WHOLE_STORE_IDENTIFIER']
   } else {
     skus = form.value.sku.split(/[\n,，\\s]+/).filter((s) => s.trim())
     if (skus.length === 0) {
@@ -59,35 +71,52 @@ const handleAddTask = () => {
     }
   }
 
-  // 构造要传递给执行器的数据
-  const executionData = {
-    scope: form.value.mode, // 'sku' or 'whole_store'
-    skus, // 使用处理后的skus
+  const commonData = {
+    scope: form.value.mode,
+    skus,
     store: currentShopInfo.value,
-    options: { ...form.value.options },
     vendor: selectedVendor.value,
     department: selectedDepartment.value
   }
 
-  // 计算任务显示名称
-  let featureName = Object.entries(form.value.options)
-    .filter(([, value]) => value === true)
-    .map(([key]) => (key === 'clearStockAllocation' ? '库存清零' : '取消京配'))
-    .join(' | ')
+  const skuDisplayName = isWholeStore
+    ? '整店操作'
+    : skus.length > 1
+      ? `批量任务 (${skus.length}个SKU)`
+      : skus[0]
 
-  // 添加到任务列表
-  addTask({
-    sku: isWholeStore
-      ? '整店操作'
-      : skus.length > 1
-        ? `批量任务 (${skus.length}个SKU)`
-        : skus[0],
-    name: featureName,
-    store: currentShopInfo.value,
-    warehouse: { warehouseName: 'N/A' }, // Pass an object as expected by the table
-    executionFeature: 'stockClearance', // 指定后端的 stockClearance 工作流
-    executionData // 附加执行所需的数据
-  })
+  if (form.value.options.clearStockAllocation) {
+    addTask({
+      sku: skuDisplayName,
+      name: '库存清零',
+      store: currentShopInfo.value,
+      warehouse: { warehouseName: 'N/A' },
+      executionFeature: 'clearStockAllocation',
+      executionType: 'task',
+      executionData: {
+        ...commonData,
+        options: { clearStockAllocation: true }
+      }
+    })
+  }
+
+  if (form.value.options.cancelJpSearch) {
+    addTask({
+      sku: skuDisplayName,
+      name: '取消京配打标',
+      store: currentShopInfo.value,
+      warehouse: { warehouseName: 'N/A' },
+      executionFeature: 'cancelJpSearch',
+      executionType: 'task',
+      executionData: {
+        ...commonData,
+        options: {
+          cancelJpSearch: true,
+          cancelJpSearchScope: form.value.mode === 'whole_store' ? 'all' : 'selected'
+        }
+      }
+    })
+  }
 }
 
 // --- 侦听器和生命周期 ---
@@ -133,13 +162,15 @@ onMounted(() => {
       @add-task="handleAddTask"
     />
     <TaskArea
+      v-model:active-tab="activeTab"
       :task-list="taskList"
+      :logs="activeTaskLogs"
       :is-any-task-running="false"
-      active-tab="tasks"
       @execute-tasks="runAllTasks"
       @clear-tasks="clearAllTasks"
       @delete-task="deleteTask"
       @execute-one="executeTask"
+      @select-task="setSelectedTask"
     />
   </div>
 </template>
