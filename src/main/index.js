@@ -2,8 +2,8 @@ import { app, shell, BrowserWindow, ipcMain, Menu, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { setupLoginHandlers, createLoginWindow, isLoggedIn } from './loginManager'
-import { setupRequestHandlers, clearSessionCookies } from './requestHandler'
+import { setupLoginHandlers, createLoginWindow, isLoggedIn, loadCookies } from './loginManager'
+import { setupRequestHandlers } from './requestHandler'
 import { setupFileHandlers } from './fileHandler'
 import fs from 'fs'
 
@@ -54,15 +54,20 @@ function createWindow() {
   }
 
   // 统一设置所有IPC事件处理器
-  function setupIPCHandlers() {
-    console.log('设置主进程IPC事件处理器...')
+  async function setupIPCHandlers() {
+    console.log('初始化应用...')
 
-    // 先清除之前的cookie，确保会话干净
-    clearSessionCookies()
-
-    setupLoginHandlers(mainWindow)
-    setupFileHandlers()
+    // 1. 首先设置请求处理器，确保API请求能正常工作
+    console.log('设置请求处理器...')
     setupRequestHandlers()
+
+    // 2. 设置文件处理器
+    console.log('设置文件处理器...')
+    setupFileHandlers()
+
+    // 3. 设置登录处理器
+    console.log('设置登录处理器...')
+    setupLoginHandlers(mainWindow)
 
     // 右键菜单
     ipcMain.on('show-context-menu', (event) => {
@@ -76,11 +81,6 @@ function createWindow() {
       ]
       const menu = Menu.buildFromTemplate(template)
       menu.popup(BrowserWindow.fromWebContents(event.sender))
-    })
-
-    ipcMain.handle('get-session-context', (event) => {
-      // console.log('主进程: get-session-context in main')
-      return getSessionContext()
     })
 
     // 示例：处理来自渲染进程的setTitle请求
@@ -104,18 +104,31 @@ function createWindow() {
       }
     })
 
-    console.log('主进程IPC事件处理器设置完毕。')
+    console.log('应用初始化完成。')
   }
 
-  // 调用IPC设置
-  setupIPCHandlers()
+  // 启动应用
+  const startApp = async () => {
+    // 1. 先设置IPC处理器
+    await setupIPCHandlers()
 
-  // 检查登录状态，如果未登录则打开登录窗口
-  isLoggedIn().then((status) => {
-    if (!status) {
+    // 2. 检查登录状态
+    const loginStatus = await isLoggedIn()
+    console.log(`登录状态检查完成: ${loginStatus ? '已登录' : '未登录'}`)
+
+    // 3. 如果未登录，显示登录窗口
+    if (!loginStatus) {
+      console.log('用户未登录，打开登录窗口...')
       createLoginWindow(mainWindow, icon)
+    } else {
+      // 4. 已登录，预加载cookies到内存
+      const cookies = await loadCookies()
+      console.log(`已从存储加载 ${cookies?.length || 0} 个cookies`)
     }
-  })
+  }
+
+  // 启动应用
+  startApp()
 }
 
 // This method will be called when Electron has finished

@@ -64,6 +64,7 @@ function sendRequest(url, options = {}) {
       // 添加请求头
       if (options.headers) {
         Object.keys(options.headers).forEach((key) => {
+          // 注意：这里我们不过滤掉Cookie头，允许客户端传递
           request.setHeader(key, options.headers[key])
         })
       }
@@ -175,6 +176,17 @@ export function setupRequestHandlers() {
   ipcMain.handle('sendRequest', async (event, url, options) => {
     try {
       console.log(`[IPC] 收到渲染进程请求: ${url}`)
+
+      // 确保options存在
+      options = options || {}
+      // 确保headers存在
+      options.headers = options.headers || {}
+
+      // 添加默认的Content-Type，如果没有指定
+      if (!options.headers['Content-Type']) {
+        options.headers['Content-Type'] = 'application/json'
+      }
+
       const response = await sendRequest(url, options)
       console.log('[IPC] 请求完成，返回数据')
       return response.data

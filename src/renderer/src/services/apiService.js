@@ -325,12 +325,10 @@ export async function getVendorList() {
       console.log('获取到供应商数量:', response.aaData.length)
       // 转换为更简单的数据结构
       return response.aaData.map((vendor) => {
-        // 打印原始数据结构，帮助调试
-        console.log('供应商原始数据:', vendor)
         return {
           id: vendor.id,
-          supplierName: vendor.supplierName, // 确保属性名称一致
-          supplierNo: vendor.supplierNo, // 确保属性名称一致
+          supplierName: vendor.supplierName,
+          supplierNo: vendor.supplierNo,
           status: vendor.status || vendor.statusStr,
           address: vendor.address || '',
           city: vendor.city || ''

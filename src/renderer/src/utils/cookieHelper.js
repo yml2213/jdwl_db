@@ -11,7 +11,32 @@ export const requiredCookies = ['pin', 'thor', 'csrfToken', 'flash']
  * @returns {Promise<Array>} 包含所有cookie的数组，如果未登录则返回null
  */
 export const getAllCookies = async () => {
-  return await window.api.getCookies()
+  try {
+    const cookies = await window.api.getCookies()
+
+    if (cookies && Array.isArray(cookies)) {
+      console.log(`成功从存储获取到 ${cookies.length} 个cookies`)
+
+      // 检查是否包含必要的cookie
+      const missingCookies = requiredCookies.filter(
+        name => !cookies.some(cookie => cookie.name === name)
+      )
+
+      if (missingCookies.length > 0) {
+        console.warn(`警告: 缺少以下必要的cookies: ${missingCookies.join(', ')}`)
+      } else {
+        console.log('已获取所有必要的cookies')
+      }
+
+      return cookies
+    } else {
+      console.warn('未从存储获取到有效的cookies')
+      return []
+    }
+  } catch (error) {
+    console.error('获取cookies失败:', error)
+    return []
+  }
 }
 
 /**
@@ -19,7 +44,14 @@ export const getAllCookies = async () => {
  * @returns {Promise<boolean>} 是否已登录
  */
 export const isLoggedIn = async () => {
-  return await window.api.checkLoginStatus()
+  try {
+    const status = await window.api.checkLoginStatus()
+    console.log(`检查登录状态: ${status ? '已登录' : '未登录'}`)
+    return status
+  } catch (error) {
+    console.error('检查登录状态失败:', error)
+    return false
+  }
 }
 
 /**
@@ -28,10 +60,15 @@ export const isLoggedIn = async () => {
  */
 export const getCookieHeaderString = async () => {
   const cookies = await getAllCookies()
-  if (!cookies) return null
+  if (!cookies || !cookies.length) {
+    console.warn('无法生成Cookie头: 未找到有效的cookies')
+    return null
+  }
 
   // 将cookie数组转换为cookie字符串
-  return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+  const cookieString = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+  console.log(`生成Cookie字符串，长度: ${cookieString.length}`)
+  return cookieString
 }
 
 /**
@@ -50,7 +87,10 @@ export const getRequestHeaders = async () => {
   }
 
   if (cookieString) {
+    console.log('将Cookie添加到请求头')
     headers['Cookie'] = cookieString
+  } else {
+    console.warn('请求头中未包含Cookie')
   }
 
   return headers
