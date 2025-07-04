@@ -85,7 +85,8 @@ app.get('/api/log-stream/:taskId', (req, res) => {
   req.on('close', () => {
     console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`)
     logEvents.off(taskId, logListener)
-    logEvents.off(`${taskId}-end`, endListener)
+    // 移除对 'end' 事件监听器的清理，因为 `once` 会自动处理
+    // logEvents.off(`${taskId}-end`, endListener)
   })
 })
 
