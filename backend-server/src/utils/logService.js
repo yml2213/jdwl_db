@@ -1,10 +1,71 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'events'
+import pino from 'pino'
 
-class LogService extends EventEmitter { }
+// 创建一个基础的 Pino logger 实例
+// 在开发环境中，使用 pino-pretty 来美化输出
+const rootLogger = pino({
+    level: 'info',
+    transport: {
+        target: 'pino-pretty',
+        options: {
+            colorize: true,
+            translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
+            ignore: 'pid,hostname,taskId' // 在控制台输出中忽略这些字段
+        }
+    }
+})
 
-const logService = new LogService();
+// 创建一个事件发射器，用于将日志推送到前端
+const logEmitter = new EventEmitter()
 
-// 增加最大监听器数量，以防多个并发任务导致警告
-logService.setMaxListeners(50);
+/**
+ * 为特定任务创建一个上下文感知的日志记录器。
+ * @param {string} taskId - 与日志关联的任务ID。
+ * @param {string} taskName - 任务的名称，将作为日志的上下文。
+ * @returns {object} 返回一个包含 logger 实例和 emitter 的对象。
+ */
+function createLogger(taskId, taskName = 'global') {
+    // 为每个任务创建一个子 logger，自动包含 taskId 和 taskName
+    const childLogger = rootLogger.child({ taskId, taskName })
 
-export default logService; 
+    // 创建一个通用的日志函数，它会同时写入日志并发送到前端
+    const log = (message, type = 'info', data = {}) => {
+        // 使用 Pino logger 记录结构化日志
+        childLogger[type]({ ...data, msg: message })
+
+        // 准备要发送到前端的日志数据
+        const logData = {
+            message,
+            type,
+            timestamp: new Date().toISOString()
+        }
+
+        // 通过 emitter 发送日志，供 SSE 使用
+        logEmitter.emit(taskId, logData)
+    }
+
+    // 创建一个简化的 updateFn，兼容旧的任务函数签名
+    const updateFn = (status, type = 'info') => {
+        const message = typeof status === 'string' ? status : status.message || JSON.stringify(status)
+        const logType = status.error ? 'error' : type
+        log(message, logType)
+    }
+
+
+    return {
+        info: (message, data) => log(message, 'info', data),
+        warn: (message, data) => log(message, 'warn', data),
+        error: (message, data) => log(message, 'error', data),
+        debug: (message, data) => log(message, 'debug', data),
+        log, // 直接暴露 log 函数，提供更大的灵活性
+        updateFn // 暴露兼容旧接口的函数
+    }
+}
+
+// 暴露 emitter，以便服务器可以监听事件
+export const events = logEmitter
+
+// 暴露创建器
+export default {
+    createLogger
+} 

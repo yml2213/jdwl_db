@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import session from 'express-session'
 import sessionFileStore from 'session-file-store'
 import crypto from 'crypto'
-import logService from './utils/logService.js'
+import logService, { events as logEvents } from './utils/logService.js'
 
 
 const app = express()
@@ -65,6 +65,7 @@ app.get('/api/log-stream/:taskId', (req, res) => {
   res.flushHeaders() //
 
   const logListener = (logData) => {
+    // 这里的 console.log 是用于在后端调试 SSE 连接本身，可以保留
     console.log(`[SSE] 发送日志给 ${taskId}:`, logData.message)
     res.write(`data: ${JSON.stringify(logData)}\n\n`)
   }
@@ -74,16 +75,16 @@ app.get('/api/log-stream/:taskId', (req, res) => {
     res.write(`data: ${JSON.stringify({ event: 'end', ...resultData })}\n\n`)
     res.end()
     // 清理监听器
-    logService.off(taskId, logListener)
+    logEvents.off(taskId, logListener)
   }
 
-  logService.on(taskId, logListener)
-  logService.once(`${taskId}-end`, endListener)
+  logEvents.on(taskId, logListener)
+  logEvents.once(`${taskId}-end`, endListener)
 
   req.on('close', () => {
     console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`)
-    logService.off(taskId, logListener)
-    logService.off(`${taskId}-end`, endListener)
+    logEvents.off(taskId, logListener)
+    logEvents.off(`${taskId}-end`, endListener)
   })
 })
 
@@ -241,12 +242,7 @@ app.post('/api/execute-flow', async (req, res) => {
 
   // 异步执行工作流
   setTimeout(async () => {
-    const log = (message, type = 'info') => {
-      const logData = { message, type, timestamp: new Date().toISOString() }
-      // 使用日志服务广播日志
-      logService.emit(taskId, logData)
-      console.log(`[${flowName}] [${type.toUpperCase()}]: ${message}`)
-    }
+    const { log } = logService.createLogger(taskId, flowName)
 
     try {
       const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -270,13 +266,13 @@ app.post('/api/execute-flow', async (req, res) => {
       }
 
       const result = await flowModule.default.execute(payload, sessionData, log)
-      logService.emit(`${taskId}-end`, { success: true, data: result })
+      logEvents.emit(`${taskId}-end`, { success: true, data: result })
 
     } catch (error) {
-      console.error(`执行工作流 ${flowName} 时出错:`, error)
+      const logger = logService.createLogger(taskId, flowName)
       const errorMessage = error.message || '工作流执行时发生未知错误'
-      log(errorMessage, 'error')
-      logService.emit(`${taskId}-end`, { success: false, message: errorMessage })
+      logger.error(errorMessage, { stack: error.stack })
+      logEvents.emit(`${taskId}-end`, { success: false, message: errorMessage })
     }
   }, 0)
 })
@@ -301,6 +297,8 @@ app.post('/task', async (req, res) => {
 
   // 异步执行任务
   setTimeout(async () => {
+    const { updateFn, error: logError } = logService.createLogger(taskId, taskName)
+
     const sessionData = {
       ...req.session.context,
       store: payload.store,
@@ -310,14 +308,6 @@ app.post('/task', async (req, res) => {
     }
     if (req.session.operationId) {
       sessionData.operationId = req.session.operationId
-    }
-
-    const updateFn = (status) => {
-      const message = typeof status === 'string' ? status : (status.message || JSON.stringify(status))
-      const type = status.error ? 'error' : 'info'
-      const logData = { message, type, timestamp: new Date().toISOString() }
-      logService.emit(taskId, logData)
-      console.log(`[Task: ${taskName}] [${type.toUpperCase()}]: ${message}`)
     }
 
     try {
@@ -334,13 +324,13 @@ app.post('/task', async (req, res) => {
       updateFn(`开始执行任务 ${taskName}...`)
       const result = await taskFunction(payload, updateFn, sessionData)
       updateFn(`任务 ${taskName} 执行完成。`)
-      logService.emit(`${taskId}-end`, { success: true, data: result })
+      logEvents.emit(`${taskId}-end`, { success: true, data: result })
 
     } catch (error) {
       console.error(`执行任务 ${taskName} 时出错:`, error)
       const errorMessage = error.message || '任务执行时发生未知错误'
-      updateFn({ message: errorMessage, error: true })
-      logService.emit(`${taskId}-end`, { success: false, message: errorMessage })
+      logError(errorMessage, { stack: error.stack })
+      logEvents.emit(`${taskId}-end`, { success: false, message: errorMessage })
     }
   }, 0)
 })
