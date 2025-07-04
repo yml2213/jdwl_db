@@ -282,7 +282,7 @@ app.post('/api/execute-flow', async (req, res) => {
  * @description 执行单个任务的端点
  */
 app.post('/task', async (req, res) => {
-  const { taskName, payload } = req.body
+  const { taskName, payload, mode } = req.body
 
   if (!req.session.context) {
     return res.status(401).json({ message: '无效的会话，请先登录' })
@@ -295,6 +295,11 @@ app.post('/task', async (req, res) => {
   const taskId = crypto.randomUUID()
   // 立即返回任务ID
   res.status(202).json({ success: true, taskId })
+
+  // 将 mode 添加到 payload，以兼容旧的前端请求结构
+  if (mode) {
+    payload.mode = mode
+  }
 
   // 异步执行任务
   setTimeout(async () => {
