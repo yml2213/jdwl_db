@@ -589,20 +589,8 @@ export async function getWarehouseList(sellerId, deptId) {
  * @returns {Promise<object>} 后端返回的响应数据，包含 sessionId
  */
 export const createSession = async (sessionData) => {
-  console.log('调用createSession API，数据:', {
-    uniqueKey: sessionData.uniqueKey ? `${sessionData.uniqueKey.substring(0, 10)}...` : '无',
-    hasCookies: sessionData.cookies && sessionData.cookies.length > 0,
-    supplierName: sessionData.supplierInfo?.name || '未提供',
-    departmentName: sessionData.departmentInfo?.name || '未提供'
-  })
-
   try {
-    // 通过主进程发送请求
-    const response = await throttledSendRequest('POST', '/api/session', sessionData, {
-      'Content-Type': 'application/json'
-    })
-
-    console.log('createSession API响应数据:', response)
+    const response = await throttledSendRequest('post', '/api/create-session', sessionData)
     return response
   } catch (error) {
     console.error('createSession API错误:', error)
@@ -611,28 +599,17 @@ export const createSession = async (sessionData) => {
 }
 
 /**
- * 检查后端会话状态
- * @returns {Promise<object>}
+ * 获取当前会话状态，验证用户是否已登录并获取会话上下文
+ * @returns {Promise<any>}
  */
 export const getSessionStatus = async () => {
-  console.log('调用getSessionStatus API检查会话状态')
-
   try {
-    const response = await throttledSendRequest('GET', '/api/session/status', null, {
-      'Content-Type': 'application/json'
-    })
-
-    console.log('getSessionStatus API响应数据:', {
-      success: response.success,
-      loggedIn: response.loggedIn,
-      hasContext: !!response.context,
-      sessionID: response.sessionID
-    })
-
+    // 确保请求的是 /api/session-status
+    const response = await throttledSendRequest('get', '/api/session-status')
     return response
   } catch (error) {
     console.error('getSessionStatus API错误:', error)
-    throw error
+    return { loggedIn: false, context: null }
   }
 }
 

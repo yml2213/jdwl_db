@@ -89,7 +89,7 @@ defineProps({
   }
 })
 
-const emit = defineEmits(['session-created', 'logout'])
+const emit = defineEmits(['login-success', 'logout'])
 const sessionContext = inject('sessionContext')
 const isLoggedIn = computed(() => !!sessionContext.value)
 // 用户名
@@ -217,8 +217,8 @@ const handleDepartmentSelected = async (department) => {
 
     if (response) {
       alert('供应商和事业部选择成功，后端会话已创建！')
-      // 关键改动：不再传递本地数据，只通知父组件会话已创建
-      emit('session-created')
+      // 关键改动：发出登录成功事件
+      emit('login-success')
     } else {
       throw new Error('创建后端会话失败，未收到有效响应。')
     }
@@ -300,10 +300,9 @@ const handleLoginSuccess = async () => {
       console.log('后端会话创建响应:', response ? '成功' : '失败')
 
       if (response) {
-        console.log('后端会话已成功重建。')
-        // Emit event to notify App.vue to fetch the new session state
-        console.log('发送session-created事件到App.vue')
-        emit('session-created')
+        console.log('登录后自动创建会话成功！')
+        // 关键改动：发出登录成功事件
+        emit('login-success')
 
         // 添加延迟刷新页面机制，确保UI状态更新
         console.log('设置一个延时，如果3秒内UI没有切换，将强制刷新页面...')

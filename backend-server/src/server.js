@@ -57,6 +57,32 @@ app.post('/api/logout', (req, res) => {
     })
 })
 
+// 新增：创建会话状态接口
+app.post('/api/create-session', (req, res) => {
+    const { uniqueKey, cookies, supplierInfo, departmentInfo } = req.body
+    if (uniqueKey && cookies && supplierInfo && departmentInfo) {
+        req.session.user = { name: supplierInfo.name, uniqueKey }
+        req.session.context = req.body // Save the whole context
+        req.session.save((err) => {
+            if (err) {
+                return res.status(500).json({ success: false, message: 'Session save error' })
+            }
+            res.json({ success: true, message: '会话创建成功' })
+        })
+    } else {
+        res.status(400).json({ success: false, message: '缺少创建会话所需的数据' })
+    }
+})
+
+// 新增：获取详细会话状态接口
+app.get('/api/session-status', (req, res) => {
+    if (req.session && req.session.user && req.session.context) {
+        res.json({ loggedIn: true, context: req.session.context })
+    } else {
+        res.json({ loggedIn: false, context: null })
+    }
+})
+
 // 检查会话状态接口
 app.get('/api/session', (req, res) => {
     if (req.session && req.session.user) {
