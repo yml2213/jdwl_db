@@ -95,3 +95,16 @@ export const getRequestHeaders = async () => {
 
   return headers
 }
+
+/**
+ * 从存储的cookies中获取会话ID
+ * @returns {Promise<string|null>} 会话ID，如果找不到则返回null
+ */
+export const getSessionId = async () => {
+  const cookies = await getAllCookies()
+  if (!cookies || !cookies.length) {
+    return null
+  }
+  const sessionCookie = cookies.find((c) => c.name === 'connect.sid')
+  return sessionCookie ? sessionCookie.value : null
+}

@@ -2,9 +2,12 @@ import express from 'express'
 import http from 'http'
 import { WebSocketServer } from 'ws'
 import session from 'express-session'
-import FileStore from 'session-file-store'
+import FileStoreFactory from 'session-file-store'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs/promises'
+
+import * as jdApiService from './services/jdApiService.js'
 
 // --- 基本设置 ---
 const __filename = fileURLToPath(import.meta.url)
@@ -15,13 +18,20 @@ const server = http.createServer(app)
 const wss = new WebSocketServer({ noServer: true })
 
 // --- 会话管理 ---
-const AppFileStore = FileStore(session)
+const FileStore = FileStoreFactory(session)
 const sessionMiddleware = session({
-    store: new AppFileStore({ path: './sessions', logFn: () => { } }),
-    secret: 'your-secret-key', // 在生产环境中应使用更安全的密钥
+    store: new FileStore({
+        path: path.join(__dirname, '..', 'sessions'),
+        logFn: function () { } // 禁用日志
+    }),
+    secret: 'your-secret-key', // 请替换为更安全的密钥
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false } // 在生产中如果使用HTTPS，应设为 true
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: false, // 如果使用HTTPS，应设置为true
+        maxAge: 24 * 60 * 60 * 1000 // 24小时
+    }
 })
 app.use(sessionMiddleware)
 
@@ -36,6 +46,7 @@ const requireAuth = (req, res, next) => {
 
 // --- API Endpoints ---
 app.use(express.json())
+app.use(express.static('public'))
 
 // 登录接口
 app.post('/api/login', (req, res) => {
@@ -103,102 +114,132 @@ app.get('/api/session-data', requireAuth, (req, res) => {
     res.json({ success: true, data: req.session.data || null })
 })
 
-// --- WebSocket 通信 ---
-const clients = new Map()
+// --- 动态加载任务和流程处理器 ---
+const loadHandlers = async (dir, suffix) => {
+    const handlers = {}
+    const handlerDir = path.join(__dirname, dir)
+    try {
+        const files = await fs.readdir(handlerDir)
+        for (const file of files) {
+            if (file.endsWith(suffix)) {
+                const handlerName = file.replace(suffix, '')
+                const modulePath = path.join(handlerDir, file)
+                // 使用 file:// URL 格式进行动态导入
+                const moduleUrl = new URL(`file://${modulePath}`)
+                const handlerModule = await import(moduleUrl.href)
+                handlers[handlerName] = handlerModule.default
+            }
+        }
+    } catch (error) {
+        console.error(`加载处理器失败 ${dir}:`, error)
+    }
+    return handlers
+}
 
-// 升级HTTP连接到WebSocket时，注入会话信息
-server.on('upgrade', (request, socket, head) => {
-    sessionMiddleware(request, {}, () => {
-        if (!request.session || !request.session.id) {
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-            socket.destroy()
+let taskHandlers = {}
+let flowHandlers = {}
+
+// WebSocket 消息处理
+const handleWebSocketMessage = async (ws, message) => {
+    const { action, taskId, taskName, isFlow, payload, sessionId } = JSON.parse(message)
+
+    if (action === 'start_task') {
+        const session = await restoreSession(sessionId)
+        if (!session) {
+            ws.send(
+                JSON.stringify({
+                    event: 'end',
+                    taskId,
+                    success: false,
+                    message: '无法恢复会话, 请重新登录'
+                })
+            )
             return
         }
-        wss.handleUpgrade(request, socket, head, (ws) => {
-            wss.emit('connection', ws, request)
-        })
-    })
-})
 
+        const log = (logMessage) => {
+            console.log(`[Task: ${taskId}] ${logMessage}`)
+            ws.send(JSON.stringify({ event: 'log', taskId, data: logMessage }))
+        }
+
+        try {
+            const handler = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
+            if (handler) {
+                const result = await handler(payload, session, log)
+                ws.send(
+                    JSON.stringify({
+                        event: 'end',
+                        taskId,
+                        success: true,
+                        data: result
+                    })
+                )
+            } else {
+                throw new Error(`未找到处理器: ${taskName}`)
+            }
+        } catch (error) {
+            console.error(`执行任务 ${taskName} (ID: ${taskId}) 失败:`, error)
+            ws.send(
+                JSON.stringify({
+                    event: 'end',
+                    taskId,
+                    success: false,
+                    message: error.message
+                })
+            )
+        }
+    }
+}
+
+/**
+ * @description 从会话存储中恢复会话
+ * @param {string} sessionId
+ * @returns {Promise<object|null>}
+ */
 const restoreSession = async (sessionId) => {
-    const sessionFilePath = path.join(__dirname, 'sessions', `${sessionId}.json`)
+    if (!sessionId) return null
     try {
-        const sessionData = await import(sessionFilePath, { assert: { type: 'json' } })
-        return sessionData.default
+        const sessionFilePath = path.join(__dirname, '..', 'sessions', `${sessionId}.json`)
+        const sessionData = await fs.readFile(sessionFilePath, 'utf-8')
+        const session = JSON.parse(sessionData)
+        console.log(`[Session] 成功恢复会话: ${sessionId}`)
+        return session
     } catch (error) {
         console.error(`[Session] 无法恢复会话 ${sessionId}:`, error)
         return null
     }
 }
 
+// --- WebSocket 服务器 ---
 wss.on('connection', (ws, request) => {
-    const sessionId = request.session.id
-    ws.sessionId = sessionId
-    clients.set(sessionId, ws)
-    console.log(`[WebSocket] 客户端已连接, Session ID: ${sessionId}`)
+    // 注意：这里我们不再从升级请求中解析会话
+    // 会话ID将由每个 'start_task' 消息提供
 
-    ws.on('message', async (message) => {
-        try {
-            const { action, taskId, taskName, isFlow, payload } = JSON.parse(message.toString())
-
-            if (action === 'start_task') {
-                console.log(`[WebSocket] 收到任务: taskId=${taskId}, taskName=${taskName}, isFlow=${isFlow}`)
-
-                // 1. 恢复会话数据
-                const sessionData = await restoreSession(ws.sessionId)
-                if (!sessionData) {
-                    ws.send(JSON.stringify({ event: 'error', taskId, message: '无法恢复会话，请重新登录' }))
-                    return
-                }
-
-                // 2. 创建日志更新函数
-                const updateFn = (logMessage, level = 'info') => {
-                    ws.send(JSON.stringify({ event: 'log', taskId, data: logMessage, level }))
-                }
-
-                try {
-                    // 3. 根据 isFlow 标志动态加载并执行
-                    const modulePath = isFlow
-                        ? `./flows/${taskName}.flow.js`
-                        : `./tasks/${taskName}.task.js`
-                    const executor = (await import(modulePath)).default
-
-                    if (!executor || typeof executor.execute !== 'function') {
-                        throw new Error(`无法找到或执行模块: ${taskName}`)
-                    }
-
-                    updateFn(`任务 "${executor.name || taskName}" 开始执行...`)
-                    const result = await executor.execute(payload, updateFn, sessionData)
-
-                    ws.send(
-                        JSON.stringify({
-                            event: 'end',
-                            taskId,
-                            success: true,
-                            data: result,
-                            message: result.message || '任务成功完成'
-                        })
-                    )
-                } catch (error) {
-                    console.error(`[Task Execution] 任务 ${taskId} (${taskName}) 执行失败:`, error)
-                    const errorMessage = error.message || '未知错误'
-                    updateFn(`错误: ${errorMessage}`, 'error')
-                    ws.send(JSON.stringify({ event: 'end', taskId, success: false, message: errorMessage }))
-                }
-            }
-        } catch (e) {
-            console.error('[WebSocket] 无法解析消息或消息格式错误:', e)
-        }
-    })
+    ws.on('message', (message) => handleWebSocketMessage(ws, message.toString()))
 
     ws.on('close', () => {
-        clients.delete(sessionId)
-        console.log(`[WebSocket] 客户端已断开, Session ID: ${sessionId}`)
+        // 可以在这里添加一些断开连接时的清理逻辑
+        console.log(`[WebSocket] 客户端已断开`)
+    })
+
+    ws.on('error', (error) => {
+        console.error('[WebSocket] 发生错误:', error)
     })
 })
 
 // --- 启动服务器 ---
+server.on('upgrade', (request, socket, head) => {
+    // 直接将升级请求交给WebSocket服务器处理，不做会话验证
+    // 会话验证将在每个任务消息中进行
+    wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request)
+        console.log('[WebSocket] 客户端已连接')
+    })
+})
+
 const PORT = process.env.PORT || 2333
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
+    taskHandlers = await loadHandlers('tasks', '.task.js')
+    flowHandlers = await loadHandlers('flows', '.flow.js')
     console.log(`后端服务已启动在 http://localhost:${PORT}`)
 }) 

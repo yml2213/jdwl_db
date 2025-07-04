@@ -1,5 +1,6 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import webSocketService from '@/services/webSocketService'
+import { getSessionId } from '@/utils/cookieHelper'
 
 /**
  * @description 这是一个Vue组合式函数，用于封装和管理任务队列的所有逻辑。
@@ -88,7 +89,8 @@ export function useTaskList() {
         taskId: task.id,
         taskName: task.executionFeature,
         isFlow: task.executionType === 'flow', // 传递类型给后端
-        payload: payload
+        payload: payload,
+        sessionId: await getSessionId()
       })
     } catch (error) {
       console.error(`启动任务 ${task.name} 出错:`, error)

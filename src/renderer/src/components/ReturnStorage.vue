@@ -15,7 +15,8 @@ const form = ref({
 })
 
 // --- 组合式函数 ---
-const { selectedStore, selectedVendor, selectedDepartment } = useShopAndWarehouse()
+const { selectedStore, selectedVendor, selectedDepartment, loadShops, loadWarehouses } =
+  useShopAndWarehouse()
 const {
   taskList,
   addTask,
@@ -74,6 +75,7 @@ onMounted(() => {
     form.value = savedForm
   }
   loadShops()
+  loadWarehouses()
 })
 </script>
 

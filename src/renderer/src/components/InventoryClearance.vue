@@ -27,7 +27,8 @@ const {
   loadShops,
   persistSelectedShop,
   selectedVendor,
-  selectedDepartment
+  selectedDepartment,
+  loadWarehouses
 } = useShopAndWarehouse()
 
 // 任务列表管理 (全局共享)
@@ -148,6 +149,7 @@ onMounted(() => {
     form.value = savedForm
   }
   loadShops()
+  loadWarehouses()
 })
 </script>
 
