@@ -85,8 +85,7 @@ app.get('/api/log-stream/:taskId', (req, res) => {
   req.on('close', () => {
     console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`)
     logEvents.off(taskId, logListener)
-    // 移除对 'end' 事件监听器的清理，因为 `once` 会自动处理
-    // logEvents.off(`${taskId}-end`, endListener)
+    logEvents.off(`${taskId}-end`, endListener)
   })
 })
 
@@ -330,8 +329,7 @@ app.post('/task', async (req, res) => {
 
       updateFn(`开始执行任务 ${taskName}...`)
       const result = await taskFunction(payload, updateFn, sessionData)
-      // 任务成功执行后，不再需要额外的 `updateFn`，直接 emit end 事件
-      // updateFn(`任务 ${taskName} 执行完成。`)
+      updateFn(`任务 ${taskName} 执行完成。`)
 
       if (result && result.success === false) {
         logEvents.emit(`${taskId}-end`, { success: false, message: result.message })
@@ -339,9 +337,9 @@ app.post('/task', async (req, res) => {
         logEvents.emit(`${taskId}-end`, { success: true, data: result })
       }
     } catch (error) {
+      console.error(`执行任务 ${taskName} 时出错:`, error)
       const errorMessage = error.message || '任务执行时发生未知错误'
-      // 确保在发射 'end' 事件之前记录错误日志
-      logService.createLogger(taskId, taskName).error(errorMessage, { stack: error.stack, from: 'server.js catch block' })
+      logError(errorMessage, { stack: error.stack })
       logEvents.emit(`${taskId}-end`, { success: false, message: errorMessage })
     }
   }, 0)
