@@ -9,30 +9,27 @@ import * as jdApiService from '../services/jdApiService.js'
 import logService from '../utils/logService.js'
 
 async function execute(context, updateFn, sessionData) {
-  // 从 updateFn (logService) 获取 logger
-  const { log, error } = logService.createLogger(context.taskId, 'returnStorage')
-
   const { orderNumber, year, returnReason } = context
 
-  log(`开始退货入库流程，订单号: ${orderNumber}, 年份: ${year}`)
+  updateFn(`开始退货入库流程，订单号: ${orderNumber}, 年份: ${year}`)
 
   // Step 1: Query CLS number by order number
-  log(`步骤1: 查询CLS编号...`)
+  updateFn(`步骤1: 查询CLS编号...`)
   const clsNo = await jdApiService.queryClsNoByOrderNo(orderNumber, year, sessionData)
   if (!clsNo) {
     const msg = '未能根据订单号找到CLS编号。'
-    error(msg)
+    updateFn(msg, 'error')
     throw new Error(msg)
   }
-  log(`成功获取CLS编号: ${clsNo}`)
+  updateFn(`成功获取CLS编号: ${clsNo}`)
 
   // Step 2: 根据 CLS 编号查询订单详情  https://o.jdl.com/rtw/getOrder.do?rand=0.25937037832834453
-  log(`步骤2: 查询订单详情...`)
+  updateFn(`步骤2: 查询订单详情...`)
   const orderDetails = await jdApiService.queryOrderDetailsByClsNo(clsNo, sessionData)
 
   if (!orderDetails || !orderDetails.deptNo || orderDetails.aaData.length == 0) {
     const msg = '未能获取订单详情或订单中没有商品。'
-    error(msg)
+    updateFn(msg, 'error')
     throw new Error(msg)
   }
 
@@ -44,7 +41,7 @@ async function execute(context, updateFn, sessionData) {
   // }
 
 
-  log(`步骤3: 提交退货入库...`)
+  updateFn(`步骤3: 提交退货入库...`)
   const submissionPayload = {
     soNo: clsNo,
     deptNo: orderDetails.deptNo,
@@ -60,9 +57,9 @@ async function execute(context, updateFn, sessionData) {
   }
 
   const result = await jdApiService.submitReturnOrder(submissionPayload, sessionData)
-  log(`退货入库提交成功。`)
+  updateFn(`退货入库提交成功。`)
+  updateFn(`提交退货入库 ===> ${JSON.stringify(result)}`)
 
-  log('提交退货入库 ===>', { result })
   if (result.resultCode == 2) {
     return {
       success: false,

@@ -330,8 +330,12 @@ app.post('/task', async (req, res) => {
       updateFn(`开始执行任务 ${taskName}...`)
       const result = await taskFunction(payload, updateFn, sessionData)
       updateFn(`任务 ${taskName} 执行完成。`)
-      logEvents.emit(`${taskId}-end`, { success: true, data: result })
 
+      if (result && result.success === false) {
+        logEvents.emit(`${taskId}-end`, { success: false, message: result.message })
+      } else {
+        logEvents.emit(`${taskId}-end`, { success: true, data: result })
+      }
     } catch (error) {
       console.error(`执行任务 ${taskName} 时出错:`, error)
       const errorMessage = error.message || '任务执行时发生未知错误'
