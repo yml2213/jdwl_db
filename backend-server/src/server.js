@@ -80,7 +80,7 @@ app.get('/api/log-stream/:taskId', (req, res) => {
   }
 
   logEvents.on(taskId, logListener)
-  logEvents.once(`${taskId}-end`, endListener)
+  logEvents.on(`${taskId}-end`, endListener)
 
   req.on('close', () => {
     console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`)
