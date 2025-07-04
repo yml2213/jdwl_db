@@ -50,35 +50,35 @@ app.use(
 // --- 新增：SSE日志流端点 ---
 app.get('/api/log-stream/:taskId', (req, res) => {
   const { taskId } = req.params
-  console.log(`[SSE] 客户端已连接，订阅任务ID: ${taskId}`);
+  console.log(`[SSE] 客户端已连接，订阅任务ID: ${taskId}`)
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders(); //
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders() //
 
   const logListener = (logData) => {
-    console.log(`[SSE] 发送日志给 ${taskId}:`, logData.message);
-    res.write(`data: ${JSON.stringify(logData)}\n\n`);
-  };
+    console.log(`[SSE] 发送日志给 ${taskId}:`, logData.message)
+    res.write(`data: ${JSON.stringify(logData)}\n\n`)
+  }
 
   const endListener = (resultData) => {
-    console.log(`[SSE] 任务 ${taskId} 完成，发送最终结果并关闭连接。`);
-    res.write(`data: ${JSON.stringify({ event: 'end', ...resultData })}\n\n`);
-    res.end();
+    console.log(`[SSE] 任务 ${taskId} 完成，发送最终结果并关闭连接。`)
+    res.write(`data: ${JSON.stringify({ event: 'end', ...resultData })}\n\n`)
+    res.end()
     // 清理监听器
-    logService.off(taskId, logListener);
-  };
+    logService.off(taskId, logListener)
+  }
 
-  logService.on(taskId, logListener);
-  logService.once(`${taskId}-end`, endListener);
+  logService.on(taskId, logListener)
+  logService.once(`${taskId}-end`, endListener)
 
   req.on('close', () => {
-    console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`);
-    logService.off(taskId, logListener);
-    logService.off(`${taskId}-end`, endListener);
-  });
-});
+    console.log(`[SSE] 客户端断开连接，任务ID: ${taskId}`)
+    logService.off(taskId, logListener)
+    logService.off(`${taskId}-end`, endListener)
+  })
+})
 
 // 根路由，用于测试服务器是否运行
 app.get('/', (req, res) => {
@@ -97,10 +97,10 @@ app.post('/api/session', async (req, res) => {
     hasCookies: cookies && cookies.length > 0,
     hasSupplierInfo: !!req.body.supplierInfo,
     hasDepartmentInfo: !!req.body.departmentInfo
-  });
+  })
 
   if (!uniqueKey || !cookies) {
-    console.warn('会话创建失败: 缺少必要数据');
+    console.warn('会话创建失败: 缺少必要数据')
     return res.status(400).json({ message: 'Missing session data.' })
   }
 
@@ -111,30 +111,30 @@ app.post('/api/session', async (req, res) => {
   // 保存会话
   req.session.save((err) => {
     if (err) {
-      console.error('保存会话失败:', err);
-      return res.status(500).json({ message: 'Failed to save session.' });
+      console.error('保存会话失败:', err)
+      return res.status(500).json({ message: 'Failed to save session.' })
     }
-    console.log('会话创建成功，Session ID:', req.sessionID);
-    res.status(200).json({ message: 'Session initialized successfully.' });
-  });
+    console.log('会话创建成功，Session ID:', req.sessionID)
+    res.status(200).json({ message: 'Session initialized successfully.' })
+  })
 })
 
 /**
  * @description 检查当前会话的状态
  */
 app.get('/api/session/status', (req, res) => {
-  console.log('检查会话状态, Session ID:', req.sessionID);
-  console.log('会话上下文存在:', !!req.session?.context);
+  console.log('检查会话状态, Session ID:', req.sessionID)
+  console.log('会话上下文存在:', !!req.session?.context)
 
   if (req.session && req.session.context) {
-    console.log('会话有效，用户已登录');
+    console.log('会话有效，用户已登录')
     res.status(200).json({
       success: true,
       loggedIn: true,
       context: req.session.context
     })
   } else {
-    console.log('会话无效或用户未登录');
+    console.log('会话无效或用户未登录')
     res.status(200).json({
       success: true,
       loggedIn: false
@@ -298,6 +298,7 @@ app.post('/task', async (req, res) => {
   }, 0)
 })
 
-app.listen(port, () => {
-  console.log(`服务已启动，地址: http://localhost:${port}`)
+app.listen(port, '0.0.0.0', () => {
+  console.log(`服务已启动，监听所有地址，端口: ${port}`)
+  console.log(`可通过 http://localhost:${port} 或本机IP地址访问`)
 })
