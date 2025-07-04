@@ -1,8 +1,6 @@
 import { ref, watch } from 'vue'
-import { executeFlow, executeTask as apiExecuteTask } from '@/services/apiService'
+import { executeFlow, executeTask as apiExecuteTask, API_BASE_URL } from '@/services/apiService'
 import { getSelectedDepartment, getSelectedVendor } from '@/utils/storageHelper'
-
-const API_BASE_URL = 'http://localhost:3000' // 后端服务器地址
 
 /**
  * @description 这是一个Vue组合式函数，用于封装和管理任务队列的所有逻辑。

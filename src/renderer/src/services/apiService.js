@@ -4,7 +4,7 @@ import qs from 'qs'
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
 
-const API_BASE_URL = 'http://47.93.132.204:2333' // 后端服务器地址
+export const API_BASE_URL = 'http://47.93.132.204:2333' // 后端服务器地址
 
 /**
  * 安全序列化对象，移除无法克隆的元素
