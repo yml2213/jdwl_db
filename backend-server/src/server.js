@@ -9,7 +9,7 @@ import logService from './utils/logService.js'
 
 
 const app = express()
-const port = 3000
+const port = 2333
 
 const FileStore = sessionFileStore(session)
 const sessionTTL = 24 * 60 * 60 * 1000 * 30  // 30天
@@ -20,7 +20,12 @@ const clients = {}
 // Middlewares
 app.use(
   cors({
-    origin: 'http://localhost:5173', // 前端地址
+    origin: function (origin, callback) {
+      // 在开发环境中，允许来自任何源的请求
+      // 在生产环境中，您可能希望有一个白名单
+      // 对于Electron应用，origin可能是undefined (file://)
+      callback(null, true)
+    },
     credentials: true // 允许发送和接收cookies
   })
 )
@@ -298,7 +303,8 @@ app.post('/task', async (req, res) => {
   }, 0)
 })
 
+// --- Start Server ---
 app.listen(port, '0.0.0.0', () => {
-  console.log(`服务已启动，监听所有地址，端口: ${port}`)
+  console.log(`服务已启动，监听所有地址，端口：${port}`)
   console.log(`可通过 http://localhost:${port} 或本机IP地址访问`)
 })
