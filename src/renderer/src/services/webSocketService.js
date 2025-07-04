@@ -1,6 +1,9 @@
 import { EventEmitter } from 'events'
+import { API_BASE_URL } from './apiService' // 引入统一的 API 地址
 
-const WS_URL = 'ws://47.93.132.204:2333' // 请根据您的后端地址进行修改
+// 根据 API_BASE_URL 动态生成 WebSocket URL
+// 这会自动处理 http -> ws 和 https -> wss 的转换
+const WS_URL = API_BASE_URL.replace(/^http/, 'ws')
 
 class WebSocketService extends EventEmitter {
     constructor() {
