@@ -1,13 +1,11 @@
 import { getRequestHeaders, getAllCookies } from '../utils/cookieHelper'
 import qs from 'qs'
-import * as XLSX from 'xlsx'
-import { getSelectedDepartment, getSelectedShop } from '../utils/storageHelper'
 import axios from 'axios'
 
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
 
-const API_BASE_URL = 'http://localhost:3000' // 后端服务器地址
+const API_BASE_URL = 'http://47.93.132.204:2333' // 后端服务器地址
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -20,21 +18,21 @@ const apiClient = axios.create({
 // 添加拦截器记录请求和响应
 apiClient.interceptors.request.use(config => {
   console.log(`请求: ${config.method.toUpperCase()} ${config.baseURL}${config.url}`,
-    config.data ? JSON.stringify(config.data).substring(0, 200) + '...' : '无数据');
-  return config;
+    config.data ? JSON.stringify(config.data).substring(0, 200) + '...' : '无数据')
+  return config
 }, error => {
-  console.error('请求拦截器错误:', error);
-  return Promise.reject(error);
-});
+  console.error('请求拦截器错误:', error)
+  return Promise.reject(error)
+})
 
 apiClient.interceptors.response.use(response => {
   console.log(`响应: ${response.config.method.toUpperCase()} ${response.config.url} - ${response.status}`,
-    response.data ? '有数据' : '无数据');
-  return response;
+    response.data ? '有数据' : '无数据')
+  return response
 }, error => {
-  console.error('响应拦截器错误:', error.response?.status, error.response?.data || error.message);
-  return Promise.reject(error);
-});
+  console.error('响应拦截器错误:', error.response?.status, error.response?.data || error.message)
+  return Promise.reject(error)
+})
 
 // 从主进程发送请求的辅助函数
 async function sendRequest(url, options) {
@@ -455,9 +453,9 @@ export async function getWarehouseList(sellerId, deptId) {
  * @returns {Promise<object>} 后端返回的响应数据，包含 sessionId
  */
 export const createSession = async (sessionData) => {
-  const response = await apiClient.post('/api/session', sessionData);
-  return response.data;
-};
+  const response = await apiClient.post('/api/session', sessionData)
+  return response.data
+}
 
 /**
  * @description 调用后端的通用任务执行接口
@@ -466,22 +464,22 @@ export const createSession = async (sessionData) => {
  * @returns {Promise<string>} - 返回一个唯一的 taskId
  */
 export const executeTask = async (taskName, payload) => {
-  console.log(`[apiService] 请求执行任务: ${taskName}`);
-  const response = await apiClient.post('/task', { taskName, payload });
+  console.log(`[apiService] 请求执行任务: ${taskName}`)
+  const response = await apiClient.post('/task', { taskName, payload })
   if (response.data && response.data.taskId) {
-    return response.data.taskId;
+    return response.data.taskId
   }
-  throw new Error('未能从后端获取任务ID');
-};
+  throw new Error('未能从后端获取任务ID')
+}
 
 /**
  * 检查后端会话状态
  * @returns {Promise<object>}
  */
 export const getSessionStatus = async () => {
-  const response = await apiClient.get('/api/session/status');
-  return response.data;
-};
+  const response = await apiClient.get('/api/session/status')
+  return response.data
+}
 
 /**
  * 执行一个后端工作流
@@ -490,13 +488,13 @@ export const getSessionStatus = async () => {
  * @returns {Promise<string>} - 返回一个唯一的 taskId
  */
 export const executeFlow = async (flowName, payload) => {
-  console.log(`[apiService] 请求执行工作流: ${flowName}`);
-  const response = await apiClient.post('/api/execute-flow', { flowName, payload });
+  console.log(`[apiService] 请求执行工作流: ${flowName}`)
+  const response = await apiClient.post('/api/execute-flow', { flowName, payload })
   if (response.data && response.data.taskId) {
-    return response.data.taskId;
+    return response.data.taskId
   }
-  throw new Error('未能从后端获取工作流ID');
-};
+  throw new Error('未能从后端获取工作流ID')
+}
 
 /**
  * @description 调用后端 /api/init 接口

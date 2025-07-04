@@ -19,7 +19,8 @@ function createWindow() {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: false // 调试：暂时禁用web安全
     }
   })
 
@@ -111,6 +112,19 @@ function createWindow() {
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
+
+  // 配置CSP
+  const { session } = require('electron')
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.jdl.com https://*.jd.com; connect-src 'self' http://localhost:3000 http://47.93.132.204:2333 https://*.jdl.com https://*.jd.com; worker-src blob: data:;"
+        ]
+      }
+    })
+  })
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

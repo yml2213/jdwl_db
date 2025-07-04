@@ -132,7 +132,8 @@ async function handleLoginSuccess(cookies, mainWindow) {
 // 检查登录窗口的当前状态
 async function checkLoginStatus(mainWindow) {
   if (!loginWindow || loginWindow.isDestroyed()) return
-  const cookies = await session.defaultSession.cookies.get({})
+  const loginSession = loginWindow.webContents.session
+  const cookies = await loginSession.cookies.get({})
   if (hasRequiredCookies(cookies)) {
     await handleLoginSuccess(cookies, mainWindow)
   }
@@ -152,7 +153,9 @@ function createLoginWindow(mainWindow, icon) {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webSecurity: false,
+      session: session.fromPartition('persist:login')
     }
   })
 
