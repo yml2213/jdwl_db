@@ -83,6 +83,10 @@ export function useTaskList() {
     try {
       const payload = { ...task.executionData }
 
+      console.log(`[executeTask] 1. Preparing to send task '${task.name}'.`)
+      const sessionId = await getSessionId()
+      console.log(`[executeTask] 2. Retrieved sessionId to be sent: ${sessionId}`)
+
       // 统一通过 WebSocket 执行任务，后端会根据 taskName 区分是 task 还是 flow
       webSocketService.send({
         action: 'start_task',
@@ -90,8 +94,9 @@ export function useTaskList() {
         taskName: task.executionFeature,
         isFlow: task.executionType === 'flow', // 传递类型给后端
         payload: payload,
-        sessionId: await getSessionId()
+        sessionId: sessionId
       })
+      console.log(`[executeTask] 3. Task sent over WebSocket.`)
     } catch (error) {
       console.error(`启动任务 ${task.name} 出错:`, error)
       task.status = '失败'

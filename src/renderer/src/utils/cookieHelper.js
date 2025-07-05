@@ -101,10 +101,18 @@ export const getRequestHeaders = async () => {
  * @returns {Promise<string|null>} 会话ID，如果找不到则返回null
  */
 export const getSessionId = async () => {
+  console.log('[getSessionId] 1. Attempting to get cookies from main process.')
   const cookies = await getAllCookies()
   if (!cookies || !cookies.length) {
+    console.log('[getSessionId] 2. No cookies found.')
     return null
   }
   const sessionCookie = cookies.find((c) => c.name === 'connect.sid')
-  return sessionCookie ? sessionCookie.value : null
+  if (sessionCookie) {
+    console.log(`[getSessionId] 2. Found connect.sid cookie with value: ${sessionCookie.value}`)
+    return sessionCookie.value
+  } else {
+    console.log('[getSessionId] 2. Did not find a connect.sid cookie.')
+    return null
+  }
 }

@@ -101,16 +101,29 @@ async function saveCookies(cookies) {
 }
 
 // 从文件读取Cookies
-async function loadCookies() {
+async function loadCookiesFromFile() {
   try {
     const data = await fs.readFile(cookiesFilePath, 'utf8')
     const cookies = JSON.parse(data)
     return cookies
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      console.error('读取Cookies失败:', error)
+      console.error('读取Cookies文件失败:', error)
     }
     return null
+  }
+}
+
+// 从Electron会话中获取所有有效的Cookie
+async function getAllStoredCookies() {
+  try {
+    const allCookies = await session.defaultSession.cookies.get({})
+    // 过滤掉已过期的Cookie
+    const validCookies = allCookies.filter(isCookieValid)
+    return validCookies
+  } catch (error) {
+    console.error('从Electron会话中获取Cookies失败:', error)
+    return []
   }
 }
 
@@ -124,7 +137,7 @@ async function handleLoginSuccess(cookies, mainWindow) {
   }
   if (mainWindow && saved) {
     // 关键改动：将保存好的cookies直接发送给前端
-    const savedCookies = await loadCookies()
+    const savedCookies = await loadCookiesFromFile()
     mainWindow.webContents.send('login-successful', savedCookies)
   }
 }
@@ -186,35 +199,46 @@ async function clearCookies(mainWindow) {
   await session.defaultSession.clearStorageData()
   console.log('Session数据已清除')
   if (mainWindow) {
-    mainWindow.webContents.send('cookies-cleared')
+    mainWindow.webContents.send('logout-successful')
   }
 }
 
-// 检查是否已登录 (基于本地文件)
+// 检查是否已登录
 async function isLoggedIn() {
-  try {
-    const cookies = await loadCookies()
-    const loginStatus = hasRequiredCookies(cookies)
-    console.log('检查本地Cookie文件，登录状态:', loginStatus)
-    return loginStatus
-  } catch (error) {
-    console.error('检查登录状态失败:', error)
-    return false
-  }
+  const cookies = await loadCookiesFromFile()
+  return hasRequiredCookies(cookies)
 }
 
-// 设置所有与登录相关的IPC事件处理程序
+// 设置登录处理器
 function setupLoginHandlers(mainWindow) {
   ipcMain.on('open-login-window', () => createLoginWindow(mainWindow))
-  ipcMain.on('logout', () => clearCookies(mainWindow))
   ipcMain.handle('check-login-status', () => isLoggedIn())
-  ipcMain.handle('get-cookies', () => loadCookies())
+  ipcMain.on('clear-cookies', () => clearCookies(mainWindow))
+
+  ipcMain.handle('get-cookies', async () => {
+    console.log('[IPC] Renderer requested cookies')
+    const fileCookies = (await loadCookiesFromFile()) || []
+    const sessionCookies = (await getAllStoredCookies()) || []
+
+    // 合并两个cookie来源，并去重
+    const allCookiesMap = new Map()
+    for (const cookie of fileCookies) {
+      allCookiesMap.set(cookie.name, cookie)
+    }
+    for (const cookie of sessionCookies) {
+      allCookiesMap.set(cookie.name, cookie)
+    }
+    const combinedCookies = Array.from(allCookiesMap.values())
+
+    console.log(`[IPC] Returning ${combinedCookies.length} combined cookies to renderer.`)
+    return combinedCookies
+  })
 }
 
 export {
   createLoginWindow,
   clearCookies,
   isLoggedIn,
-  loadCookies,
+  loadCookiesFromFile as loadCookies,
   setupLoginHandlers
 }

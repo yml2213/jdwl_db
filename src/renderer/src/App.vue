@@ -20,6 +20,7 @@ const isDev = ref(process.env.NODE_ENV === 'development')
 const appState = ref('loading') // 'loading', 'login', 'main'
 const sessionContext = ref(null)
 provide('sessionContext', sessionContext)
+const accountManagerRef = ref(null)
 
 // --- Authorization & Initialization Flow ---
 const initializeApp = async () => {
@@ -86,6 +87,18 @@ onMounted(() => {
   console.log('App.vue onMounted: 应用已挂载')
   webSocketService.connect()
   initializeApp()
+
+  // Listen for successful login from the main process
+  if (window.electron && window.electron.ipcRenderer) {
+    window.electron.ipcRenderer.on('login-successful', (event, cookies) => {
+      console.log('App.vue: 收到来自主进程的 login-successful 信号。')
+      if (accountManagerRef.value) {
+        accountManagerRef.value.handleLoginSuccess(cookies)
+      } else {
+        console.error('AccountManager component reference is not available.')
+      }
+    })
+  }
 })
 
 onBeforeUnmount(() => {
@@ -112,7 +125,11 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
     </div>
 
     <div v-else-if="appState === 'login'" class="login-view">
-      <AccountManager @login-success="onLoginSuccess" />
+      <AccountManager
+        ref="accountManagerRef"
+        @login-success="onLoginSuccess"
+        @logout="handleLogout"
+      />
     </div>
 
     <div v-else-if="appState === 'main'" class="main-layout">

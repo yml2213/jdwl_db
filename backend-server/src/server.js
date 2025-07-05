@@ -197,15 +197,34 @@ const handleWebSocketMessage = async (ws, message) => {
  * @returns {Promise<object|null>}
  */
 const restoreSession = async (sessionId) => {
+    console.log(`[Session Restore] 1. Received raw sessionId: ${sessionId}`)
     if (!sessionId) return null
+
+    // express-session的会话cookie是签名的，格式为 s:sessionid.signature
+    // 我们需要从中提取出真正的 sessionid 作为文件名
+    let sid = sessionId
+    if (sid.startsWith('s:')) {
+        sid = sid.slice(2)
+        sid = sid.slice(0, sid.lastIndexOf('.'))
+    }
+    console.log(`[Session Restore] 2. Parsed sid for filename: ${sid}`)
+
     try {
-        const sessionFilePath = path.join(__dirname, '..', 'sessions', `${sessionId}.json`)
+        const sessionFilePath = path.join(__dirname, '..', 'sessions', `${sid}.json`) // 使用解析后的sid
+        console.log(`[Session Restore] 3. Attempting to read file: ${sessionFilePath}`)
         const sessionData = await fs.readFile(sessionFilePath, 'utf-8')
+        console.log(`[Session Restore] 4. Successfully read session file content.`)
         const session = JSON.parse(sessionData)
-        console.log(`[Session] 成功恢复会话: ${sessionId}`)
+        console.log(
+            `[Session Restore] 5. Successfully parsed session object for user:`,
+            session.user?.userName
+        )
         return session
     } catch (error) {
-        console.error(`[Session] 无法恢复会话 ${sessionId}:`, error)
+        console.error(
+            `[Session Restore] FAILED. Unable to restore session for sid=${sid} (Original ID: ${sessionId}). Error:`,
+            error
+        )
         return null
     }
 }

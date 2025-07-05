@@ -37,9 +37,6 @@ const axiosInstance = axios.create({
   maxBodyLength: 100 * 1024 * 1024 // 100MB的最大请求体限制
 })
 
-// 存储会话ID和cookie
-let sessionCookies = []
-
 /**
  * 发送HTTP请求
  * @param {string} url - 请求URL
@@ -47,11 +44,9 @@ let sessionCookies = []
  * @returns {Promise<Object>} - 响应数据
  */
 function sendRequest(url, options = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
       console.log(`[Main Process] 发送请求: ${options.method || 'GET'} ${url}`)
-
-      // 添加调试信息
       console.log(`[Main Process] 请求头:`, JSON.stringify(options.headers || {}))
 
       const request = net.request({
@@ -64,20 +59,21 @@ function sendRequest(url, options = {}) {
       // 添加请求头
       if (options.headers) {
         Object.keys(options.headers).forEach((key) => {
-          // 注意：这里我们不过滤掉Cookie头，允许客户端传递
           request.setHeader(key, options.headers[key])
         })
       }
 
-      // 如果请求头中已经包含Cookie，使用它
-      if (options.headers && options.headers.Cookie) {
-        console.log(`[Main Process] 使用请求中提供的Cookie: ${options.headers.Cookie.substring(0, 50)}...`)
-      }
-      // 否则添加保存的会话cookie
-      else if (sessionCookies.length > 0) {
-        const cookieStr = sessionCookies.join('; ')
-        console.log(`[Main Process] 添加存储的会话cookie: ${cookieStr.substring(0, 50)}...`)
-        request.setHeader('Cookie', cookieStr)
+      // 动态获取并添加 connect.sid cookie
+      try {
+        const cookies = await session.defaultSession.cookies.get({ domain: 'localhost' })
+        const sessionCookie = cookies.find((c) => c.name === 'connect.sid')
+        if (sessionCookie) {
+          const cookieStr = `${sessionCookie.name}=${sessionCookie.value}`
+          console.log(`[Main Process] 添加存储的会话cookie: ${cookieStr.substring(0, 50)}...`)
+          request.setHeader('Cookie', cookieStr)
+        }
+      } catch (e) {
+        console.error('[Main Process] 获取会话cookie失败:', e)
       }
 
       // 接收数据
@@ -85,41 +81,20 @@ function sendRequest(url, options = {}) {
 
       // 处理响应
       request.on('response', (response) => {
-        // console.log(`[Main Process] 收到响应状态: ${response.statusCode}`)
-
-        // 记录并保存Set-Cookie头，以便在后续请求中使用
-        const setCookieHeaders = response.headers['set-cookie']
-        if (setCookieHeaders) {
-          // console.log(`[Main Process] 收到Set-Cookie头`, setCookieHeaders)
-
-          // 解析和存储cookies
-          try {
-            sessionCookies = []  // 清空之前的cookie
-            setCookieHeaders.forEach(cookieStr => {
-              const mainCookie = cookieStr.split(';')[0]
-              // console.log(`[Main Process] 保存cookie: ${mainCookie}`)
-              sessionCookies.push(mainCookie)
-            })
-          } catch (e) {
-            console.error('[Main Process] 解析cookie失败:', e)
-          }
-        }
-
         response.on('data', (chunk) => {
           responseData += chunk.toString()
         })
 
         response.on('end', () => {
           try {
-            // 如果是JSON格式，则解析为对象
             let parsedData = responseData
-            if (responseData && response.headers['content-type'] && response.headers['content-type'].includes('application/json')) {
+            if (
+              responseData &&
+              response.headers['content-type'] &&
+              response.headers['content-type'].includes('application/json')
+            ) {
               parsedData = JSON.parse(responseData)
-              // console.log(`[Main Process] 解析响应JSON数据成功`)
-            } else {
-              // console.log(`[Main Process] 收到非JSON数据，长度: ${responseData.length}`)
             }
-
             resolve({
               data: parsedData,
               status: response.statusCode,
@@ -141,7 +116,6 @@ function sendRequest(url, options = {}) {
 
       // 发送请求体
       if (options.body) {
-        // console.log('[Main Process] 发送请求体数据')
         const data = typeof options.body === 'string' ? options.body : JSON.stringify(options.body)
         request.write(data)
       }
@@ -157,8 +131,8 @@ function sendRequest(url, options = {}) {
 
 // 清除存储的会话cookie
 function clearSessionCookies() {
-  console.log('[Main Process] 清除会话cookie')
-  sessionCookies = []
+  // This function might still be useful if we want to force a logout from the main process side
+  console.log('[Main Process] 清除会话cookie (No longer clearing local variable)')
 }
 
 async function getCsrfTokenFromCookies(cookies) {
