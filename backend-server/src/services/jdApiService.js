@@ -29,6 +29,8 @@ const jdApiAxios = axios.create({
   baseURL: 'https://o.jdl.com',
   timeout: 120000, // 120秒超时
   headers: {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
     Accept: 'application/json, text/javascript, */*; q=0.01',
     'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
     'X-Requested-With': 'XMLHttpRequest'
@@ -37,26 +39,29 @@ const jdApiAxios = axios.create({
 
 /**
  * 从会话数据中提取必要的认证信息
- * @param {string} sessionId - 会话ID
+ * @param {object} session - 完整的会话对象
  * @returns {object} 包含 cookieString 和 csrfToken
  */
 function getAuthInfo(session) {
-  if (!session || !session.cookies) {
-    throw new Error('无效的会话数据或缺少cookies')
+  // 京东相关的完整上下文信息（包括cookies）都保存在 session.context 中
+  if (!session || !session.context || !session.context.cookies) {
+    throw new Error('会话数据无效或缺少京东Cookies (session.context.cookies)')
   }
 
-  const { cookies } = session
-  if (!cookies || cookies.length === 0) {
-    throw new Error('会话中没有Cookies')
+  const { cookies } = session.context // 从正确的上下文中获取cookies
+  if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
+    throw new Error('在会话上下文中没有找到有效的Cookies数组')
   }
 
   const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+  console.log('[getAuthInfo] 准备用于请求京东API的Cookie:', cookieString); // 增加日志，用于调试
   const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
   if (!csrfToken) {
-    throw new Error('在加载的Cookies中未找到csrfToken')
+    // 某些API可能不需要csrfToken，这里只做警告
+    console.warn('在会话的Cookies中未找到csrfToken')
   }
 
-  return { cookieString, csrfToken, sessionData: session }
+  return { cookieString, csrfToken, sessionData: session.context }
 }
 
 /**
@@ -1330,4 +1335,100 @@ export async function queryProductDataBySkus(skus, deptId, schemeId, sessionData
 
   console.log(`[jdApiService] 未能获取到商品数据。`)
   return []
+}
+
+/**
+ * 获取供应商列表
+ * @param {object} session - 完整的会话对象
+ * @returns {Promise<Array>} - 供应商列表
+ */
+export async function getVendorList(session) {
+  const { cookieString, csrfToken } = getAuthInfo(session)
+
+  const url = `/supplier/querySupplierList.do?rand=${Math.random()}`
+  const data = qs.stringify({
+    csrfToken,
+    sellerId: '',
+    supplierName: '',
+    supplierCode: '',
+    page: 1,
+    pageSize: 100, // 假设最多100个供应商
+    sidx: 'supplierNo',
+    sord: 'asc'
+  })
+
+  const response = await requestJdApi({
+    method: 'POST',
+    url,
+    data,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/supplier/list'
+    }
+  })
+
+  // 检查返回的数据结构
+  if (response && response.success && Array.isArray(response.data)) {
+    return response.data.map((item) => ({
+      id: item.supplierNo, // 使用 supplierNo 作为唯一标识
+      name: item.supplierName,
+      supplierNo: item.supplierNo
+    }))
+  } else if (response && typeof response === 'string' && response.trim().startsWith('<')) {
+    // 如果返回的是一个HTML字符串，很可能是登录页面或者错误页面
+    console.error('获取供应商列表失败：收到了HTML响应，可能登录已过期。')
+    throw new Error('NotLogin')
+  } else if (response && response.error === 'NotLogin') {
+    throw new Error('NotLogin')
+  } else {
+    console.warn('获取供应商列表返回数据格式不正确:', response)
+    return []
+  }
+}
+
+/**
+ * 获取事业部列表
+ * @param {string} vendorName - 供应商名称
+ * @param {object} session - 完整的会话对象
+ * @returns {Promise<Array>} - 事业部列表
+ */
+export async function getDepartmentList(vendorName, session) {
+  const { cookieString, csrfToken } = getAuthInfo(session)
+
+  const url = `/dept/queryDeptList.do?rand=${Math.random()}`
+  const data = qs.stringify({
+    csrfToken,
+    supplierName: vendorName
+  })
+
+  const response = await requestJdApi({
+    method: 'POST',
+    url,
+    data,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/supplier/list' // Referer可以保持一致
+    }
+  })
+
+  if (response && Array.isArray(response)) {
+    return response.map((item) => ({
+      id: item.deptId,
+      name: item.deptName,
+      deptNo: item.deptNo,
+      sellerId: item.sellerId, // 确保返回 sellerId
+      sellerNo: item.sellerNo // 确保返回 sellerNo
+    }))
+  } else if (response && typeof response === 'string' && response.trim().startsWith('<')) {
+    // 如果返回的是一个HTML字符串，很可能是登录页面或者错误页面
+    console.error('获取事业部列表失败：收到了HTML响应，可能登录已过期。')
+    throw new Error('NotLogin')
+  } else if (response && response.error === 'NotLogin') {
+    throw new Error('NotLogin')
+  } else {
+    console.warn('获取事业部列表返回数据格式不正确:', response)
+    return []
+  }
 }

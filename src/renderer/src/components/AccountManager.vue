@@ -69,14 +69,18 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
 import { getAllCookies } from '../utils/cookieHelper'
-import { createSession } from '../services/apiService'
+import {
+  createSession,
+  updateSelection
+} from '../services/apiService'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
   getSelectedVendor,
   getSelectedDepartment,
   hasUserSelected,
-  markAsSelected
+  markAsSelected,
+  clearSelections
 } from '../utils/storageHelper'
 import VendorSelector from './VendorSelector.vue'
 import DepartmentSelector from './DepartmentSelector.vue'
@@ -91,7 +95,10 @@ defineProps({
 
 const emit = defineEmits(['login-success', 'logout'])
 const sessionContext = inject('sessionContext')
-const isLoggedIn = computed(() => !!sessionContext.value)
+
+// 登录状态
+const isLoggedIn = computed(() => sessionContext.value && sessionContext.value.user)
+
 // 用户名
 const username = ref('')
 // 选择弹窗显示状态
@@ -111,8 +118,9 @@ const hasSelectedData = computed(() => {
 })
 
 // 从cookie中获取用户名 (从pin获取)
-const updateUsername = async () => {
-  const cookies = await getAllCookies()
+const updateUsername = async (passedCookies) => {
+  // 优先使用传入的 cookies，如果没有，再从存储中获取
+  const cookies = passedCookies || (await getAllCookies())
   if (cookies && Array.isArray(cookies)) {
     const pinCookie = cookies.find((c) => c.name === 'pin')
     if (pinCookie && pinCookie.value) {
@@ -192,98 +200,65 @@ const handleDepartmentSelected = async (department) => {
   hasSelected.value = true
   markAsSelected()
 
-  // 关键改动：创建后端会话
+  // 关键改动：将选择结果更新到后端
   try {
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-
-    if (!pinCookie) {
-      alert('创建会话失败：无法找到关键的用户凭据(pin)，请尝试重新登录。')
-      return
-    }
-
-    if (!cookies || !vendorInfo || !departmentInfo) {
-      alert('创建会话失败：缺少Cookies、供应商或事业部信息。')
-      return
-    }
-
-    const sessionData = {
-      uniqueKey: `${pinCookie.value}-${departmentInfo.id}`, // 使用 pin + 事业部ID 作为唯一标识
-      cookies,
+    const selectionData = {
       supplierInfo: vendorInfo,
-      departmentInfo
+      departmentInfo: departmentInfo
     }
-    const response = await createSession(sessionData)
+    const response = await updateSelection(selectionData)
+    if (!response.success) {
+      throw new Error(response.message || '更新后端选择失败')
+    }
+    
+    console.log('选择已成功更新到后端。流程完成。')
+    // 使用后端返回的最新、最完整的上下文来完成登录流程
+    emit('login-success', response.context)
 
-    if (response) {
-      alert('供应商和事业部选择成功，后端会话已创建！')
-      // 关键改动：发出登录成功事件
-      emit('login-success')
-    } else {
-      throw new Error('创建后端会话失败，未收到有效响应。')
-    }
   } catch (error) {
-    console.error('创建后端会话失败:', error)
-    alert(`创建后端会话失败: ${error.message}`)
+    console.error('更新后端选择失败:', error)
+    alert(`关键步骤失败：无法保存您的选择。错误: ${error.message}`)
+    // 可选：执行登出逻辑
+    logout()
   }
 
   // 关闭选择弹窗
   closeSelectionModal()
 }
 
-const handleLoginSuccess = async (injectedCookies = null) => {
-  console.log('登录成功事件被触发！')
-  await updateUsername() // 更新用户名
-  loadSavedSelections() // 加载已保存的选择
-  console.log('登录成功后，用户名更新为:', username.value)
-  console.log('本地存储中是否有已选择的供应商和事业部:', hasUserSelected())
+const handleLoginSuccess = async (allCookies) => {
+  console.log('步骤1: JD登录成功，开始创建后端会话。')
+  await updateUsername(allCookies)
 
-  // 如果用户已经选择过供应商和事业部
-  if (hasUserSelected()) {
-    console.log('用户已选择供应商和事业部，尝试直接创建会话。')
-    try {
-      // 获取所有必要数据
-      const cookies = injectedCookies || (await getAllCookies())
-      console.log('获取到cookie数量:', cookies?.length || 0)
+  clearSelections()
 
-      // 检查cookies是否有效
-      if (!cookies || cookies.length === 0) {
-        console.error('无法获取到有效的Cookie，无法创建会话')
-        alert('无法获取登录凭据，请尝试重新登录。')
-        return
-      }
+  try {
+    // 步骤1.1: 筛选出必要的Cookie
+    const requiredCookieNames = ['pin', 'thor', 'csrfToken', 'flash']
+    const essentialCookies = allCookies.filter(c => requiredCookieNames.includes(c.name))
 
-      const vendorInfo = getSelectedVendor()
-      const departmentInfo = getSelectedDepartment()
-      const pinCookie = cookies?.find((c) => c.name === 'pin')
-
-      if (!pinCookie) {
-        alert('创建会话失败：无法找到关键的用户凭据(pin)，请尝试重新登录。')
-        return
-      }
-
-      const sessionData = {
-        uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
-        cookies,
-        supplierInfo: vendorInfo,
-        departmentInfo
-      }
-
-      const response = await createSession(sessionData)
-      if (response) {
-        console.log('通过已有数据创建会话成功。')
-        emit('login-success')
-      } else {
-        throw new Error('创建后端会话失败，未收到有效响应。')
-      }
-    } catch (error) {
-      console.error('使用已有数据创建会话失败:', error)
-      alert(`登录失败: ${error.message}`)
+    if (essentialCookies.length < requiredCookieNames.length) {
+        const missing = requiredCookieNames.filter(n => !essentialCookies.some(c => c.name === n));
+        throw new Error(`登录凭据不完整，缺少以下Cookie: ${missing.join(', ')}`);
     }
-  } else {
-    // 如果用户没有选择过，则引导用户进行选择
-    console.log('用户尚未选择供应商和事业部，引导用户进行选择。')
+
+    // 步骤1.2: 调用后端创建会话
+    const response = await createSession(essentialCookies)
+    if (!response.success) {
+      throw new Error(response.message || '创建后端会话失败')
+    }
+
+    console.log('步骤2: 后端会话已成功创建，准备选择供应商/事业部。')
+    // 更新本地的会话上下文，以便后续API调用（如getVendorList）能使用
+    sessionContext.value = response.context
+
+    // 步骤3: 打开选择弹窗
     startSelection()
+
+  } catch (error) {
+    console.error('登录流程失败 (步骤1/2):', error)
+    alert(`登录流程中断: ${error.message}`)
+    logout()
   }
 }
 
@@ -291,11 +266,8 @@ const initialize = async () => {
   // This is for when the app is opened and user is already logged in.
   loadSavedSelections()
   if (isLoggedIn.value) {
-    updateUsername()
+    await updateUsername() // 这里不需要传cookies，它会自己去获取
   }
-
-  // Listen for the login-successful event from the main process
-  window.electron.ipcRenderer.on('login-successful', handleLoginSuccess)
 }
 
 // 在所有函数声明后暴露方法
@@ -303,11 +275,13 @@ defineExpose({
   handleLoginSuccess
 })
 
-onMounted(initialize)
+onMounted(() => {
+  initialize()
+})
 
 onUnmounted(() => {
   // Clean up the listener when the component is unmounted
-  window.electron.ipcRenderer.removeAllListeners('login-successful')
+  // window.electron.ipcRenderer.removeAllListeners('login-successful')
 })
 </script>
 

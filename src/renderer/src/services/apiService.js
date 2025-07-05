@@ -4,7 +4,8 @@ import qs from 'qs'
 // API基础URL
 const BASE_URL = 'https://o.jdl.com'
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://47.93.132.204:2333' // 后端服务器地址
+// 恢复动态设置API地址，并为本地开发提供默认值
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:2333'
 
 /**
  * 安全序列化对象，移除无法克隆的元素
@@ -123,56 +124,38 @@ async function getCsrfToken() {
   return tokenCookie ? tokenCookie.value : ''
 }
 
-/**
- * 发送网络请求的通用方法
- * @param {string} url - 请求URL
- * @param {Object} options - 请求选项
- * @returns {Promise<any>} 响应数据
- */
-export const fetchApi = async (url, options = {}) => {
-  const MAX_RETRIES = 3 // 最大重试次数
-  const TIMEOUT = 120000 // 超时时间设为120秒
+// 基础的 fetch 封装，带重试机制
+async function fetchApi(
+  endpoint,
+  options = {},
+  retries = 3,
+  delay = 2000,
+  backoff = 2
+) {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`发送请求: ${url}`, options)
+      const response = await window.api.sendRequest(url, {
+        method: options.method || 'GET',
+        headers: options.headers,
+        body: options.body ? JSON.stringify(options.body) : undefined
+      })
+      return response
+    } catch (error) {
+      console.warn(`API请求失败(尝试 ${i + 1}/${retries}):`, error)
 
-  try {
-    // 获取包含Cookie的请求头
-    const headers = await getRequestHeaders()
-
-    // 合并选项
-    const finalOptions = {
-      ...options,
-      timeout: TIMEOUT, // 设置更长的超时时间
-      headers: {
-        ...headers,
-        ...options.headers
+      // 如果已经达到最大重试次数，抛出错误
+      if (i >= retries - 1) {
+        console.error(`达到最大重试次数(${retries})，请求失败:`, error)
+        throw error
       }
+
+      // 等待一段时间后重试，使用指数退避策略
+      const waitTime = delay * Math.pow(backoff, i)
+      console.log(`将在 ${waitTime / 1000} 秒后重试...`)
+      await new Promise((resolve) => setTimeout(resolve, waitTime))
     }
-
-    console.log('发送请求:', url, options)
-
-    let retries = 0
-    while (retries < MAX_RETRIES) {
-      try {
-        const response = await window.api.sendRequest(url, finalOptions)
-        return response
-      } catch (error) {
-        retries++
-        console.warn(`API请求失败(尝试 ${retries}/${MAX_RETRIES}):`, error)
-
-        // 如果已经达到最大重试次数，抛出错误
-        if (retries >= MAX_RETRIES) {
-          console.error(`达到最大重试次数(${MAX_RETRIES})，请求失败:`, error)
-          throw error
-        }
-
-        // 等待一段时间后重试，使用指数退避策略
-        const waitTime = 2000 * Math.pow(2, retries - 1) // 2秒, 4秒, 8秒...
-        console.log(`将在 ${waitTime / 1000} 秒后重试...`)
-        await new Promise((resolve) => setTimeout(resolve, waitTime))
-      }
-    }
-  } catch (error) {
-    console.error('API请求失败:', error)
-    throw error
   }
 }
 
@@ -299,200 +282,23 @@ export async function getShopList(deptId) {
 }
 
 /**
- * 获取供应商列表
- * @returns {Promise<Array>} 供应商列表数组
+ * 从后端获取供应商列表
+ * @returns {Promise<Array>} 供应商列表
  */
 export async function getVendorList() {
-  const url = `${BASE_URL}/supplier/querySupplierList.do?rand=${Math.random()}`
-
-  // 先获取 cookies 并检查登录状态
-  const cookies = await getAllCookies()
-  if (!cookies || cookies.length === 0) {
-    console.error('获取供应商列表失败: 未找到有效的 cookies，可能未登录')
-    return []
-  }
-
-  const csrfToken = await getCsrfToken()
-  if (!csrfToken) {
-    console.error('获取供应商列表失败: 未找到 csrfToken，可能登录状态无效')
-    return []
-  }
-
-  console.log('获取供应商列表开始, csrfToken:', csrfToken ? '已获取' : '未获取')
-  console.log('当前 cookies 数量:', cookies.length)
-
-  // 构建请求数据
-  const data = qs.stringify({
-    csrfToken: csrfToken,
-    sellerId: '',
-    deptId: '',
-    status: '',
-    supplierNo: '',
-    supplierName: '',
-    aoData:
-      '[{"name":"sEcho","value":2},{"name":"iColumns","value":6},{"name":"sColumns","value":",,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":1},{"name":"bSortable_1","value":false},{"name":"mDataProp_2","value":"supplierNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"supplierName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"deptName"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"statusStr"},{"name":"bSortable_5","value":true},{"name":"iSortCol_0","value":2},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
-  })
-
-  try {
-    console.log('发送供应商列表请求')
-
-    // 获取完整的 Cookie 字符串
-    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
-    console.log('使用完整的 Cookie 字符串，长度:', cookieString.length)
-
-    const response = await fetchApi(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'Origin': BASE_URL,
-        'Referer': `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest',
-        'Cookie': cookieString // 直接设置完整的 Cookie 字符串
-      },
-      body: data
-    })
-
-    console.log('供应商列表响应:', response ? '获取成功' : '未获取数据')
-
-    // 检查错误响应
-    if (response && response.error === 'NotLogin') {
-      console.error('获取供应商列表失败: 未登录或会话已过期')
-      return []
-    }
-
-    // 处理响应数据，提取供应商列表
-    if (response && response.aaData) {
-      console.log('获取到供应商数量:', response.aaData.length)
-      // 转换为更简单的数据结构
-      return response.aaData.map((vendor) => {
-        return {
-          id: vendor.id,
-          supplierName: vendor.supplierName,
-          supplierNo: vendor.supplierNo,
-          status: vendor.status || vendor.statusStr,
-          address: vendor.address || '',
-          city: vendor.city || ''
-        }
-      })
-    } else {
-      console.error('响应数据格式不正确:', response)
-      return []
-    }
-  } catch (error) {
-    console.error('获取供应商列表失败:', error)
-    return [] // 返回空数组而不是抛出错误，以避免UI崩溃
-  }
+  return await fetchApi('/api/vendors')
 }
 
 /**
- * 根据供应商获取事业部列表
+ * 根据供应商名称从后端获取事业部列表
  * @param {string} vendorName - 供应商名称
- * @returns {Promise<Array>} 事业部列表数组
+ * @returns {Promise<Array>} 事业部列表
  */
 export async function getDepartmentsByVendor(vendorName) {
-  console.log('开始获取事业部列表, 供应商名称:', vendorName)
-  const url = `${BASE_URL}/dept/queryDeptList.do?rand=${Math.random()}`
-
-  // 先获取 cookies 并检查登录状态
-  const cookies = await getAllCookies()
-  if (!cookies || cookies.length === 0) {
-    console.error('获取事业部列表失败: 未找到有效的 cookies，可能未登录')
-    return []
-  }
-
-  const csrfToken = await getCsrfToken()
-  if (!csrfToken) {
-    console.error('获取事业部列表失败: 未找到 csrfToken，可能登录状态无效')
-    return []
-  }
-
-  console.log('获取事业部列表, csrfToken:', csrfToken ? '已获取' : '未获取')
-  console.log('当前 cookies 数量:', cookies.length)
-
-  // 构建请求数据
-  const data = qs.stringify({
-    csrfToken: csrfToken,
-    id: '',
-    sellerId: '',
-    status: '2', // 启用状态
-    aoData:
-      '[{"name":"sEcho","value":3},{"name":"iColumns","value":7},{"name":"sColumns","value":",,,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":1},{"name":"bSortable_1","value":false},{"name":"mDataProp_2","value":"deptNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"deptName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"sellerNo"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"sellerName"},{"name":"bSortable_5","value":true},{"name":"mDataProp_6","value":"statusStr"},{"name":"bSortable_6","value":true},{"name":"iSortCol_0","value":2},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
+  return await fetchApi('/api/departments', {
+    method: 'POST',
+    body: { vendorName }
   })
-
-  try {
-    console.log('发送事业部列表请求')
-
-    // 获取完整的 Cookie 字符串
-    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
-    console.log('使用完整的 Cookie 字符串，长度:', cookieString.length)
-
-    const response = await fetchApi(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'Origin': BASE_URL,
-        'Referer': `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest',
-        'Cookie': cookieString // 直接设置完整的 Cookie 字符串
-      },
-      body: data
-    })
-
-    console.log('事业部列表响应:', response ? '获取成功' : '未获取数据')
-
-    // 检查错误响应
-    if (response && response.error === 'NotLogin') {
-      console.error('获取事业部列表失败: 未登录或会话已过期')
-      return []
-    }
-
-    // 处理响应数据，提取事业部列表
-    if (response && response.aaData) {
-      console.log('获取到事业部总数量:', response.aaData.length)
-
-      // 过滤名称包含供应商名称的事业部
-      const filteredDepts = response.aaData.filter((dept) => {
-        const deptMatch = dept.deptName && dept.deptName.includes(vendorName)
-        const sellerMatch = dept.sellerName && dept.sellerName.includes(vendorName)
-        return deptMatch || sellerMatch
-      })
-
-      console.log('过滤后的事业部数量:', filteredDepts.length)
-
-      if (filteredDepts.length === 0 && response.aaData.length > 0) {
-        console.log('过滤条件太严格，无法找到匹配的事业部，返回所有事业部')
-        // 如果过滤后没有事业部但API返回了事业部，则返回所有事业部
-        return response.aaData.map((dept) => ({
-          id: dept.id,
-          name: dept.deptName,
-          deptNo: dept.deptNo,
-          sellerId: dept.sellerId,
-          sellerName: dept.sellerName,
-          sellerNo: dept.sellerNo,
-          status: dept.statusStr,
-          createTime: dept.createTimeStr
-        }))
-      }
-
-      // 转换为更简单的数据结构
-      return filteredDepts.map((dept) => ({
-        id: dept.id,
-        name: dept.deptName,
-        deptNo: dept.deptNo,
-        sellerId: dept.sellerId,
-        sellerName: dept.sellerName,
-        sellerNo: dept.sellerNo,
-        status: dept.statusStr,
-        createTime: dept.createTimeStr
-      }))
-    } else {
-      console.error('响应数据格式不正确:', response)
-      return []
-    }
-  } catch (error) {
-    console.error('获取事业部列表失败:', error)
-    return [] // 返回空数组而不是抛出错误，以避免UI崩溃
-  }
 }
 
 /**
@@ -585,17 +391,26 @@ export async function getWarehouseList(sellerId, deptId) {
 
 /**
  * @description 创建一个新的会话，将认证和上下文信息发送到后端
- * @param {object} sessionData 包含 cookies, supplierInfo, departmentInfo 的对象
- * @returns {Promise<object>} 后端返回的响应数据，包含 sessionId
+ * @param {Array} cookies 从京东登录后获取的 cookies 数组
+ * @returns {Promise<Object>} 后端返回的会话对象
  */
-export const createSession = async (sessionData) => {
-  try {
-    const response = await throttledSendRequest('post', '/api/create-session', sessionData)
-    return response
-  } catch (error) {
-    console.error('createSession API错误:', error)
-    throw error
-  }
+export async function createSession(cookies) {
+  return await fetchApi('/api/create-session', {
+    method: 'POST',
+    body: { cookies } // 只发送 cookies
+  })
+}
+
+/**
+ * @description 将用户选择的供应商和事业部信息更新到后端会话中
+ * @param {object} selectionData 包含 supplierInfo 和 departmentInfo 的对象
+ * @returns {Promise<Object>} 后端返回的更新后的会话对象
+ */
+export async function updateSelection(selectionData) {
+  return await fetchApi('/api/update-selection', {
+    method: 'POST',
+    body: selectionData
+  });
 }
 
 /**
@@ -657,3 +472,6 @@ export async function saveFileContent(filePath, content) {
 export async function openFileDialog() {
   return await window.electron.ipcRenderer.invoke('open-file-dialog')
 }
+
+// --- WebSocket 通信 ---
+let webSocket = null

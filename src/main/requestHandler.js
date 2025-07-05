@@ -11,6 +11,12 @@ import { saveBufferToDownloads } from './fileHandler'
 import { net } from 'electron'
 import { session } from 'electron'
 
+// 定义后端服务的基础URL
+const API_BASE_URL = 'http://localhost:2333'
+
+// 存储和管理会话级别的Cookie
+const sessionCookies = new Map()
+
 // 日志文件路径
 const logPath = path.join(app.getPath('userData'), 'request-logs.txt')
 
@@ -49,11 +55,15 @@ function sendRequest(url, options = {}) {
       console.log(`[Main Process] 发送请求: ${options.method || 'GET'} ${url}`)
       console.log(`[Main Process] 请求头:`, JSON.stringify(options.headers || {}))
 
+      // 如果URL是相对路径，则添加基础URL
+      const finalUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+
       const request = net.request({
-        url,
+        url: finalUrl,
         method: options.method || 'GET',
         redirect: 'follow',
-        ...options
+        session: options.session || session.defaultSession,
+        useSessionCookies: true
       })
 
       // 添加请求头

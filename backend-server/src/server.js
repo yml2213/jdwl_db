@@ -68,21 +68,97 @@ app.post('/api/logout', (req, res) => {
     })
 })
 
-// 新增：创建会话状态接口
+// 新增：获取供应商列表
+app.get('/api/vendors', requireAuth, async (req, res) => {
+    console.log('[API /api/vendors] 收到请求。正在处理...')
+    try {
+        const vendors = await jdApiService.getVendorList(req.session)
+        console.log('[API /api/vendors] 成功获取并处理了供应商数据，准备返回:', vendors)
+        res.json(vendors)
+    } catch (error) {
+        console.error('[API /api/vendors] 获取供应商列表时发生严重错误:', error)
+        if (error.message === 'NotLogin') {
+            res.status(401).json({ error: 'NotLogin', message: '会话无效或已过期' })
+        } else {
+            res.status(500).json({ error: 'InternalServerError', message: error.message })
+        }
+    }
+})
+
+// 新增：获取事业部列表
+app.post('/api/departments', requireAuth, async (req, res) => {
+    const { vendorName } = req.body
+    if (!vendorName) {
+        return res.status(400).json({ error: 'BadRequest', message: '缺少 vendorName 参数' })
+    }
+    try {
+        const departments = await jdApiService.getDepartmentList(vendorName, req.session)
+        res.json(departments)
+    } catch (error) {
+        console.error(`获取"${vendorName}"的事业部列表失败:`, error)
+        if (error.message === 'NotLogin') {
+            res.status(401).json({ error: 'NotLogin', message: '会话无效或已过期' })
+        } else {
+            res.status(500).json({ error: 'InternalServerError', message: error.message })
+        }
+    }
+})
+
+// 新增：创建会话状态接口（新流程）
 app.post('/api/create-session', (req, res) => {
-    const { uniqueKey, cookies, supplierInfo, departmentInfo } = req.body
-    if (uniqueKey && cookies && supplierInfo && departmentInfo) {
-        req.session.user = { name: supplierInfo.name, uniqueKey }
-        req.session.context = req.body // Save the whole context
+    const { cookies } = req.body
+    if (cookies && Array.isArray(cookies)) {
+        // 从 cookies 中解码用户名
+        const pinCookie = cookies.find((c) => c.name === 'pin')
+        const username = pinCookie ? decodeURIComponent(pinCookie.value) : '未知用户'
+
+        req.session.user = { name: username }
+        req.session.context = { cookies } // 只保存 cookies
+
         req.session.save((err) => {
             if (err) {
+                console.error('[API /api/create-session] 会话保存失败:', err)
                 return res.status(500).json({ success: false, message: 'Session save error' })
             }
-            res.json({ success: true, message: '会话创建成功' })
+            console.log(`[API /api/create-session] 会话为用户 "${username}" 创建成功。`)
+            res.json({ success: true, message: '会话创建成功', context: req.session.context })
         })
     } else {
-        res.status(400).json({ success: false, message: '缺少创建会话所需的数据' })
+        res.status(400).json({ success: false, message: '请求体中缺少必需的 cookies 数组。' })
     }
+})
+
+// 新增：更新会话中的选择信息
+app.post('/api/update-selection', requireAuth, (req, res) => {
+    const { supplierInfo, departmentInfo } = req.body
+    if (!supplierInfo || !departmentInfo) {
+        return res
+            .status(400)
+            .json({ success: false, message: '缺少 supplierInfo 或 departmentInfo' })
+    }
+
+    if (!req.session.context) {
+        return res.status(400).json({ success: false, message: '无效的会话，找不到上下文。' })
+    }
+
+    // 更新会话上下文
+    req.session.context.supplierInfo = supplierInfo
+    req.session.context.departmentInfo = departmentInfo
+
+    // 更新用户 uniqueKey
+    const pinCookie = req.session.context.cookies?.find(c => c.name === 'pin');
+    if (pinCookie && departmentInfo.id) {
+        req.session.user.uniqueKey = `${pinCookie.value}-${departmentInfo.id}`;
+    }
+
+    req.session.save((err) => {
+        if (err) {
+            console.error('[API /api/update-selection] 更新会话失败:', err)
+            return res.status(500).json({ success: false, message: 'Session save error' })
+        }
+        console.log(`[API /api/update-selection] 成功为用户 "${req.session.user.name}" 更新选择。`)
+        res.json({ success: true, message: '选择已更新', context: req.session.context })
+    })
 })
 
 // 新增：获取详细会话状态接口

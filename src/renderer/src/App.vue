@@ -26,7 +26,7 @@ const accountManagerRef = ref(null)
 const initializeApp = async () => {
   appState.value = 'loading'
   try {
-    // 1. First, try to get a session from the server directly.
+    // 1. 始终从服务器获取会话状态.
     const status = await getSessionStatus()
     if (status.loggedIn && status.context) {
       console.log('会话恢复成功 (来自后端)')
@@ -34,45 +34,25 @@ const initializeApp = async () => {
       appState.value = 'main'
       return
     }
-
-    // 2. If server has no session, try to create one using local data.
-    const cookies = await getAllCookies()
-    const vendorInfo = getSelectedVendor()
-    const departmentInfo = getSelectedDepartment()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-
-    if (pinCookie && vendorInfo && departmentInfo) {
-      console.log('发现本地凭据，尝试用本地数据创建新会话...')
-      const sessionData = {
-        uniqueKey: `${pinCookie.value}-${departmentInfo.id}`,
-        cookies,
-        supplierInfo: vendorInfo,
-        departmentInfo
-      }
-      await createSession(sessionData)
-
-      // After attempting to create, re-check status to confirm.
-      const finalStatus = await getSessionStatus()
-      if (finalStatus.loggedIn && finalStatus.context) {
-        console.log('使用本地数据创建并恢复会话成功')
-        sessionContext.value = finalStatus.context
-        appState.value = 'main'
-        return
-      }
-    }
   } catch (error) {
     console.error('自动恢复或创建会话失败:', error)
   }
 
-  // 3. If all else fails, show the login screen.
+  // 2. 如果服务器没有会话，则要求用户登录.
   console.log('无法自动恢复会话，请手动登录。')
   sessionContext.value = null
   appState.value = 'login'
 }
 
-const onLoginSuccess = async () => {
-  console.log('登录成功，重新初始化应用...')
-  await initializeApp()
+const onLoginSuccess = (context) => {
+  if (context) {
+    console.log('登录和会话创建完全成功，进入主应用。')
+    sessionContext.value = context
+    appState.value = 'main'
+  } else {
+    console.error('onLoginSuccess被调用，但没有有效的会话上下文。')
+    appState.value = 'login'
+  }
 }
 
 const handleLogout = () => {
