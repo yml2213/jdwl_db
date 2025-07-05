@@ -1346,15 +1346,26 @@ export async function getVendorList(session) {
   const { cookieString, csrfToken } = getAuthInfo(session)
 
   const url = `/supplier/querySupplierList.do?rand=${Math.random()}`
+  // const data = qs.stringify({
+  //   csrfToken,
+  //   sellerId: '',
+  //   supplierName: '',
+  //   supplierCode: '',
+  //   page: 1,
+  //   pageSize: 100, // 假设最多100个供应商
+  //   sidx: 'supplierNo',
+  //   sord: 'asc'
+  // })
+  // 构建请求数据
   const data = qs.stringify({
-    csrfToken,
+    csrfToken: csrfToken,
     sellerId: '',
+    deptId: '',
+    status: '',
+    supplierNo: '',
     supplierName: '',
-    supplierCode: '',
-    page: 1,
-    pageSize: 100, // 假设最多100个供应商
-    sidx: 'supplierNo',
-    sord: 'asc'
+    aoData:
+      '[{"name":"sEcho","value":2},{"name":"iColumns","value":6},{"name":"sColumns","value":",,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":1},{"name":"bSortable_1","value":false},{"name":"mDataProp_2","value":"supplierNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"supplierName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"deptName"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"statusStr"},{"name":"bSortable_5","value":true},{"name":"iSortCol_0","value":2},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
   })
 
   const response = await requestJdApi({
