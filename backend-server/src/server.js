@@ -236,12 +236,15 @@ app.get('/api/session-status', (req, res) => {
 
 // 新增：获取店铺列表
 app.get('/api/shops', requireAuth, async (req, res) => {
-    const { deptId } = req.query;
+    const { deptId, shopName } = req.query;
+    console.log('req.query', req.query);
+    console.log('deptId', deptId);
+    console.log('shopName', shopName);
     if (!deptId) {
         return res.status(400).json({ error: 'BadRequest', message: '缺少 deptId 查询参数' });
     }
     try {
-        const shops = await jdApiService.getShopList(deptId, req.session);
+        const shops = await jdApiService.getShopList(deptId, shopName, req.session);
         res.json(shops);
     } catch (error) {
         console.error(`获取事业部 ${deptId} 的店铺列表失败:`, error);

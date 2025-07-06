@@ -1474,7 +1474,7 @@ export async function getDepartmentList(vendorName, session) {
  * @param {object} session - 完整的会话对象
  * @returns {Promise<Array>} 店铺列表数组
  */
-export async function getShopList(deptId, session) {
+export async function getShopList(deptId, shopName, session) {
   const { cookieString, csrfToken } = getAuthInfo(session);
   if (!deptId) {
     throw new Error('获取店铺列表需要提供事业部ID (deptId)');
@@ -1485,7 +1485,7 @@ export async function getShopList(deptId, session) {
   const pageSize = 100;
   let hasMoreData = true;
 
-  console.log(`[jdApiService] 开始获取店铺列表, 事业部ID: ${deptId}`);
+  console.log(`[jdApiService] 开始获取店铺列表, 事业部ID: ${deptId}, 事业部名字: ${shopName}`);
 
   while (hasMoreData) {
     const data = qs.stringify({

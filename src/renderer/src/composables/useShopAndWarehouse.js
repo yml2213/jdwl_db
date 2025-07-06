@@ -79,6 +79,7 @@ export function useShopAndWarehouse() {
         shopsList.value = cachedShops
       } else {
         const department = getSelectedDepartment()
+        console.log('useShopAndWarehouse  ====> department', department)
         if (!department || !department.deptNo) throw new Error('未选择事业部')
         const deptId = department.deptNo.replace('CBU', '')
         const shops = await getShopList(deptId)
@@ -106,6 +107,7 @@ export function useShopAndWarehouse() {
       } else {
         const vendor = getSelectedVendor()
         const department = getSelectedDepartment()
+        console.log(' department', department)
         if (!vendor?.id || !department?.sellerId || !department?.deptNo)
           throw new Error('未选择供应商或事业部')
         const warehouses = await getWarehouseList(
