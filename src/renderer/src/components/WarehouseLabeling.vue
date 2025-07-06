@@ -142,6 +142,25 @@ watch(
   { deep: true }
 )
 
+// 新增：监听快速选择的变化，以更新UI选项
+watch(
+  () => form.quickSelect,
+  (newVal) => {
+    const workflows = getWorkflows();
+    if (newVal === 'manual') {
+      // 当切换回手动模式时，重置所有选项为未选中
+      const manualOptions = workflows.manual.options;
+      Object.keys(form.options).forEach(key => {
+        form.options[key] = manualOptions[key] || false;
+      });
+    } else if (workflows[newVal] && workflows[newVal].options) {
+      // 当选择一个工作流时，应用该工作流的预设选项
+      const workflowOptions = workflows[newVal].options;
+      Object.assign(form.options, workflowOptions);
+    }
+  }
+);
+
 function updateForm(newFormState) {
   Object.assign(form, newFormState)
 }
@@ -289,34 +308,8 @@ const addTask = () => {
       stages,
       initialContext
     }
-  })
-}
-
-watch(
-  () => form.quickSelect,
-  (newValue) => {
-    resetOptions()
-    if (newValue === 'workflow') {
-      const workflows = getWorkflows()
-      const workflowOptions = workflows.warehouseLabeling.options
-      Object.keys(form.options).forEach((key) => {
-        if (workflowOptions.hasOwnProperty(key)) {
-          form.options[key] = workflowOptions[key]
-        }
-      })
-    }
-  }
-)
-
-const manualTaskLabels = {
-  importStoreProducts: '导入店铺商品',
-  enableStoreProducts: '启用店铺商品',
-  importLogisticsAttributes: '导入物流属性',
-  enableInventoryAllocation: '启用库存分配',
-  enableJpSearch: '启用京配打标',
-  addInventory: '添加库存',
-  importProductNames: '导入商品简称'
-}
+  });
+};
 
 function handleRowClick(task) {
   selectedTask.value = task

@@ -4,14 +4,15 @@
       <div class="form-group">
         <label class="form-label">快捷选择</label>
         <div class="select-wrapper">
-          <select
-            :value="form.quickSelect"
-            @change="emit('update:form', { ...form, quickSelect: $event.target.value })"
-            class="form-select"
+          <el-select
+            :model-value="form.quickSelect"
+            placeholder="选择任务流"
+            style="width: 100%"
+            @change="onQuickSelectChange"
           >
-            <option value="manual">手动选择</option>
-            <option value="workflow">任务流 -- 入仓打标</option>
-          </select>
+            <el-option value="manual">手动选择</el-option>
+            <el-option value="warehouseLabeling">任务流 -- 入仓打标</el-option>
+          </el-select>
         </div>
       </div>
 
@@ -216,10 +217,18 @@ const props = defineProps({
 const emit = defineEmits([
   'update:form',
   'update:logisticsOptions',
-  'addTask',
   'update:selectedStore',
-  'update:selectedWarehouse'
+  'update:selectedWarehouse',
+  'addTask'
 ])
+
+const onQuickSelectChange = (newValue) => {
+  emit('update:form', { ...props.form, quickSelect: newValue });
+};
+
+const onFormChange = (key, value) => {
+  emit('update:form', { ...props.form, [key]: value })
+}
 
 // Define manual options for rendering
 const manualOptions = [
