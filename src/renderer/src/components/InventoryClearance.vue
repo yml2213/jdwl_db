@@ -125,8 +125,8 @@ const handleAddTask = () => {
       warehouse: { warehouseName: 'N/A' },
       executionData: {
         initialContext: {
-          ...commonData,
-          scope: form.value.mode === 'whole_store' ? 'all' : 'selected'
+          ...commonData
+          // scope 已在 commonData 中正确设置，此处无需覆盖
         },
         stages: [
           {
