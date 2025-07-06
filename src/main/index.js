@@ -32,6 +32,12 @@ function createWindow() {
       console.log('Open dev tool...')
       mainWindow.webContents.openDevTools()
     }
+    // 允许在生产环境通过F12打开开发者工具
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12' && input.type === 'keyDown') {
+        mainWindow.webContents.toggleDevTools()
+      }
+    })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

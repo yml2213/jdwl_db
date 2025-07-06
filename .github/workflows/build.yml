@@ -11,6 +11,8 @@ on:
 jobs:
   build-mac:
     runs-on: macos-latest
+    env:
+      VITE_API_URL: ${{ secrets.VITE_API_URL }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -26,8 +28,6 @@ jobs:
 
       - name: 构建Mac版本
         run: npm run build:mac
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
       - name: 上传Mac构建产物
         uses: actions/upload-artifact@v4
@@ -39,6 +39,8 @@ jobs:
 
   build-win:
     runs-on: windows-latest
+    env:
+      VITE_API_URL: ${{ secrets.VITE_API_URL }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -54,8 +56,6 @@ jobs:
 
       - name: 构建Windows版本
         run: npm run build:win
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
       - name: 上传Windows构建产物
         uses: actions/upload-artifact@v4
