@@ -13,3 +13,4 @@ backend-server/temp
 .env
 .env.local
 .env.*.local
+package-lock.json

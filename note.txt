@@ -28,6 +28,8 @@ c. 注意分批提交的时间间隔
 
 npm run dev:frontend -- --mode devlocal
 
+pnpm dev:frontend -- --mode devlocal
+
 
 启动后端服务器
 在您的另一个编辑器（比如 VS Code）的终端中，运行以下命令：
