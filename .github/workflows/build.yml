@@ -27,7 +27,7 @@ jobs:
         run: npm ci
 
       - name: 构建Mac版本
-        run: npm run build:mac
+        run: VITE_API_URL=${{ secrets.VITE_API_URL }} npm run build:mac
 
       - name: 上传Mac构建产物
         uses: actions/upload-artifact@v4
@@ -55,7 +55,7 @@ jobs:
         run: npm ci
 
       - name: 构建Windows版本
-        run: npm run build:win
+        run: VITE_API_URL=${{ secrets.VITE_API_URL }} npm run build:win
 
       - name: 上传Windows构建产物
         uses: actions/upload-artifact@v4
