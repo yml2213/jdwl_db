@@ -3,7 +3,6 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { getFormattedChinaTime } from './timeUtils.js'
 import fsPromises from 'fs/promises'
 import { fileURLToPath } from 'url'
 

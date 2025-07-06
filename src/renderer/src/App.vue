@@ -129,6 +129,10 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
       </header>
 
       <div class="main-body">
+        <div v-if="showDebugPanel" class="debug-panel">
+          <h3>调试信息</h3>
+          <pre>{{ JSON.stringify(sessionContext, null, 2) }}</pre>
+        </div>
         <div class="tabs">
           <button
             v-for="(_, tabName) in tabComponents"
@@ -204,6 +208,16 @@ body,
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+.debug-panel {
+  padding: 16px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ccc;
+  max-height: 300px; /* 增加最大高度 */
+  overflow-y: auto;
+  font-family: monospace;
+  color: #333; /* 设置清晰的文字颜色 */
 }
 
 .app-header {
