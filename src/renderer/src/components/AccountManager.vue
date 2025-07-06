@@ -71,7 +71,8 @@ import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
 import { getAllCookies } from '../utils/cookieHelper'
 import {
   createSession,
-  updateSelection
+  updateSelection,
+  logout as logoutApi
 } from '../services/apiService'
 import {
   saveSelectedVendor,
@@ -144,11 +145,24 @@ const openLoginWindow = () => {
 
 // 退出登录
 const logout = async () => {
-  if (window.electron && window.electron.ipcRenderer) {
-    window.electron.ipcRenderer.send('logout')
+  try {
+    // 1. 先调用后端登出接口，清除后端会话
+    console.log('【调试】调用后端登出接口')
+    await logoutApi()
+    console.log('【调试】后端会话已清除')
+  } catch (error) {
+    console.error('【调试】后端登出失败:', error)
+    // 即使后端登出失败，也继续执行前端登出流程
   }
-
-  // 触发logout事件，通知App.vue更新状态
+  
+  // 2. 清除前端存储
+  console.log('【调试】清除前端存储')
+  localStorage.clear()
+  sessionStorage.clear()
+  
+  // 3. 触发登出事件，通知 App.vue 更新状态
+  // App.vue 会负责调用 window.api.clearCookies() 和重连 WebSocket
+  console.log('【调试】触发 logout 事件')
   emit('logout')
 }
 
@@ -228,8 +242,14 @@ const handleDepartmentSelected = async (department) => {
 
 const handleLoginSuccess = async (allCookies) => {
   console.log('步骤1: JD登录成功，开始创建后端会话。')
+  
+  if (!allCookies || !Array.isArray(allCookies) || allCookies.length === 0) {
+    console.error('登录失败: 接收到的 cookies 无效', allCookies)
+    alert('登录失败: 无法获取有效的登录凭据')
+    return
+  }
+  
   await updateUsername(allCookies)
-
   clearSelections()
 
   try {
@@ -238,14 +258,30 @@ const handleLoginSuccess = async (allCookies) => {
     const essentialCookies = allCookies.filter(c => requiredCookieNames.includes(c.name))
 
     if (essentialCookies.length < requiredCookieNames.length) {
-        const missing = requiredCookieNames.filter(n => !essentialCookies.some(c => c.name === n));
-        throw new Error(`登录凭据不完整，缺少以下Cookie: ${missing.join(', ')}`);
+      const missing = requiredCookieNames.filter(n => !essentialCookies.some(c => c.name === n));
+      throw new Error(`登录凭据不完整，缺少以下Cookie: ${missing.join(', ')}`);
     }
 
     // 步骤1.2: 调用后端创建会话
-    const response = await createSession(essentialCookies)
-    if (!response.success) {
-      throw new Error(response.message || '创建后端会话失败')
+    let response
+    let retries = 3
+    
+    while (retries > 0) {
+      try {
+        response = await createSession(essentialCookies)
+        if (response.success) {
+          break
+        } else {
+          throw new Error(response.message || '创建后端会话失败')
+        }
+      } catch (error) {
+        retries--
+        if (retries === 0) {
+          throw error
+        }
+        console.warn(`创建会话失败，剩余重试次数: ${retries}`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
     }
 
     console.log('步骤2: 后端会话已成功创建，准备选择供应商/事业部。')

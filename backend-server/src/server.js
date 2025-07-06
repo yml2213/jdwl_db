@@ -68,8 +68,39 @@ app.post('/api/login', (req, res) => {
 
 // 登出接口
 app.post('/api/logout', (req, res) => {
-    req.session.destroy(() => {
-        res.json({ success: true, message: '登出成功' })
+    // 获取会话ID，用于后续删除会话文件
+    const sessionId = req.sessionID
+    console.log(`[API /api/logout] 收到登出请求，会话ID: ${sessionId}`)
+
+    // 获取会话存储路径
+    const sessionPath = path.join(__dirname, '..', 'sessions')
+    const sessionFile = path.join(sessionPath, `${sessionId}.json`)
+
+    // 销毁会话对象
+    req.session.destroy(async (err) => {
+        if (err) {
+            console.error('[API /api/logout] 销毁会话对象失败:', err)
+            return res.status(500).json({ success: false, message: '登出过程中发生错误' })
+        }
+
+        // 尝试删除会话文件
+        try {
+            // 检查文件是否存在
+            const fileExists = await fs.access(sessionFile).then(() => true).catch(() => false)
+
+            if (fileExists) {
+                await fs.unlink(sessionFile)
+                console.log(`[API /api/logout] 已删除会话文件: ${sessionFile}`)
+            } else {
+                console.log(`[API /api/logout] 会话文件不存在: ${sessionFile}`)
+            }
+
+            res.json({ success: true, message: '登出成功，会话已完全清除' })
+        } catch (fileError) {
+            console.error('[API /api/logout] 删除会话文件失败:', fileError)
+            // 即使删除文件失败，也返回登出成功，因为会话对象已被销毁
+            res.json({ success: true, message: '登出成功，但会话文件删除失败' })
+        }
     })
 })
 

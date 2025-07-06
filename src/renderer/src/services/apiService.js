@@ -296,5 +296,36 @@ export async function openFileDialog() {
   return await window.electron.ipcRenderer.invoke('open-file-dialog')
 }
 
-// --- WebSocket 通信 ---
-let webSocket = null
+/**
+ * @description 调用后端登出接口，清除会话
+ * @returns {Promise<Object>} - 返回登出结果
+ */
+export async function logout() {
+  try {
+    console.log('调用后端登出接口...')
+
+    // 清除所有请求缓存
+    lastRequestTime = 0
+
+    // 清除后端会话ID
+    backendSessionID = null
+
+    // 调用后端登出接口
+    const result = await fetchApi('/api/logout', {
+      method: 'POST'
+    })
+
+    console.log('后端登出成功，清除本地缓存')
+
+    // 清除所有本地存储
+    localStorage.clear()
+    sessionStorage.clear()
+
+    return result
+  } catch (error) {
+    console.error('登出失败:', error)
+    throw error
+  }
+}
+
+

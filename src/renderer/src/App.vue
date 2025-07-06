@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, provide } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, provide, nextTick } from 'vue'
 import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { getSessionStatus, createSession } from './services/apiService'
+import { getSessionStatus, createSession, logout as logoutApi } from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
@@ -55,11 +55,73 @@ const onLoginSuccess = (context) => {
   }
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
   console.log('正在执行前端登出操作...')
+  
+  try {
+    // 1. 调用后端登出接口
+    console.log('【调试】App.vue: 调用后端登出接口')
+    await logoutApi()
+    console.log('【调试】App.vue: 后端会话已清除')
+  } catch (error) {
+    console.error('【调试】App.vue: 后端登出失败:', error)
+    // 即使后端登出失败，也继续执行前端登出流程
+  }
+  
+  // 2. 清除前端状态
+  console.log('【调试】App.vue: 清除会话上下文和本地存储')
   sessionContext.value = null
   clearSelections() // Clear local storage
+  
+  // 3. 清除所有本地存储
+  localStorage.clear()
+  sessionStorage.clear()
+  
+  // 4. 清除所有 IndexedDB 数据库
+  try {
+    console.log('【调试】App.vue: 清除 IndexedDB 数据库')
+    const databases = await window.indexedDB.databases()
+    for (const db of databases) {
+      window.indexedDB.deleteDatabase(db.name)
+    }
+  } catch (error) {
+    console.error('【调试】App.vue: 清除 IndexedDB 失败:', error)
+  }
+  
+  // 5. 清除所有缓存（如果可用）
+  if (window.caches) {
+    try {
+      console.log('【调试】App.vue: 清除缓存存储')
+      const cacheNames = await window.caches.keys()
+      await Promise.all(cacheNames.map(cacheName => window.caches.delete(cacheName)))
+    } catch (error) {
+      console.error('【调试】App.vue: 清除缓存失败:', error)
+    }
+  }
+  
+  // 6. 更新应用状态
+  console.log('【调试】App.vue: 将应用状态设置为 login')
   appState.value = 'login'
+  
+  // 7. 调用 Electron 清除 Cookies
+  if (window.api) {
+    console.log('【调试】App.vue: 调用 window.api.clearCookies()')
+    try {
+      await window.api.clearCookies()
+      console.log('【调试】App.vue: Cookies 已清除')
+    } catch (error) {
+      console.error('【调试】App.vue: 清除 Cookies 失败:', error)
+    }
+  } else {
+    console.error('【调试】App.vue: window.api 不存在，无法清除 cookies')
+  }
+  
+  // 8. 重新连接 WebSocket
+  console.log('【调试】App.vue: 重新连接 WebSocket')
+  webSocketService.close()
+  setTimeout(() => {
+    webSocketService.connect()
+  }, 500)
 }
 
 // --- Lifecycle Hooks ---
@@ -72,11 +134,36 @@ onMounted(() => {
   if (window.electron && window.electron.ipcRenderer) {
     window.electron.ipcRenderer.on('login-successful', (event, cookies) => {
       console.log('App.vue: 收到来自主进程的 login-successful 信号。')
-      if (accountManagerRef.value) {
-        accountManagerRef.value.handleLoginSuccess(cookies)
-      } else {
-        console.error('AccountManager component reference is not available.')
-      }
+      
+      // 确保应用状态为登录状态
+      appState.value = 'login'
+      
+      // 使用 nextTick 确保 AccountManager 组件已经渲染
+      nextTick(() => {
+        if (accountManagerRef.value) {
+          accountManagerRef.value.handleLoginSuccess(cookies)
+        } else {
+          console.error('AccountManager 组件引用不可用，尝试延迟处理...')
+          // 如果组件引用不可用，使用延迟
+          setTimeout(() => {
+            if (accountManagerRef.value) {
+              console.log('延迟后找到 AccountManager 组件引用，处理登录成功信号')
+              accountManagerRef.value.handleLoginSuccess(cookies)
+            } else {
+              console.error('即使延迟后，AccountManager 组件引用仍不可用')
+              // 尝试直接使用 cookies 创建会话
+              createSession(cookies).then(response => {
+                if (response.success) {
+                  console.log('直接创建会话成功，跳过 AccountManager 组件')
+                  onLoginSuccess(response.context)
+                }
+              }).catch(error => {
+                console.error('直接创建会话失败:', error)
+              })
+            }
+          }, 500)
+        }
+      })
     })
   }
 })

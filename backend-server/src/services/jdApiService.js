@@ -1479,8 +1479,8 @@ export async function getShopList(deptId, shopName, session) {
   if (!deptId) {
     throw new Error('获取店铺列表需要提供事业部ID (deptId)');
   }
-  console.log('获取店铺列表 (后端实现) getShopList  ====> deptId', deptId);
-  console.log('获取店铺列表 (后端实现) getShopList  ====> shopName', shopName);
+  // console.log('获取店铺列表 (后端实现) getShopList  ====> deptId', deptId);
+  // console.log('获取店铺列表 (后端实现) getShopList  ====> shopName', shopName);
 
   const allShops = [];
   let currentStart = 0;

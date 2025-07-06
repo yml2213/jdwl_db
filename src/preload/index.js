@@ -16,7 +16,14 @@ const api = {
   // 清除登录Cookie
   clearCookies: () => {
     console.log('[Preload] 清除Cookies')
-    ipcRenderer.send('clear-cookies')
+    return new Promise((resolve) => {
+      ipcRenderer.send('clear-cookies')
+      // 等待一段时间，确保主进程有足够的时间处理
+      setTimeout(() => {
+        console.log('[Preload] Cookies清除操作已发送，等待主进程处理')
+        resolve()
+      }, 300)
+    })
   },
   // 获取存储的Cookie
   getCookies: () => {

@@ -190,17 +190,83 @@ function createLoginWindow(mainWindow, icon) {
 
 // 清除Cookies
 async function clearCookies(mainWindow) {
+  console.log('======== 开始清除 Cookies 和会话数据 ========')
+
   try {
-    await fs.unlink(cookiesFilePath)
-    console.log('Cookies文件已删除')
+    // 1. 关闭登录窗口（如果存在）
+    if (loginWindow && !loginWindow.isDestroyed()) {
+      console.log('关闭登录窗口')
+      loginWindow.close()
+      loginWindow = null
+    }
+
+    // 2. 删除 Cookies 文件
+    try {
+      await fs.unlink(cookiesFilePath)
+      console.log('Cookies文件已删除')
+    } catch (error) {
+      if (error.code !== 'ENOENT') console.error('清除Cookies文件失败:', error)
+      else console.log('Cookies文件不存在，无需删除')
+    }
+
+    // 3. 清除所有会话数据
+    console.log('清除所有会话数据...')
+
+    // 3.1 清除默认会话的所有 Cookie
+    console.log('清除默认会话的所有 Cookie...')
+    const defaultCookies = await session.defaultSession.cookies.get({})
+    for (const cookie of defaultCookies) {
+      const url = `${cookie.secure ? 'https' : 'http'}://${cookie.domain}${cookie.path}`
+      await session.defaultSession.cookies.remove(url, cookie.name)
+    }
+
+    // 3.2 清除登录分区的所有 Cookie
+    console.log('清除登录分区的所有 Cookie...')
+    const loginSession = session.fromPartition('persist:login')
+    const loginCookies = await loginSession.cookies.get({})
+    for (const cookie of loginCookies) {
+      const url = `${cookie.secure ? 'https' : 'http'}://${cookie.domain}${cookie.path}`
+      await loginSession.cookies.remove(url, cookie.name)
+    }
+
+    // 3.3 清除所有存储数据
+    const clearPromises = [
+      // 清除默认会话数据
+      session.defaultSession.clearStorageData({
+        storages: ['cookies', 'localstorage', 'sessionstorage', 'indexdb', 'websql', 'cachestorage'],
+        quotas: ['temporary', 'persistent', 'syncable']
+      }),
+      // 清除登录分区会话数据
+      loginSession.clearStorageData({
+        storages: ['cookies', 'localstorage', 'sessionstorage', 'indexdb', 'websql', 'cachestorage'],
+        quotas: ['temporary', 'persistent', 'syncable']
+      })
+    ]
+
+    await Promise.all(clearPromises)
+    console.log('所有会话数据已清除')
+
+    // 3.4 清除 HTTP 缓存
+    console.log('清除 HTTP 缓存...')
+    await session.defaultSession.clearHostResolverCache()
+    await session.defaultSession.clearAuthCache()
+    await loginSession.clearHostResolverCache()
+    await loginSession.clearAuthCache()
+
+    // 4. 通知前端登出成功
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('发送登出成功信号到前端')
+      mainWindow.webContents.send('logout-successful')
+    }
+
+    // 不再重启应用程序
+    console.log('清除完成，不重启应用程序')
+
   } catch (error) {
-    if (error.code !== 'ENOENT') console.error('清除Cookies文件失败:', error)
+    console.error('清除 Cookies 过程中发生错误:', error)
   }
-  await session.defaultSession.clearStorageData()
-  console.log('Session数据已清除')
-  if (mainWindow) {
-    mainWindow.webContents.send('logout-successful')
-  }
+
+  console.log('======== 清除 Cookies 和会话数据完成 ========')
 }
 
 // 检查是否已登录
