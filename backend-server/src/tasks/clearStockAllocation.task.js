@@ -15,8 +15,8 @@ const BATCH_DELAY = 5 * 60 * 1000 // 5分钟
 const TEMP_DIR_NAME = '库存分配清零'
 
 
-async function execute(context, updateFn, sessionData) {
-  const { skus, store, department, scope } = context
+async function execute(context, sessionData) {
+  const { skus, store, department, scope, updateFn } = context
 
   updateFn('库存分配清零任务开始...')
   updateFn(`操作范围: ${scope === 'whole_store' ? '整店' : '指定SKU'}`)

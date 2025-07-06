@@ -96,35 +96,48 @@ const handleAddTask = () => {
       ? `批量任务 (${skus.length}个SKU)`
       : skus[0]
 
+  // 当选择“库存分配清零”时
   if (form.value.options.clearStockAllocation) {
     addTask({
       sku: skuDisplayName,
       name: '库存清零',
       store: currentShopInfo.value,
       warehouse: { warehouseName: 'N/A' },
-      executionFeature: 'clearStockAllocation',
-      executionType: 'task',
+      // 使用新的工作流编排器格式
       executionData: {
-        ...commonData,
-        options: { clearStockAllocation: true }
+        initialContext: { ...commonData },
+        stages: [
+          {
+            name: '库存分配清零阶段',
+            tasks: [{ name: 'clearStockAllocation', context: {} }]
+          }
+        ]
       }
     })
   }
 
+  // 当选择“取消京配打标”时
   if (form.value.options.cancelJpSearch) {
     addTask({
       sku: skuDisplayName,
       name: '取消京配打标',
       store: currentShopInfo.value,
       warehouse: { warehouseName: 'N/A' },
-      executionFeature: 'cancelJpSearch',
-      executionType: 'task',
       executionData: {
-        ...commonData,
-        options: {
-          cancelJpSearch: true,
-          cancelJpSearchScope: form.value.mode === 'whole_store' ? 'all' : 'selected'
-        }
+        initialContext: {
+          ...commonData,
+          scope: form.value.mode === 'whole_store' ? 'all' : 'selected'
+        },
+        stages: [
+          {
+            name: '查询商品信息阶段',
+            tasks: [{ name: 'getProductData', context: {} }]
+          },
+          {
+            name: '取消京配打标阶段',
+            tasks: [{ name: 'cancelJpSearch', context: {} }]
+          }
+        ]
       }
     })
   }

@@ -1,5 +1,5 @@
 /**
- * 后端任务：取消京配打标
+ * 后端任务： 取消京配打标
  * 支持两种模式：
  * 1. 整店取消京配打标
  * 2. 部分取消京配打标
@@ -33,73 +33,13 @@ function createJpSearchExcelBuffer(items) {
 }
 
 /**
- * 批量处理需要取消京配打标的商品
- * @param {string[]} itemsToProcess - 商品CSG列表
- * @param {object} store - 店铺信息
- * @param {object} sessionData - 会话数据
- * @param {function} updateFn - 用于发送日志和进度更新的函数
- * @returns {Promise<object>} 批处理结果
- */
-async function processInBatches(itemsToProcess, store, sessionData, updateFn) {
-    const batchFn = async (batchItems) => {
-        try {
-            updateFn(`正在为 ${batchItems.length} 个商品创建批处理文件...`)
-            const fileBuffer = createJpSearchExcelBuffer(batchItems)
-
-            // 保存文件到本地
-            const filePath = await saveExcelFile(fileBuffer, {
-                dirName: TEMP_DIR_NAME,
-                store: store,
-                extension: 'xls'
-            })
-
-            if (filePath) {
-                updateFn(`批处理文件已保存: ${filePath}`)
-            }
-
-            const response = await jdApiService.uploadJpSearchFile(fileBuffer, sessionData)
-            updateFn(`取消京配打标=======> response ${JSON.stringify(response)}`)
-
-            if (response && response.resultCode === 1) {
-                return {
-                    success: true,
-                    message: `${response.resultData || '取消京配打标任务提交成功。'} (处理了 ${batchItems.length
-                        } 个商品)`
-                }
-            }
-
-            // 检查频率限制错误
-            if (response && response.message && response.message.includes('频繁操作')) {
-                return { success: false, message: response.message }
-            }
-
-            const errorMessage = response?.message || '取消京配打标时发生未知错误'
-            return { success: false, message: errorMessage }
-        } catch (error) {
-            updateFn(`批处理执行时发生严重错误: ${error.message}`, 'error')
-            return { success: false, message: `批处理失败: ${error.message}` }
-        }
-    }
-
-    return await executeInBatches({
-        items: itemsToProcess,
-        batchSize: BATCH_SIZE,
-        delay: BATCH_DELAY,
-        batchFn,
-        log: (message, level = 'info') => updateFn(message, level),
-        isRunning: { value: true }
-    })
-}
-
-/**
  * 主执行函数 - 由任务调度器调用
  * @param {object} context 包含 skus, csgList, store, department, options
- * @param {function} updateFn - 用于发送日志和进度更新的函数
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-const execute = async (context, updateFn, sessionData) => {
-    const { skus, store, department } = context
+const execute = async (context, sessionData) => {
+    const { skus: skuLifecycles, store, department, updateFn } = context
     let itemsToProcess = []
     const mode = context.scope
 
@@ -122,36 +62,26 @@ const execute = async (context, updateFn, sessionData) => {
         }
     } else {
         // 模式2：按SKU列表模式
-        if (!skus || skus.length === 0) {
+        if (!skuLifecycles || skuLifecycles.length === 0) {
             updateFn('按SKU模式下未提供SKU列表，任务结束。')
             return { success: true, message: '按SKU模式下未提供SKU列表，任务结束。' }
         }
-        updateFn(`按SKU模式，将通过 ${skus.length} 个SKU进行查询...`)
-        try {
-            const operationId = sessionData.operationId
-            if (!operationId) {
-                throw new Error('会话数据中缺少 operationId，无法查询商品数据。')
-            }
-            if (!department || !department.deptNo) {
-                throw new Error('上下文缺少 department 信息，无法查询商品数据。')
-            }
 
-            const productDataList = await jdApiService.queryProductDataBySkus(
-                skus,
-                department.deptNo.split('CBU')[1],
-                operationId,
-                sessionData
+        // 优化：检查是否为SKU生命周期对象
+        if (
+            skuLifecycles[0] &&
+            typeof skuLifecycles[0] === 'object' &&
+            skuLifecycles[0].data &&
+            skuLifecycles[0].data.shopGoodsNo
+        ) {
+            updateFn('检测到SKU生命周期对象，直接提取CSG编码...')
+            itemsToProcess = skuLifecycles.map((item) => item.data.shopGoodsNo).filter(Boolean)
+            updateFn(`成功从生命周期对象中提取了 ${itemsToProcess.length} 个CSG编码。`)
+        } else {
+            // 如果数据不符合预期，直接抛出错误，因为前置任务应该已经保证了数据格式的正确性
+            throw new Error(
+                '输入数据格式不正确，期望获得SKU生命周期对象数组，但未能获取。工作流可能配置不当。'
             )
-
-            if (productDataList && productDataList.length > 0) {
-                itemsToProcess = productDataList.map((p) => p.shopGoodsNo).filter(Boolean)
-                updateFn(`成功查询到 ${itemsToProcess.length} 个商品的CSG编码。`)
-            } else {
-                updateFn(`未能通过SKU查询到任何有效的商品CSG编码。`)
-            }
-        } catch (error) {
-            updateFn(`通过SKU查询CSG时出错: ${error.message}`, 'error')
-            throw new Error(`通过SKU查询CSG时出错: ${error.message}`)
         }
     }
 
@@ -166,7 +96,53 @@ const execute = async (context, updateFn, sessionData) => {
     )
 
     try {
-        const batchResults = await processInBatches(uniqueItems, store, sessionData, updateFn)
+        const batchFn = async (batchItems) => {
+            try {
+                updateFn(`正在为 ${batchItems.length} 个商品创建批处理文件...`)
+                const fileBuffer = createJpSearchExcelBuffer(batchItems)
+
+                // 保存文件到本地
+                const filePath = await saveExcelFile(fileBuffer, {
+                    dirName: TEMP_DIR_NAME,
+                    store: store,
+                    extension: 'xls'
+                })
+
+                if (filePath) {
+                    updateFn(`批处理文件已保存: ${filePath}`)
+                }
+
+                const response = await jdApiService.uploadJpSearchFile(fileBuffer, sessionData)
+                updateFn(`取消京配打标=======> response ${JSON.stringify(response)}`)
+
+                if (response && response.resultCode === 1) {
+                    return {
+                        success: true,
+                        message: `${response.resultData || '取消京配打标任务提交成功。'
+                            } (处理了 ${batchItems.length} 个商品)`
+                    }
+                }
+
+                // 检查频率限制错误
+                if (response && response.message && response.message.includes('频繁操作')) {
+                    return { success: false, message: response.message }
+                }
+
+                const errorMessage = response?.message || '取消京配打标时发生未知错误'
+                return { success: false, message: errorMessage }
+            } catch (error) {
+                updateFn(`批处理执行时发生严重错误: ${error.message}`, 'error')
+                return { success: false, message: `批处理失败: ${error.message}` }
+            }
+        }
+        const batchResults = await executeInBatches({
+            items: uniqueItems,
+            batchSize: BATCH_SIZE,
+            delay: BATCH_DELAY,
+            batchFn,
+            log: (message, level = 'info') => updateFn(message, level),
+            isRunning: { value: true }
+        })
         if (!batchResults.success) {
             throw new Error(`任务有失败的批次: ${batchResults.message}`)
         }
