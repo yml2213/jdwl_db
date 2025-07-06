@@ -15,12 +15,9 @@ const TEMP_DIR_NAME = '启用库存商品分配';
  * @param {object} context.store - 店铺信息
  * @param {object} context.department - 事业部信息
  */
-const execute = async (context, ...args) => {
-  const [legacyUpdateFn, session] = args.length === 2 ? args : [args[0], context.session];
-  const updateFn = typeof legacyUpdateFn === 'function' ? legacyUpdateFn : () => { };
-  const sessionData = session || (args.length === 1 ? args[0] : context.session);
-
-  let { allProductData, skus, store, department } = context;
+async function execute(context, sessionData, cancellationToken = { value: true }) {
+  const { updateFn, skus, store, department } = context;
+  let { allProductData } = context;
 
   if (!sessionData || !sessionData.jdCookies) {
     updateFn('错误：缺少会话信息。');
@@ -66,7 +63,7 @@ const execute = async (context, ...args) => {
       const filePath = await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store, extension: 'xlsx' });
       updateFn(`库存分配文件已保存到: ${filePath}`);
 
-      const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData);
+      const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn);
       updateFn(`API 响应: ${JSON.stringify(response)}`);
 
       if (response && (response.resultCode === '1' || response.resultCode === 1 || response.resultCode === '2' || response.resultCode === 2)) {
@@ -89,8 +86,8 @@ const execute = async (context, ...args) => {
     batchSize: API_BATCH_SIZE,
     delay: BATCH_DELAY,
     batchFn,
-    log: (message, type = 'info') => updateFn({ message: `[批处理] ${message}`, type }),
-    isRunning: { value: true },
+    log: updateFn,
+    isRunning: cancellationToken,
   });
 
   if (!batchResult.success) {
@@ -126,5 +123,7 @@ function createExcelFile(productDataList, department, store) {
 export default {
   name: 'enableInventoryAllocation',
   description: '启用库存商品分配（文件上传, 内置分批）',
+  requiredContext: ['skus', 'store', 'department'],
+  outputContext: [],
   execute,
 };

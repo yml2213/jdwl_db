@@ -16,16 +16,8 @@ const TEMP_DIR_NAME = '启用店铺商品'
  * @param {object[]} [context.allProductData] - 从工作流传入的完整商品数据
  * @param {string[]} [context.skus] - 从单任务模式传入的SKU列表
  */
-async function execute(context, updateFn, sessionData, cancellationToken = { value: true }) {
-  // 优雅地处理两种不同的调用方式：
-  // 1. 单项任务调用: execute(context, updateFn, sessionData, cancellationToken)
-  // 2. 工作流调用: execute(context, sessionData, cancellationToken) - (updateFn is sessionData)
-  if (typeof updateFn !== 'function') {
-    // 这是工作流调用
-    cancellationToken = sessionData || { value: true } // cancellationToken is the 3rd arg
-    sessionData = updateFn // sessionData is the 2nd arg
-    updateFn = () => { } // 提供一个无操作的 updateFn
-  }
+async function execute(context, sessionData, cancellationToken = { value: true }) {
+  const { updateFn } = context; // 从上下文中解构出 updateFn
 
   if (!sessionData || !sessionData.jdCookies) {
     const errorMsg = '错误: 缺少会话信息'
@@ -124,5 +116,7 @@ function createStatusUpdateExcel(csgList) {
 export default {
   name: 'enableStoreProducts',
   description: '启用店铺商品（包含主数据和店铺内状态）',
+  requiredContext: ['skus', 'store'], // 定义任务执行所必需的上下文参数
+  outputContext: [], // 定义任务不向上层输出参数
   execute,
 }

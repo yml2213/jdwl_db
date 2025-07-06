@@ -134,5 +134,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
 export default {
   name: 'importStoreProducts',
   description: '导入店铺商品',
+  requiredContext: ['skus', 'store', 'department', 'vendor'], // 定义任务执行所必需的上下文参数
+  outputContext: [], // 定义任务不向上层输出参数
   execute: execute
 }

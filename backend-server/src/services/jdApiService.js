@@ -187,6 +187,8 @@ export async function uploadInventoryAllocationFile(fileBuffer, sessionData, upd
       headers: headers
     })
 
+    console.log('uploadInventoryAllocationFile result 111===>', result)
+
     // 检查业务层面的频率限制错误
     if (result && result.resultMessage && result.resultMessage.includes('频繁操作')) {
       if (attempt < MAX_RETRIES) {
