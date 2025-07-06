@@ -33,7 +33,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
     if (!sessionData || !sessionData.jdCookies) throw new Error('缺少会话信息。');
     if (!logisticsOptions) throw new Error('上下文中缺少有效的物流参数。');
 
-    updateFn({ message: `"导入物流属性" 开始，店铺 [${store.name}]...` });
+    updateFn({ message: `"导入物流属性" 开始，店铺 [${store.shopName}]...` });
     updateFn({ message: `总共需要处理 ${skuLifecycles.length} 个SKU.` });
     updateFn({ message: `使用的物流参数: ${JSON.stringify(logisticsOptions)}` });
 
