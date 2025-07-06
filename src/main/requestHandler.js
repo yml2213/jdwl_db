@@ -52,8 +52,8 @@ const axiosInstance = axios.create({
 function sendRequest(url, options = {}) {
   return new Promise(async (resolve, reject) => {
     try {
-      console.log(`[Main Process] 发送请求: ${options.method || 'GET'} ${url}`)
-      console.log(`[Main Process] 请求头:`, JSON.stringify(options.headers || {}))
+      // console.log(`[Main Process] 发送请求: ${options.method || 'GET'} ${url}`)
+      // console.log(`[Main Process] 请求头:`, JSON.stringify(options.headers || {}))
 
       // 如果URL是相对路径，则添加基础URL
       const finalUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`
@@ -159,7 +159,7 @@ export function setupRequestHandlers() {
   // 处理渲染进程的请求
   ipcMain.handle('sendRequest', async (event, url, options) => {
     try {
-      console.log(`[IPC] 收到渲染进程请求: ${url}`)
+      // console.log(`[IPC] 收到渲染进程请求: ${url}`)
 
       // 确保options存在
       options = options || {}
@@ -172,7 +172,7 @@ export function setupRequestHandlers() {
       }
 
       const response = await sendRequest(url, options)
-      console.log('[IPC] 请求完成，返回数据')
+      // console.log('[IPC] 请求完成，返回数据')
       return response.data
     } catch (error) {
       console.error('[IPC] 处理请求失败:', error)

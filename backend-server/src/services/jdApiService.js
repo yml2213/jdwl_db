@@ -43,12 +43,12 @@ const jdApiAxios = axios.create({
  * @returns {object} 包含 cookieString 和 csrfToken
  */
 function getAuthInfo(session) {
-  // 京东相关的完整上下文信息（包括cookies）都保存在 session.context 中
-  if (!session || !session.context || !session.context.cookies) {
-    throw new Error('会话数据无效或缺少京东Cookies (session.context.cookies)')
+  // 京东相关的完整上下文信息（包括cookies）都保存在 session.jdCookies 中
+  if (!session || !session.jdCookies) {
+    throw new Error('会话数据无效或缺少京东Cookies (session.jdCookies)')
   }
 
-  const { cookies } = session.context // 从正确的上下文中获取cookies
+  const { jdCookies: cookies } = session // 从会话中获取 jdCookies 并重命名为 cookies
   if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
     throw new Error('在会话上下文中没有找到有效的Cookies数组')
   }
@@ -60,7 +60,7 @@ function getAuthInfo(session) {
     console.warn('在会话的Cookies中未找到csrfToken')
   }
 
-  return { cookieString, csrfToken, sessionData: session.context }
+  return { cookieString, csrfToken, sessionData: session }
 }
 
 /**

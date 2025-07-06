@@ -114,7 +114,7 @@ app.post('/api/create-session', (req, res) => {
         const username = pinCookie ? decodeURIComponent(pinCookie.value) : '未知用户'
 
         req.session.user = { name: username }
-        req.session.context = { cookies } // 只保存 cookies
+        req.session.jdCookies = cookies // 使用新字段 jdCookies 存储
 
         req.session.save((err) => {
             if (err) {
@@ -122,7 +122,8 @@ app.post('/api/create-session', (req, res) => {
                 return res.status(500).json({ success: false, message: 'Session save error' })
             }
             console.log(`[API /api/create-session] 会话为用户 "${username}" 创建成功。`)
-            res.json({ success: true, message: '会话创建成功', context: req.session.context })
+            // 为保持前端兼容，动态构建 context 对象
+            res.json({ success: true, message: '会话创建成功', context: { cookies: req.session.jdCookies } })
         })
     } else {
         res.status(400).json({ success: false, message: '请求体中缺少必需的 cookies 数组。' })
@@ -140,16 +141,17 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
             .json({ success: false, message: '缺少 supplierInfo 或 departmentInfo' })
     }
 
-    if (!req.session.context) {
+    // 检查 jdCookies 是否存在
+    if (!req.session.jdCookies) {
         return res.status(400).json({ success: false, message: '无效的会话，找不到上下文。' })
     }
 
-    // 1. 更新会话上下文
-    req.session.context.supplierInfo = supplierInfo
-    req.session.context.departmentInfo = departmentInfo
+    // 1. 直接更新会话属性
+    req.session.supplierInfo = supplierInfo
+    req.session.departmentInfo = departmentInfo
 
     // 2. 更新或创建用户 uniqueKey
-    const pinCookie = req.session.context.cookies?.find((c) => c.name === 'pin')
+    const pinCookie = req.session.jdCookies?.find((c) => c.name === 'pin')
     console.log('[Debug] Found pinCookie:', pinCookie) // 调试日志
     let uniqueKey = null
     const departmentId = departmentInfo.deptNo?.replace('CBU', '')
@@ -167,7 +169,7 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
 
             if (operationId) {
                 console.log(`[Session] 找到了已存在的方案ID: ${operationId}`);
-                req.session.context.operationId = operationId;
+                req.session.operationId = operationId;
             } else {
                 console.log(`[Session] 未找到方案ID，正在调用京东API创建新的方案...`);
                 try {
@@ -175,7 +177,7 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
                     if (result.success) {
                         operationId = result.operationId;
                         console.log(`[Session] 新方案创建成功，ID: ${operationId}`);
-                        req.session.context.operationId = operationId;
+                        req.session.operationId = operationId;
                         // 数据库操作也应包含在try...catch中
                         await db.saveScheme(uniqueKey, operationId);
                         console.log(`[Session] 新方案ID已保存到数据库。`);
@@ -201,14 +203,28 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
             return res.status(500).json({ success: false, message: 'Session save error' })
         }
         console.log(`[API /api/update-selection] 成功为用户 "${req.session.user.name}" 更新选择。`)
-        res.json({ success: true, message: '选择已更新', context: req.session.context })
+        // 为保持前端兼容，动态构建 context 对象
+        const context = {
+            cookies: req.session.jdCookies,
+            supplierInfo: req.session.supplierInfo,
+            departmentInfo: req.session.departmentInfo,
+            operationId: req.session.operationId
+        }
+        res.json({ success: true, message: '选择已更新', context })
     })
 })
 
 // 新增：获取详细会话状态接口
 app.get('/api/session-status', (req, res) => {
-    if (req.session && req.session.user && req.session.context) {
-        res.json({ loggedIn: true, context: req.session.context })
+    if (req.session && req.session.user && req.session.jdCookies) {
+        // 为保持前端兼容，动态构建 context 对象
+        const context = {
+            cookies: req.session.jdCookies,
+            supplierInfo: req.session.supplierInfo,
+            departmentInfo: req.session.departmentInfo,
+            operationId: req.session.operationId
+        }
+        res.json({ loggedIn: true, context })
     } else {
         res.json({ loggedIn: false, context: null })
     }
