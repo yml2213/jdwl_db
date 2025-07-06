@@ -11,8 +11,8 @@ import { saveBufferToDownloads } from './fileHandler'
 import { net } from 'electron'
 import { session } from 'electron'
 
-// 定义后端服务的基础URL
-const API_BASE_URL = 'http://localhost:2333'
+// 定义后端服务的基础URL，优先从环境变量读取
+const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:2333'
 
 // 存储和管理会话级别的Cookie
 const sessionCookies = new Map()

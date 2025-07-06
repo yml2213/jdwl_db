@@ -8,3 +8,8 @@ out
 excel_gen
 backend-server/temp
 .vscode
+
+# Environment variables
+.env
+.env.local
+.env.*.local
