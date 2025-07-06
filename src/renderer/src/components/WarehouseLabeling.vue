@@ -198,11 +198,11 @@ const addTask = () => {
         Object.assign(taskContext, form.payloads[optionKey])
       }
       if (optionKey === 'importLogisticsAttributes') {
-        // 关键修复：将UI上的物流信息添加到此任务的上下文中
-        taskContext.logisticsOptions = { ...logisticsOptions.value }
+        // 在手动模式下，我们假设它可能是一个 ref
+        taskContext.logisticsOptions = { ...(logisticsOptions.value || logisticsOptions) }
       }
       if (optionKey === 'addInventory') {
-        taskContext.inventoryAmount = form.options.inventoryAmount || 0
+        taskContext.inventoryAmount = form.inventoryAmount || 1000
       }
       workflow.push({ name: optionKey, context: taskContext })
     })
@@ -217,18 +217,24 @@ const addTask = () => {
     const workflowConfig = workflows.warehouseLabeling
     taskName = '工作流: 入仓打标'
 
-    workflowConfig.tasks.forEach((taskDef) => {
-      const taskContext = { ...taskDef.context } // 从配置中获取基础上下文
-      // 特殊逻辑：根据UI状态覆盖或添加上下文
-      if (taskDef.name === 'importLogisticsAttributes') {
-        // 关键修复：将UI上的物流信息添加到此任务的上下文中
-        taskContext.logisticsOptions = { ...logisticsOptions.value }
-      }
-      if (taskDef.name === 'addInventory') {
-        taskContext.inventoryAmount = form.options.inventoryAmount || 0
-      }
-      workflow.push({ name: taskDef.name, context: taskContext })
-    })
+    // 从 options 中构建工作流任务，而不是不存在的 tasks 数组
+    const workflowOptions = workflowConfig.options || {};
+    const validTaskKeys = getAllManualTaskKeys(); // 获取所有有效的任务键
+
+    for (const taskName in workflowOptions) {
+        // 只处理值为 true 且是有效任务键的选项
+        if (workflowOptions[taskName] === true && validTaskKeys.includes(taskName)) {
+            const taskContext = {};
+            // 特殊逻辑：根据UI状态覆盖或添加上下文
+            if (taskName === 'importLogisticsAttributes') {
+                taskContext.logisticsOptions = { ...logisticsOptions };
+            }
+            if (taskName === 'addInventory') {
+                taskContext.inventoryAmount = form.inventoryAmount || 1000;
+            }
+            workflow.push({ name: taskName, context: taskContext });
+        }
+    }
   }
 
   // --- 5. 添加到任务列表 ---
