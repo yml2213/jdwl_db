@@ -6,6 +6,7 @@ import FileStoreFactory from 'session-file-store'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs/promises'
+import { unsign } from 'cookie-signature'
 import db from './utils/db.js' // 引入数据库工具
 
 import * as jdApiService from './services/jdApiService.js'
@@ -20,12 +21,13 @@ const wss = new WebSocketServer({ noServer: true })
 
 // --- 会话管理 ---
 const FileStore = FileStoreFactory(session)
+const sessionSecret = 'QWER1234asdf.!1234' // 提取会话密钥为常量
 const sessionMiddleware = session({
     store: new FileStore({
         path: path.join(__dirname, '..', 'sessions'),
         logFn: function () { } // 禁用日志
     }),
-    secret: 'your-secret-key', // 请替换为更安全的密钥
+    secret: sessionSecret, // 请替换为更安全的密钥
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -133,7 +135,7 @@ app.post('/api/create-session', (req, res) => {
 // 新增：更新会话中的选择信息并确保方案ID存在
 app.post('/api/update-selection', requireAuth, async (req, res) => {
     const { supplierInfo, departmentInfo } = req.body
-    console.log('[Debug] /api/update-selection body:', req.body) // 调试日志
+    // console.log('[Debug] /api/update-selection body:', req.body) // 调试日志
 
     if (!supplierInfo || !departmentInfo) {
         return res
@@ -152,14 +154,14 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
 
     // 2. 更新或创建用户 uniqueKey
     const pinCookie = req.session.jdCookies?.find((c) => c.name === 'pin')
-    console.log('[Debug] Found pinCookie:', pinCookie) // 调试日志
+    // console.log('[Debug] Found pinCookie:', pinCookie) // 调试日志
     let uniqueKey = null
     const departmentId = departmentInfo.deptNo?.replace('CBU', '')
     if (pinCookie && departmentId) {
         uniqueKey = `${decodeURIComponent(pinCookie.value)}-${departmentId}`
         req.session.user.uniqueKey = uniqueKey
     }
-    console.log('[Debug] Generated uniqueKey:', uniqueKey) // 调试日志
+    // console.log('[Debug] Generated uniqueKey:', uniqueKey) // 调试日志
 
     // 3. 检查并确保方案ID (operationId) 存在
     if (uniqueKey) {
@@ -367,41 +369,56 @@ const handleWebSocketMessage = async (ws, message) => {
 
 /**
  * @description 从会话存储中恢复会话
- * @param {string} sessionId
- * @returns {Promise<object|null>}
+ * @param {string} sessionId - 从客户端获取的会话ID
+ * @returns {Promise<object|null>} - 解析后的会话数据或null
  */
 const restoreSession = async (sessionId) => {
-    console.log(`[Session Restore] 1. Received raw sessionId: ${sessionId}`)
-    if (!sessionId) return null
+    const sessionPath = path.join(__dirname, '..', 'sessions');
+    const fileStore = new FileStore({ path: sessionPath });
 
-    // express-session的会话cookie是签名的，格式为 s:sessionid.signature
-    // 我们需要从中提取出真正的 sessionid 作为文件名
-    let sid = sessionId
-    if (sid.startsWith('s:')) {
-        sid = sid.slice(2)
-        sid = sid.slice(0, sid.lastIndexOf('.'))
-    }
-    console.log(`[Session Restore] 2. Parsed sid for filename: ${sid}`)
+    console.log(`[Session Restore] 1. Received raw cookie value: ${sessionId}`);
 
     try {
-        const sessionFilePath = path.join(__dirname, '..', 'sessions', `${sid}.json`) // 使用解析后的sid
-        console.log(`[Session Restore] 3. Attempting to read file: ${sessionFilePath}`)
-        const sessionData = await fs.readFile(sessionFilePath, 'utf-8')
-        console.log(`[Session Restore] 4. Successfully read session file content.`)
-        const session = JSON.parse(sessionData)
-        console.log(
-            `[Session Restore] 5. Successfully parsed session object for user:`,
-            session.user?.userName
-        )
-        return session
+        const decodedCookie = decodeURIComponent(sessionId);
+        console.log(`[Session Restore] 2. Decoded cookie value: ${decodedCookie}`);
+
+        if (!decodedCookie.startsWith('s:')) {
+            console.error(`[Session Restore] FAILED. Cookie does not look like a signed session cookie.`);
+            return null;
+        }
+
+        // The cookie value is "s:sid.signature", unsign needs "sid.signature"
+        const signedSid = decodedCookie.substring(2);
+
+        // Unsign the cookie to get the raw session ID
+        const rawSid = unsign(signedSid, sessionSecret);
+
+        console.log(`[Session Restore] 3. Unsigned to get raw SID: ${rawSid}`);
+
+        if (!rawSid) {
+            console.error(`[Session Restore] FAILED. Cookie signature is invalid.`);
+            return null;
+        }
+
+        return new Promise((resolve, reject) => {
+            fileStore.get(rawSid, (err, session) => {
+                if (err) {
+                    console.error(`[Session Restore] FAILED to get session from store for sid=${rawSid}. Error:`, err);
+                    return reject(err);
+                }
+                if (!session) {
+                    console.log(`[Session Restore] No session found for sid=${rawSid}.`);
+                    return resolve(null);
+                }
+                console.log(`[Session Restore] Successfully restored session for sid=${rawSid}.`);
+                resolve(session);
+            });
+        });
     } catch (error) {
-        console.error(
-            `[Session Restore] FAILED. Unable to restore session for sid=${sid} (Original ID: ${sessionId}). Error:`,
-            error
-        )
-        return null
+        console.error(`[Session Restore] FAILED. Unexpected error during session restoration for cookie=${sessionId}. Error:`, error);
+        throw error;
     }
-}
+};
 
 // --- WebSocket 服务器 ---
 wss.on('connection', (ws, request) => {
