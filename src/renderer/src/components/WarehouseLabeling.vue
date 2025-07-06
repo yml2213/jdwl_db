@@ -41,7 +41,8 @@ import { useShopAndWarehouse } from '../composables/useShopAndWarehouse'
 import {
   getInitialFormState,
   getAllManualTaskKeys,
-  getWorkflows
+  getWorkflows,
+  taskDependencies // 导入新的依赖关系定义
 } from '../features/warehouseLabeling/taskConfiguration'
 import {
   getSelectedVendor,
@@ -192,7 +193,21 @@ const addTask = () => {
     if (selectedOptions.length === 0) {
       return alert('请至少选择一个手动任务！')
     }
-    
+
+    // 检查并注入依赖
+    const requiredDependencies = new Set();
+    selectedOptions.forEach(option => {
+        if (taskDependencies[option]) {
+            requiredDependencies.add(taskDependencies[option]);
+        }
+    });
+
+    const dependencyTasks = Array.from(requiredDependencies).map(depName => ({
+        name: depName,
+        context: {},
+        source: 'initial'
+    }));
+
     const manualTasks = selectedOptions.map(optionKey => {
       const taskContext = {};
       if (form.payloads && form.payloads[optionKey]) {
@@ -204,14 +219,28 @@ const addTask = () => {
       if (optionKey === 'addInventory') {
         taskContext.inventoryAmount = form.inventoryAmount || 1000;
       }
-      // 手动模式下，所有任务都视为初始任务，可以并行
-      return { name: optionKey, context: taskContext, source: 'initial' };
+      
+      // 如果任务有依赖，将其 source 指向依赖项
+      const source = taskDependencies[optionKey] || 'initial';
+      return { name: optionKey, context: taskContext, source };
     });
 
-    stages.push({
-        name: '手动执行的任务',
-        tasks: manualTasks
-    });
+    // 构建阶段
+    if (dependencyTasks.length > 0) {
+        stages.push({
+            name: '阶段 1: 自动处理依赖项',
+            tasks: dependencyTasks
+        });
+        stages.push({
+            name: '阶段 2: 执行手动选择的任务',
+            tasks: manualTasks
+        });
+    } else {
+        stages.push({
+            name: '手动执行的任务',
+            tasks: manualTasks
+        });
+    }
 
     const taskOptionLabels = taskOptions.reduce((acc, opt) => {
         acc[opt.key] = opt.label;

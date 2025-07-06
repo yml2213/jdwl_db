@@ -113,6 +113,7 @@ export async function executeWorkflow({
                         {
                             // 传递给任务执行器的上下文
                             ...initialContext,
+                            ...taskInfo.context, // 修正：合并任务特定的上下文
                             // 注意：这里传递的是筛选后的SKU生命周期对象列表
                             skus: skusForSource,
                             updateFn

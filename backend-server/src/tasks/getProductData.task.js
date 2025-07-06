@@ -8,7 +8,7 @@ import * as jdApiService from '../services/jdApiService.js'
  * @param {object} cancellationToken - 取消令牌
  */
 async function execute(context, sessionData, cancellationToken = { value: true }) {
-    const { skus: skuLifecycles, updateFn } = context;
+    const { skus: skuLifecycles, updateFn, department } = context;
 
     if (!skuLifecycles || !Array.isArray(skuLifecycles) || skuLifecycles.length === 0) {
         throw new Error('上下文中必须包含一个非空的SKU生命周期对象数组。');
@@ -17,15 +17,17 @@ async function execute(context, sessionData, cancellationToken = { value: true }
     // 从生命周期对象中提取SKU字符串列表
     const skuStrings = skuLifecycles.map(item => item.sku);
 
-    const { departmentInfo, operationId } = sessionData;
-    if (!departmentInfo || !departmentInfo.id) {
-        throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。');
+    const { operationId } = sessionData;
+    // 修正: 从 context 而不是 sessionData 获取 department 信息
+    if (!department || !department.deptNo) {
+        throw new Error('上下文中缺少有效的事业部信息 (department)。');
     }
     if (!operationId) {
         throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。');
     }
 
-    const deptId = departmentInfo.id;
+    // const deptId = department.id;
+    const deptId = department.deptNo.split('CBU')[1]
 
     try {
         updateFn({ message: `正在为 ${skuStrings.length} 个SKU查询商品数据...` });

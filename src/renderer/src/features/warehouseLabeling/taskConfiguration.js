@@ -90,4 +90,16 @@ export function getAllManualTaskKeys() {
     const manualOptions = workflows.manual.options
     const nonTaskKeys = ['skipConfigErrors', 'inventoryAmount'] // Options that don't represent a task
     return Object.keys(manualOptions).filter((key) => !nonTaskKeys.includes(key))
-} 
+}
+
+/**
+ * @description Defines the data dependencies between tasks.
+ * The key is the task that has a dependency, and the value is the task that provides the data.
+ * @returns {object} A map of task dependencies.
+ */
+export const taskDependencies = {
+    importLogisticsAttributes: 'getProductData',
+    enableInventoryAllocation: 'getProductData',
+    addInventory: 'getProductData',
+    enableJpSearch: 'getProductData',
+}; 
