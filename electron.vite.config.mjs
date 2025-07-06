@@ -20,7 +20,7 @@ export default defineConfig({
     plugins: [vue()],
     build: {
       rollupOptions: {
-        external: ['@element-plus/icons-vue']
+        external: []
       }
     }
   }
