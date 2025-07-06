@@ -25,6 +25,7 @@
       @execute-one="$emit('execute-one', $event)"
       @update:selected="updateSelectedTasks"
       @select-task="$emit('select-task', $event)"
+      @cancel-task="$emit('cancel-task', $event)"
     />
   </div>
 </template>
@@ -58,7 +59,8 @@ defineEmits([
   'delete-task',
   'update:active-tab',
   'execute-one',
-  'select-task'
+  'select-task',
+  'cancel-task'
 ])
 
 const selectedTaskIds = ref([])

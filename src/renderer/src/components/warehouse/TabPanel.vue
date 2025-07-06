@@ -33,6 +33,7 @@
           @execute-one="$emit('execute-one', $event)"
           @update:selected="$emit('update:selected', $event)"
           @select-task="$emit('select-task', $event)"
+          @cancel-task="$emit('cancel-task', $event)"
         />
       </div>
       <div :class="['tab-pane', { active: activeTab === 'logs' }]">
@@ -76,7 +77,8 @@ const emit = defineEmits([
   'execute-one',
   'enable-products',
   'update:selected',
-  'select-task'
+  'select-task',
+  'cancel-task'
 ])
 
 const onEnableProducts = (products) => {

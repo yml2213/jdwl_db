@@ -27,6 +27,7 @@
       @delete-task="deleteTask"
       @execute-one="executeTask"
       @row-click="handleRowClick"
+      @cancel-task="cancelTask"
     />
   </div>
 </template>
@@ -57,7 +58,8 @@ const {
   executeTask,
   deleteTask,
   runAllTasks,
-  clearAllTasks
+  clearAllTasks,
+  cancelTask
 } = useTaskList()
 const {
   shopsList,

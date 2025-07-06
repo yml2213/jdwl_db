@@ -45,13 +45,20 @@
           <td class="task-cell result-cell">{{ task.result }}</td>
           <td class="task-cell actions-cell">
             <button
-              v-if="['等待中', '失败'].includes(task.status)"
-              @click="$emit('execute-one', task)"
+              v-if="['等待中', '运行中'].includes(task.status) && !task.isWaiting"
+              @click.stop="$emit('execute-one', task)"
               class="action-btn execute-btn"
             >
               执行
             </button>
-            <button @click="$emit('delete-task', task.id)" class="action-btn delete-btn">
+            <button
+              v-if="['运行中'].includes(task.status) || task.isWaiting"
+              @click.stop="$emit('cancel-task', task.id)"
+              class="action-btn cancel-btn"
+            >
+              取消
+            </button>
+            <button @click.stop="$emit('delete-task', task.id)" class="action-btn delete-btn">
               删除
             </button>
           </td>
@@ -74,7 +81,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete-task', 'execute-one', 'update:selected', 'select-task'])
+const emit = defineEmits(['delete-task', 'execute-one', 'update:selected', 'select-task', 'cancel-task'])
 
 const selectedTasks = ref([])
 
@@ -213,6 +220,14 @@ watch(
 }
 .execute-btn:hover {
   background-color: #2563eb;
+}
+
+.cancel-btn {
+  background-color: #f97316;
+  color: white;
+}
+.cancel-btn:hover {
+  background-color: #ea580c;
 }
 
 .delete-btn {

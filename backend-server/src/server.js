@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs/promises'
 import { unsign } from 'cookie-signature'
 import db from './utils/db.js' // 引入数据库工具
+import { taskManager } from './utils/taskManager.js'
 
 import * as jdApiService from './services/jdApiService.js'
 
@@ -317,53 +318,107 @@ let flowHandlers = {}
 
 // WebSocket 消息处理
 const handleWebSocketMessage = async (ws, message) => {
-    const { action, taskId, taskName, isFlow, payload, sessionId } = JSON.parse(message)
+    try {
+        const { action, taskId, taskName, isFlow, payload, sessionId } = JSON.parse(message)
 
-    if (action === 'start_task') {
-        const session = await restoreSession(sessionId)
-        if (!session) {
-            ws.send(
-                JSON.stringify({
-                    event: 'end',
-                    taskId,
-                    success: false,
-                    message: '无法恢复会话, 请重新登录'
-                })
-            )
-            return
-        }
-
-        const log = (logMessage) => {
-            console.log(`[Task: ${taskId}]  日志: ${logMessage}`)
-            ws.send(JSON.stringify({ event: 'log', taskId, data: logMessage }))
-        }
-
-        try {
-            const handlerModule = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
-            if (handlerModule && typeof handlerModule.execute === 'function') {
-                const result = await handlerModule.execute(payload, log, session)
-                let data = {
-                    event: 'end',
-                    taskId,
-                    success: result.success,
-                    data: result.message || result.msg
-                }
-                console.log(`[Task: ${taskId}] ws发送到前端数据: ${JSON.stringify(data)}`)
-                ws.send(JSON.stringify(data))
-            } else {
-                throw new Error(`未找到处理器或处理器缺少 execute 方法: ${taskName}`)
+        if (action === 'start_task') {
+            const session = await restoreSession(sessionId)
+            if (!session) {
+                ws.send(
+                    JSON.stringify({
+                        event: 'end',
+                        taskId,
+                        success: false,
+                        message: '无法恢复会话, 请重新登录'
+                    })
+                )
+                return
             }
-        } catch (error) {
-            console.error(`执行任务 ${taskName} (ID: ${taskId}) 失败:`, error)
+
+            const cancellationToken = taskManager.registerTask(taskId)
+
+            const log = (logMessage) => {
+                if (!cancellationToken.value) return // 如果任务已取消，则不发送日志
+
+                console.log(`[Task: ${taskId}]  日志:`, logMessage)
+                // 确保发送给前端的数据格式统一
+                const eventData =
+                    typeof logMessage === 'object' && logMessage !== null
+                        ? { ...logMessage, event: logMessage.event || 'log', taskId } // 将日志对象与taskId合并
+                        : { event: 'log', taskId, data: logMessage } // 纯字符串日志
+                ws.send(JSON.stringify(eventData))
+            }
+
+            try {
+                const handlerModule = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
+                if (handlerModule && typeof handlerModule.execute === 'function') {
+                    const result = await handlerModule.execute(payload, log, session, cancellationToken)
+
+                    // 任务自然结束后，检查是否是因为取消而结束
+                    if (!cancellationToken.value) {
+                        console.log(`[Task: ${taskId}] Execution stopped due to cancellation.`)
+                        // 可选：发送一个取消成功的消息
+                        ws.send(
+                            JSON.stringify({
+                                event: 'end',
+                                taskId,
+                                success: false,
+                                message: '任务已被用户取消。'
+                            })
+                        )
+                    } else {
+                        let data = {
+                            event: 'end',
+                            taskId,
+                            success: result.success,
+                            data: result.message || result.msg
+                        }
+                        console.log(`[Task: ${taskId}] ws发送到前端数据: ${JSON.stringify(data)}`)
+                        ws.send(JSON.stringify(data))
+                    }
+                } else {
+                    throw new Error(`未找到处理器或处理器缺少 execute 方法: ${taskName}`)
+                }
+            } catch (error) {
+                // 发生错误时也检查是否是因取消任务导致
+                if (!cancellationToken.value) {
+                    console.log(`[Task: ${taskId}] Task was cancelled, ignoring subsequent error.`)
+                    ws.send(
+                        JSON.stringify({
+                            event: 'end',
+                            taskId,
+                            success: false,
+                            message: '任务已被用户取消。'
+                        })
+                    )
+                } else {
+                    console.error(`执行任务 ${taskName} (ID: ${taskId}) 失败:`, error)
+                    ws.send(
+                        JSON.stringify({
+                            event: 'end',
+                            taskId,
+                            success: false,
+                            message: error.message
+                        })
+                    )
+                }
+            } finally {
+                taskManager.deregisterTask(taskId)
+            }
+        } else if (action === 'cancel_task') {
+            console.log(`[WebSocket] Received cancel request for task ${taskId}`)
+            taskManager.cancelTask(taskId)
+            // 可选: 立即向前端反馈取消请求已被接收
             ws.send(
                 JSON.stringify({
-                    event: 'end',
+                    event: 'log',
                     taskId,
-                    success: false,
-                    message: error.message
+                    data: { message: '取消请求已发送...', type: 'warn' }
                 })
             )
         }
+    } catch (error) {
+        console.error('处理WebSocket消息时发生未知错误:', error)
     }
 }
 

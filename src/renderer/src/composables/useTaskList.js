@@ -130,6 +130,31 @@ export function useTaskList() {
   }
 
   /**
+   * @description 取消一个正在执行的任务。
+   * @param {string} taskId - 要取消的任务的ID。
+   */
+  const cancelTask = (taskId) => {
+    const task = taskList.value.find((t) => t.id === taskId)
+    if (!task) {
+      console.warn(`[cancelTask] 无法找到ID为 ${taskId} 的任务。`)
+      return
+    }
+
+    // 立即更新前端状态
+    task.status = '已取消'
+    task.result = '任务已被用户请求取消。'
+    task.isExecuting = false
+    task.isWaiting = false
+
+    // 向后端发送取消请求
+    webSocketService.send({
+      action: 'cancel_task',
+      taskId: taskId
+    })
+    console.log(`[cancelTask] 已发送取消请求至后端，任务ID: ${taskId}`)
+  }
+
+  /**
    * @description 按顺序执行队列中所有状态为"等待中"的任务。
    */
   const runAllTasks = async () => {
@@ -179,6 +204,7 @@ export function useTaskList() {
     addTask,
     executeTask,
     deleteTask,
+    cancelTask,
     runAllTasks,
     clearFinishedTasks,
     clearAllTasks,

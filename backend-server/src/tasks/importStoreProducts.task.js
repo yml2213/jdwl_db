@@ -31,19 +31,19 @@ function createExcelFileAsBuffer(skuList, vendor) {
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, updateFn, sessionData) {
+async function execute(context, updateFn, sessionData, cancellationToken = { value: true }) {
   // 优雅地处理两种不同的调用方式：
-  // 1. 单项任务调用: execute(context, updateFn, sessionData)
-  // 2. 工作流调用: execute(context, sessionData)
+  // 1. 单项任务调用: execute(context, updateFn, sessionData, cancellationToken)
+  // 2. 工作流调用: execute(context, sessionData, cancellationToken) - (updateFn is sessionData)
   if (typeof updateFn !== 'function') {
-    // 这是工作流调用，第二个参数实际上是 sessionData
-    sessionData = updateFn
-    // 提供一个无操作的 updateFn，以防后续代码调用它
-    updateFn = () => { }
+    // 这是工作流调用
+    cancellationToken = sessionData || { value: true } // cancellationToken is the 3rd arg
+    sessionData = updateFn // sessionData is the 2nd arg
+    updateFn = () => { } // 提供一个无操作的 updateFn
   }
 
   try {
-    updateFn('importStoreProducts 任务开始执行');
+    updateFn('importStoreProducts 任务开始执行')
 
     const { skus, store, department, vendor } = context
 
@@ -128,8 +128,12 @@ async function execute(context, updateFn, sessionData) {
           updateFn({ message: `[批处理] ${String(logData)}`, type: level })
         }
       },
-      isRunning: { value: true } // 假设任务总是在运行，除非被取消
+      isRunning: cancellationToken
     })
+
+    if (!cancellationToken.value) {
+      return { success: false, message: '任务被用户取消。' }
+    }
 
     if (!batchResults.success) {
       throw new Error(`导入店铺商品任务处理完成，但有失败的批次: ${batchResults.message}`)
