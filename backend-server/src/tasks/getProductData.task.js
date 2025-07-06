@@ -26,7 +26,6 @@ async function execute(context, sessionData, cancellationToken = { value: true }
         throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。');
     }
 
-    // const deptId = department.id;
     const deptId = department.deptNo.split('CBU')[1]
 
     try {

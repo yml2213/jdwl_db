@@ -86,6 +86,7 @@ onMounted(() => {
   border-radius: 3px;
   white-space: pre-wrap;
   word-break: break-all;
+  user-select: text; /* 明确允许文本选择 */
 }
 
 .log-time {

@@ -1093,7 +1093,7 @@ export async function getJpEnabledCsgsForStore(context, sessionData) {
   // console.log('getJpEnabledCsgsForStore -- sessionData:', sessionData)
 
   // 验证必要的数据
-  if (!store || !department || !department.id || !store.shopName) {
+  if (!store || !department || !department.deptNo || !store.shopName) {
     const errorMsg = '获取京配开启商品列表失败：缺少店铺或事业部信息。'
     console.error(`[getJpEnabledCsgsForStore] ${errorMsg}`, {
       store,
@@ -1112,7 +1112,7 @@ export async function getJpEnabledCsgsForStore(context, sessionData) {
     condition: {
       shopName: store.shopName,
       jdDeliver: '1', // '1' 代表京配搜索已开启
-      deptId: String(department.id) // 事业部ID
+      deptId: String(department.deptNo.split('CBU')[1]) // 事业部ID
     }
   }
 

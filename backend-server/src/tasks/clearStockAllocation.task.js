@@ -31,7 +31,7 @@ async function execute(context, updateFn, sessionData) {
     updateFn(`[Task: clearStockAllocation] 整店库存清零模式，店铺: ${store.shopName}`)
     const result = await jdApiService.clearStockForWholeStore(
       store.id,
-      department.id,
+      department.deptNo.split('CBU')[1],
       sessionData,
       updateFn
     )

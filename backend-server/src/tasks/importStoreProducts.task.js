@@ -49,7 +49,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
 
     const skuStrings = skuLifecycles.map(item => item.sku);
 
-    updateFn({ message: `"导入店铺商品" 开始，店铺 [${store.name}]...` });
+    updateFn({ message: `"导入店铺商品" 开始，店铺 [${store.shopName}]...` });
     updateFn({ message: `总共需要处理 ${skuStrings.length} 个SKU.` });
 
     const batchFn = async (skuBatch) => {
@@ -60,7 +60,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
 
         const filePath = await saveExcelFile(fileBuffer, {
           dirName: TEMP_DIR_NAME,
-          store: { shopName: store?.name },
+          store: { shopName: store?.shopName },
           extension: 'xls'
         });
         if (filePath) updateFn({ message: `Excel文件已保存到: ${filePath}` });

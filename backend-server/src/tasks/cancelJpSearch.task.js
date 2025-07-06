@@ -132,13 +132,13 @@ const execute = async (context, updateFn, sessionData) => {
             if (!operationId) {
                 throw new Error('会话数据中缺少 operationId，无法查询商品数据。')
             }
-            if (!department || !department.id) {
+            if (!department || !department.deptNo) {
                 throw new Error('上下文缺少 department 信息，无法查询商品数据。')
             }
 
             const productDataList = await jdApiService.queryProductDataBySkus(
                 skus,
-                department.id,
+                department.deptNo.split('CBU')[1],
                 operationId,
                 sessionData
             )
