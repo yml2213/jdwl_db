@@ -1,16 +1,11 @@
-import { resolve } from 'path'
-import { fileURLToPath } from 'url'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
-
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+import { fileURLToPath, URL } from 'node:url'
+import { resolve } from 'path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
-    define: {
-      'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL)
-    }
+    plugins: [externalizeDepsPlugin()]
   },
   preload: {
     plugins: [externalizeDepsPlugin()]
@@ -18,9 +13,15 @@ export default defineConfig({
   renderer: {
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src/renderer/src')
+        '@': fileURLToPath(new URL('./src/renderer/src', import.meta.url)),
+        '@main': fileURLToPath(new URL('./src/main', import.meta.url))
       }
     },
-    plugins: [vue()]
+    plugins: [vue()],
+    build: {
+      rollupOptions: {
+        external: ['@element-plus/icons-vue']
+      }
+    }
   }
 })

@@ -90,7 +90,9 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: 安装依赖
-        run: pnpm install
+        run: |
+          pnpm install
+          pnpm add @element-plus/icons-vue
 
       - name: 构建Windows版本
         run: pnpm run build:win
