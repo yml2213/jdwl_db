@@ -79,10 +79,18 @@ export function useShopAndWarehouse() {
         shopsList.value = cachedShops
       } else {
         const department = getSelectedDepartment()
+        const vendor = getSelectedVendor() // 1. 获取选定的供应商信息
+
         console.log('useShopAndWarehouse  ====> department', department)
+        console.log('useShopAndWarehouse  ====> vendor', vendor) // 调试日志
+
         if (!department || !department.deptNo) throw new Error('未选择事业部')
+        if (!vendor || !vendor.name) throw new Error('未选择供应商') // 增加对供应商的检查
+
         const deptId = department.deptNo.replace('CBU', '')
-        const shops = await getShopList(deptId)
+        const shopName = vendor.name // 2. 获取供应商名称
+
+        const shops = await getShopList(deptId, shopName) // 3. 将供应商名称传递给API调用
         shopsList.value = shops
         saveShopsList(shops) // 缓存到本地
       }

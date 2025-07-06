@@ -158,15 +158,24 @@ async function fetchApi(
 /**
  * 获取店铺列表 (已优化)
  * @param {string} deptId - 事业部ID
+ * @param {string} shopName - 店铺或供应商名称，用于过滤
  * @returns {Promise<Array>} 店铺列表数组
  */
-export async function getShopList(deptId) {
+export async function getShopList(deptId, shopName) {
   if (!deptId) {
     console.error('获取店铺列表失败: 未提供事业部ID');
     return [];
   }
+
+  // 创建URL查询参数
+  const params = new URLSearchParams({ deptId });
+  // 如果提供了shopName，则将其添加到查询参数中
+  if (shopName) {
+    params.append('shopName', shopName);
+  }
+
   // 注意：fetchApi 内部会自动拼接 API_BASE_URL
-  return await fetchApi(`/api/shops?deptId=${deptId}`);
+  return await fetchApi(`/api/shops?${params.toString()}`);
 }
 
 /**

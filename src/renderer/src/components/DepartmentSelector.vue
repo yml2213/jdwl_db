@@ -9,7 +9,7 @@
       </div>
       <select v-model="selectedDepartmentId" @change="onDepartmentSelect" :disabled="isLoading || error || !departments.length">
         <option disabled value="">请选择一个事业部</option>
-        <option v-for="dept in departments" :key="dept.id" :value="dept.id">
+        <option v-for="dept in departments" :key="dept.deptNo" :value="dept.deptNo">
           {{ dept.name }} ({{ dept.deptNo }})
         </option>
       </select>
@@ -58,7 +58,7 @@ const fetchDepartments = async () => {
 }
 
 const onDepartmentSelect = () => {
-  const selectedDept = departments.value.find(d => d.id === selectedDepartmentId.value)
+  const selectedDept = departments.value.find(d => d.deptNo === selectedDepartmentId.value)
   if (selectedDept) {
     emit('department-selected', selectedDept)
   }
