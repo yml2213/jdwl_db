@@ -17,20 +17,30 @@ const TEMP_DIR_NAME = '导入物流属性'
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, updateFn, sessionData, cancellationToken) {
+async function execute(context, sessionData, cancellationToken = { value: true }) {
+  const { updateFn } = context // 从上下文中解构出 updateFn
   try {
-    if (!cancellationToken.value) {
-      return { success: false, message: '任务已取消。' }
+    updateFn('importLogisticsAttributes 任务开始执行')
+
+    // 从上下文中获取所需数据
+    const { skus, department, store, logisticsOptions } = context
+
+    // 检查商品列表是否为空
+    if (!skus || skus.length === 0) {
+      updateFn({ message: '商品列表为空，无需操作。', type: 'info' })
+      return { success: true, message: '商品列表为空，无需操作。' }
     }
-    // 1. 从标准化的 context 中获取所有输入
-    const { itemsToProcess, department, store, logisticsOptions } = context
+
+    // 将 skus 数组转换为京东API需要的格式
+    const itemsToProcess = skus.map((sku) => ({
+      skuId: sku,
+      ...logisticsOptions
+    }))
+
+    updateFn(`"导入物流属性" 开始，店铺 [${store.name}]...`)
+    updateFn(`总共需要处理 ${itemsToProcess.length} 个SKU.`)
 
     // 2. 参数校验
-    if (!itemsToProcess || itemsToProcess.length === 0) {
-      const msg = '商品列表为空，无需操作。'
-      updateFn(msg)
-      return { success: true, message: msg }
-    }
     if (!department || !department.deptNo) {
       throw new Error('上下文中缺少有效的事业部信息。')
     }
@@ -85,22 +95,23 @@ async function execute(context, updateFn, sessionData, cancellationToken) {
       }
     }
 
-    const batchResults = await executeInBatches({
+    const results = await executeInBatches({
       items: itemsToProcess,
       batchSize: BATCH_SIZE,
       delay: BATCH_DELAY,
       batchFn,
-      log: updateFn, // 直接传递 updateFn
+      // 逻辑已移至 server.js 的智能 updateFn, 这里只需直接传递即可
+      log: updateFn,
       isRunning: cancellationToken
     })
 
     if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
-    if (!batchResults.success) {
-      throw new Error(`导入物流属性任务处理完成，但有失败的批次: ${batchResults.message}`)
+    if (!results.success) {
+      throw new Error(`导入物流属性任务处理完成，但有失败的批次: ${results.message}`)
     }
 
-    return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
+    return { success: true, message: `所有批次成功完成。 ${results.message}` }
   } catch (error) {
     if (!cancellationToken.value) {
       const cancelMsg = '任务在执行中被用户取消。'

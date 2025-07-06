@@ -31,17 +31,8 @@ function createExcelFileAsBuffer(skuList, vendor) {
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-async function execute(context, updateFn, sessionData, cancellationToken = { value: true }) {
-  // 优雅地处理两种不同的调用方式：
-  // 1. 单项任务调用: execute(context, updateFn, sessionData, cancellationToken)
-  // 2. 工作流调用: execute(context, sessionData, cancellationToken) - (updateFn is sessionData)
-  if (typeof updateFn !== 'function') {
-    // 这是工作流调用
-    cancellationToken = sessionData || { value: true } // cancellationToken is the 3rd arg
-    sessionData = updateFn // sessionData is the 2nd arg
-    updateFn = () => { } // 提供一个无操作的 updateFn
-  }
-
+async function execute(context, sessionData, cancellationToken = { value: true }) {
+  const { updateFn } = context; // 从上下文中解构出 updateFn
   try {
     updateFn('importStoreProducts 任务开始执行')
 
@@ -119,7 +110,8 @@ async function execute(context, updateFn, sessionData, cancellationToken = { val
       batchSize: BATCH_SIZE,
       delay: BATCH_DELAY,
       batchFn,
-      log: (message, level = 'info') => updateFn({ message: `[批处理] ${message}`, type: level }),
+      // 逻辑已移至 server.js 的智能 updateFn, 这里只需直接传递即可
+      log: updateFn,
       isRunning: cancellationToken
     })
 

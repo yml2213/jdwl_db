@@ -327,39 +327,26 @@ const handleWebSocketMessage = async (ws, message) => {
 
         // 核心重构：创建一个全能的 updateFn，所有与前端的任务通信都通过它
         const updateFn = (data) => {
-            // 如果任务已被取消，则不应发送任何更新，除了最终的取消消息（在其他地方处理）
-            // 注意：这里需要从 taskManager 获取最新的状态，因为 cancellationToken 可能是旧的引用
-            const isCancelled = taskManager.isCancelled(taskId);
-            if (isCancelled && data?.event !== 'end') {
-                // console.log(`[UpdateFn] Task ${taskId} is cancelled. Suppressing message:`, data);
-                return;
-            }
-
-            if (ws.readyState !== WebSocket.OPEN) return;
-
-            let eventPayload;
+            let messageObject;
 
             if (typeof data === 'string') {
-                // 1. 处理纯字符串日志
-                eventPayload = { event: 'log', message: data };
-            } else if (data && typeof data === 'object') {
-                if (data.event) {
-                    // 2. 处理已经格式化的事件 (如 'waiting', 'end')
-                    eventPayload = data;
-                } else {
-                    // 3. 处理日志对象 (如 { message, error, type })
-                    eventPayload = { event: 'log', ...data };
-                }
+                // 如果传入的是字符串，包装成标准日志对象
+                messageObject = { event: 'log', message: data, type: 'info' };
+            } else if (typeof data === 'object' && data !== null) {
+                // 如果是对象，确保它有 event 属性
+                messageObject = { event: 'log', ...data }; // 默认 event 是 'log'
             } else {
-                // 忽略无效数据
-                return;
+                // 对于其他意外类型，记录一个警告
+                console.warn(`[UpdateFn] Received data of unexpected type: ${typeof data}`);
+                messageObject = { event: 'log', message: `警告: 收到意外的数据类型 ${typeof data}`, type: 'warn' };
             }
 
-            // 自动为所有事件附加 taskId
-            const finalPayload = { ...eventPayload, taskId };
-
-            console.log(`[UpdateFn] ws发送到前端 ->`, JSON.stringify(finalPayload));
-            ws.send(JSON.stringify(finalPayload));
+            // 最后，为所有消息统一添加 taskId 并发送
+            try {
+                ws.send(JSON.stringify({ ...messageObject, taskId }));
+            } catch (e) {
+                console.error(`[UpdateFn] 发送 WebSocket 消息失败:`, e)
+            }
         }
 
 
@@ -440,46 +427,46 @@ const restoreSession = async (sessionId) => {
     const sessionPath = path.join(__dirname, '..', 'sessions');
     const fileStore = new FileStore({ path: sessionPath });
 
-    console.log(`[Session Restore] 1. Received raw cookie value: ${sessionId}`);
+    console.log(`[会话恢复] 1. 收到原始cookie值: ${sessionId}`);
 
     try {
         const decodedCookie = decodeURIComponent(sessionId);
-        console.log(`[Session Restore] 2. Decoded cookie value: ${decodedCookie}`);
+        console.log(`[会话恢复] 2. 解码后的cookie值: ${decodedCookie}`);
 
         if (!decodedCookie.startsWith('s:')) {
-            console.error(`[Session Restore] FAILED. Cookie does not look like a signed session cookie.`);
+            console.error(`[会话恢复] 失败。Cookie不是一个已签名的会话cookie。`);
             return null;
         }
 
-        // The cookie value is "s:sid.signature", unsign needs "sid.signature"
+        // Cookie值格式为 "s:sid.signature", unsign需要 "sid.signature"
         const signedSid = decodedCookie.substring(2);
 
-        // Unsign the cookie to get the raw session ID
+        // 解签名获取原始会话ID
         const rawSid = unsign(signedSid, sessionSecret);
 
-        console.log(`[Session Restore] 3. Unsigned to get raw SID: ${rawSid}`);
+        console.log(`[会话恢复] 3. 解签名后获得原始会话ID: ${rawSid}`);
 
         if (!rawSid) {
-            console.error(`[Session Restore] FAILED. Cookie signature is invalid.`);
+            console.error(`[会话恢复] 失败。Cookie签名无效。`);
             return null;
         }
 
         return new Promise((resolve, reject) => {
             fileStore.get(rawSid, (err, session) => {
                 if (err) {
-                    console.error(`[Session Restore] FAILED to get session from store for sid=${rawSid}. Error:`, err);
+                    console.error(`[会话恢复] 从存储中获取会话失败，会话ID=${rawSid}。错误:`, err);
                     return reject(err);
                 }
                 if (!session) {
-                    console.log(`[Session Restore] No session found for sid=${rawSid}.`);
+                    console.log(`[会话恢复] 未找到会话，会话ID=${rawSid}。`);
                     return resolve(null);
                 }
-                console.log(`[Session Restore] Successfully restored session for sid=${rawSid}.`);
+                console.log(`[会话恢复] 成功恢复会话，会话ID=${rawSid}。`);
                 resolve(session);
             });
         });
     } catch (error) {
-        console.error(`[Session Restore] FAILED. Unexpected error during session restoration for cookie=${sessionId}. Error:`, error);
+        console.error(`[会话恢复] 失败。在恢复会话过程中发生意外错误，cookie=${sessionId}。错误:`, error);
         throw error;
     }
 };

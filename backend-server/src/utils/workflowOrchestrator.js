@@ -42,14 +42,17 @@ export async function executeWorkflow({
 
         // 准备当前任务的执行上下文
         // 合并 共享上下文 和 任务自带的上下文
-        const currentTaskContext = { ...sharedContext, ...taskInfo.context };
+        const currentTaskContext = {
+            ...sharedContext,
+            ...taskInfo.context,
+            updateFn: updateFn
+        };
 
         try {
             updateFn({ message: `--- 开始执行任务: ${handler.description || taskInfo.name} ---`, type: 'info' });
 
             const result = await handler.execute(
                 currentTaskContext,
-                updateFn,
                 sessionData,
                 cancellationToken
             );

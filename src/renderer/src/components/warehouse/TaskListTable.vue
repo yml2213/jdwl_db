@@ -169,6 +169,7 @@ watch(
 
 .task-cell {
   font-size: 12px;
+  user-select: text; /* 允许单元格内的文本被选中 */
 }
 
 .actions-header-cell {

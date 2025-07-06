@@ -21,13 +21,13 @@ export function useTaskList() {
 
     switch (event) {
       case 'log':
-        // 如果是对象形式的日志，通常是结构化信息
-        if (typeof data === 'object' && data !== null) {
-          // 其他结构化日志，推入日志数组
-          task.logs.push(JSON.stringify(data))
-        } else {
-          // 普通字符串日志
-          task.logs.push(data)
+        // 后端重构后, 日志内容在 `message` 属性中, 它被 ...rest 操作符捕获
+        // 所以我们应该从 `rest.message` 而不是 `data` 中获取日志
+        if (rest.message) {
+          task.logs.push(rest.message);
+        } else if (data) {
+          // 保留旧的逻辑以防万一
+          task.logs.push(typeof data === 'object' ? JSON.stringify(data) : data);
         }
 
         if (selectedTask.value && selectedTask.value.id === taskId) {
@@ -108,18 +108,18 @@ export function useTaskList() {
       // executionData 现在包含了 { workflow, initialContext }
       const payload = { ...task.executionData }
 
-      console.log(`[executeTask] 1. Preparing to send workflow for task '${task.name}'.`)
+      console.log(`[执行任务] 1. 准备发送工作流，任务名称: '${task.name}'`)
       const sessionId = await getSessionId()
-      console.log(`[executeTask] 2. Retrieved sessionId to be sent: ${sessionId}`)
+      console.log(`[执行任务] 2. 获取到会话ID: ${sessionId}`)
 
       // 统一通过 WebSocket 执行工作流
       webSocketService.send({
         action: 'execute_workflow',
         taskId: task.id,
-        payload: payload, // payload is now { workflow, initialContext }
+        payload: payload, // payload 包含 workflow 和 initialContext
         sessionId: sessionId
       })
-      console.log(`[executeTask] 3. Workflow sent over WebSocket.`)
+      console.log(`[执行任务] 3. 工作流已通过WebSocket发送`)
     } catch (error) {
       console.error(`启动任务 ${task.name} 出错:`, error)
       task.status = '失败'
