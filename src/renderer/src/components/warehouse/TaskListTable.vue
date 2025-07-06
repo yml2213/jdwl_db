@@ -36,8 +36,10 @@
           <td class="task-cell">{{ task.createdAt }}</td>
           <td class="task-cell status-cell">
             <div class="status-content">
-              <div v-if="task.isWaiting" class="spinner"></div>
-              <StatusTag :status="task.status" />
+              <el-icon v-if="task.isWaiting" class="is-loading" :size="14">
+                <Loading />
+              </el-icon>
+              <StatusTag :status="task.status" :is-waiting="task.isWaiting" />
             </div>
           </td>
           <td class="task-cell result-cell">{{ task.result }}</td>
@@ -62,6 +64,8 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import StatusTag from './StatusTag.vue'
+import { ElIcon } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 
 const props = defineProps({
   tasks: {
@@ -131,19 +135,21 @@ watch(
   gap: 8px;
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.el-icon.is-loading {
+  animation: rotate 2s linear infinite;
 }
 
-@keyframes spin {
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
   to {
     transform: rotate(360deg);
   }
+}
+
+.spinner {
+  flex-shrink: 0; /* Prevent spinner from shrinking */
 }
 
 .task-header-cell {

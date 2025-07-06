@@ -119,8 +119,15 @@ async function execute(context, updateFn, sessionData) {
       batchSize: BATCH_SIZE,
       delay: BATCH_DELAY,
       batchFn,
-      log: (message, level = 'info') =>
-        updateFn({ message: `[批处理] ${message}`, type: level }),
+      log: (logData, level = 'info') => {
+        // 如果 logData 是我们为前端定制的事件对象，直接传递
+        if (typeof logData === 'object' && logData !== null && logData.event) {
+          updateFn(logData)
+        } else {
+          // 否则，作为普通日志消息处理
+          updateFn({ message: `[批处理] ${String(logData)}`, type: level })
+        }
+      },
       isRunning: { value: true } // 假设任务总是在运行，除非被取消
     })
 

@@ -10,6 +10,10 @@ const props = defineProps({
     type: String,
     required: true,
     default: '等待中'
+  },
+  isWaiting: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -23,10 +27,12 @@ const statusClass = computed(() => {
     return 'failure'
   }
 
+  // Differentiate between initial waiting and rate-limit waiting
+  if (status === '等待中' || status === 'waiting') {
+    return props.isWaiting ? 'rate-limited-waiting' : 'waiting'
+  }
+
   switch (status) {
-    case '等待中':
-    case 'waiting':
-      return 'waiting'
     case '执行中':
     case 'processing':
       return 'processing'
@@ -60,17 +66,22 @@ const displayText = computed(() => {
 
 <style scoped>
 .status-tag {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 2px 8px;
   font-size: 12px;
   border-radius: 12px;
   color: white;
-  text-align: center;
   white-space: nowrap;
 }
 
 .waiting {
-  background-color: #909399;
+  background-color: #909399; /* Grey for initial waiting */
+}
+
+.rate-limited-waiting {
+  background-color: #e6a23c; /* Yellow for rate-limit waiting */
 }
 
 .processing {
