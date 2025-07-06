@@ -14,14 +14,14 @@ const runningTasks = new Map()
  */
 function registerTask(taskId) {
     if (runningTasks.has(taskId)) {
-        console.warn(`[TaskManager] Task with ID ${taskId} is already registered.`)
+        console.warn(`[任务管理器] ID为 ${taskId} 的任务已经注册。`)
         // 如果任务已存在，可能需要先取消旧的
         cancelTask(taskId)
     }
 
     const cancellationToken = { value: true }
     runningTasks.set(taskId, cancellationToken)
-    console.log(`[TaskManager] Task ${taskId} registered. Total running tasks: ${runningTasks.size}`)
+    console.log(`[任务管理器] 任务 ${taskId} 已注册。当前运行任务总数: ${runningTasks.size}`)
     return cancellationToken
 }
 
@@ -33,10 +33,10 @@ function cancelTask(taskId) {
     if (runningTasks.has(taskId)) {
         const cancellationToken = runningTasks.get(taskId)
         cancellationToken.value = false
-        console.log(`[TaskManager] Task ${taskId} cancellation requested.`)
+        console.log(`[任务管理器] 任务 ${taskId} 已请求取消。`)
         // 不立即从map中删除，等待任务循环自行终止和注销
     } else {
-        console.warn(`[TaskManager] Attempted to cancel task ${taskId}, but it was not found.`)
+        console.warn(`[任务管理器] 尝试取消任务 ${taskId}，但未找到该任务。`)
     }
 }
 
@@ -47,7 +47,7 @@ function cancelTask(taskId) {
 function deregisterTask(taskId) {
     if (runningTasks.delete(taskId)) {
         console.log(
-            `[TaskManager] Task ${taskId} deregistered. Total running tasks: ${runningTasks.size}`
+            `[任务管理器] 任务 ${taskId} 已注销。当前运行任务总数: ${runningTasks.size}`
         )
     }
 }

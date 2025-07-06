@@ -44,22 +44,24 @@
           </td>
           <td class="task-cell result-cell">{{ task.result }}</td>
           <td class="task-cell actions-cell">
-            <button
-              v-if="['等待中', '运行中'].includes(task.status) && !task.isWaiting"
-              @click.stop="$emit('execute-one', task)"
-              class="action-btn execute-btn"
-            >
-              执行
-            </button>
+            <div class="action-group">
+              <button
+                v-if="['等待中', '失败'].includes(task.status)"
+                @click.stop="$emit('execute-one', task)"
+                class="action-btn execute-btn"
+              >
+                执行
+              </button>
+              <button @click.stop="$emit('delete-task', task.id)" class="action-btn delete-btn">
+                删除
+              </button>
+            </div>
             <button
               v-if="['运行中'].includes(task.status) || task.isWaiting"
               @click.stop="$emit('cancel-task', task.id)"
               class="action-btn cancel-btn"
             >
               取消
-            </button>
-            <button @click.stop="$emit('delete-task', task.id)" class="action-btn delete-btn">
-              删除
             </button>
           </td>
         </tr>
@@ -201,8 +203,13 @@ watch(
 .actions-cell {
   display: flex;
   gap: 6px;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
+}
+
+.action-group {
+  display: flex;
+  gap: 6px;
 }
 
 .action-btn {

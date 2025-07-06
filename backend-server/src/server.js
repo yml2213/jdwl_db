@@ -341,11 +341,12 @@ const handleWebSocketMessage = async (ws, message) => {
                 if (!cancellationToken.value) return // 如果任务已取消，则不发送日志
 
                 console.log(`[Task: ${taskId}]  日志:`, logMessage)
-                // 确保发送给前端的数据格式统一
-                const eventData =
-                    typeof logMessage === 'object' && logMessage !== null
-                        ? { ...logMessage, event: logMessage.event || 'log', taskId } // 将日志对象与taskId合并
-                        : { event: 'log', taskId, data: logMessage } // 纯字符串日志
+                // 统一将日志内容包装在 data 字段中，确保前端能一致地处理
+                const eventData = {
+                    event: 'log',
+                    taskId,
+                    data: logMessage
+                }
                 ws.send(JSON.stringify(eventData))
             }
 

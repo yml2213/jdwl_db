@@ -3,10 +3,19 @@
     <div v-if="isRunning" class="log-status">执行中...</div>
     <div v-if="taskError" class="log-status log-error">错误: {{ taskError }}</div>
     <div v-if="taskResult" class="log-status log-success">完成: {{ taskResult.message }}</div>
-    <div v-for="(log, index) in logs" :key="index" :class="`log-entry log-${log.type}`">
-      <span class="log-time">[{{ log.time }}]</span>
-      <span class="log-message">{{ log.message }}</span>
-    </div>
+    <template v-for="(log, index) in logs" :key="index">
+      <div
+        v-if="log && typeof log === 'object'"
+        :class="`log-entry log-${log.type || 'info'}`"
+      >
+        <span class="log-time">[{{ log.time || new Date().toLocaleTimeString() }}]</span>
+        <span class="log-message">{{ log.message || JSON.stringify(log) }}</span>
+      </div>
+      <div v-else-if="log" class="log-entry log-info">
+        <span class="log-time">[{{ new Date().toLocaleTimeString() }}]</span>
+        <span class="log-message">{{ log }}</span>
+      </div>
+    </template>
     <div v-if="logs.length === 0 && !isRunning" class="no-logs">
       <p>暂无日志</p>
     </div>
