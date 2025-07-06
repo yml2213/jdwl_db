@@ -71,7 +71,6 @@ function getAuthInfo(session) {
 export async function requestJdApi(config) {
   try {
     const response = await jdApiAxios(config)
-    console.log(response)
     // 检查京东返回的特定错误格式
     if (response.data && response.data.code && response.data.code !== 200) {
       throw new Error(response.data.msg || '京东API返回错误')

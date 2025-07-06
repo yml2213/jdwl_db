@@ -74,7 +74,7 @@ app.get('/api/vendors', requireAuth, async (req, res) => {
     console.log('[API /api/vendors] 收到请求。正在处理...')
     try {
         const vendors = await jdApiService.getVendorList(req.session)
-        console.log('[API /api/vendors] 成功获取并处理了供应商数据，准备返回:', vendors)
+        // console.log('[API /api/vendors] 成功获取并处理了供应商数据，准备返回:', vendors)
         res.json(vendors)
     } catch (error) {
         console.error('[API /api/vendors] 获取供应商列表时发生严重错误:', error)
@@ -164,22 +164,28 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
                 console.log(`[Session] 找到了已存在的方案ID: ${operationId}`);
                 req.session.context.operationId = operationId;
             } else {
-                console.log(`[Session] 未找到方案ID，正在创建新的方案...`);
-                const result = await jdApiService.startSessionOperation(req.session);
-                if (result.success) {
-                    operationId = result.operationId;
-                    console.log(`[Session] 新方案创建成功，ID: ${operationId}`);
-                    req.session.context.operationId = operationId;
-                    await db.saveScheme(uniqueKey, operationId);
-                    console.log(`[Session] 新方案ID已保存到数据库。`);
-                } else {
-                    // 如果创建失败，记录错误但不要中断流程
-                    console.error('[Session] 创建新方案ID时出错:', result.message);
+                console.log(`[Session] 未找到方案ID，正在调用京东API创建新的方案...`);
+                try {
+                    const result = await jdApiService.startSessionOperation(req.session);
+                    if (result.success) {
+                        operationId = result.operationId;
+                        console.log(`[Session] 新方案创建成功，ID: ${operationId}`);
+                        req.session.context.operationId = operationId;
+                        // 数据库操作也应包含在try...catch中
+                        await db.saveScheme(uniqueKey, operationId);
+                        console.log(`[Session] 新方案ID已保存到数据库。`);
+                    } else {
+                        // 如果API调用本身返回了 success: false
+                        console.error('[Session] 京东API报告创建新方案ID失败:', result.message || '无具体错误信息');
+                    }
+                } catch (apiError) {
+                    // 如果jdApiService.startSessionOperation抛出了异常
+                    console.error('[Session] 调用京东API创建方案ID时发生严重错误:', apiError);
                 }
             }
         } catch (dbError) {
-            console.error('[Session] 读写方案ID数据库时出错:', dbError);
-            // 数据库错误不应中断整个登录流程
+            console.error('[Session] 读写方案ID数据库时发生严重错误:', dbError);
+            // 数据库错误不应中断整个登录流程，但需要记录
         }
     }
 

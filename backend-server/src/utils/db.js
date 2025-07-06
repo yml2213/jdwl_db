@@ -6,6 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dbPath = path.join(__dirname, '..', '..', 'db.json');
 
+console.log('[DB Util] 数据库文件路径已计算为:', dbPath); // 增加日志用于调试
+
 // 一个非常简单的文件锁，防止并发写入
 let isLocked = false;
 const lock = () => {
