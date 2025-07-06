@@ -147,14 +147,11 @@ app.whenReady().then(() => {
   // 配置CSP
   const { session } = require('electron')
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const apiUrl = process.env.VITE_API_URL || 'http://localhost:2333'
-    const wsUrl = apiUrl.replace(/^http/, 'ws')
-
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.jdl.com https://*.jd.com; connect-src 'self' ${apiUrl} ${wsUrl} https://*.jdl.com https://*.jd.com; worker-src blob: data:;`
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.jdl.com https://*.jd.com; connect-src 'self' http://localhost:2333 ws://localhost:2333 http://47.93.132.204:2333 ws://47.93.132.204:2333 https://*.jdl.com https://*.jd.com; worker-src blob: data:;"
         ]
       }
     })

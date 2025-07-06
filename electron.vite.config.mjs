@@ -7,7 +7,10 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    define: {
+      'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL)
+    }
   },
   preload: {
     plugins: [externalizeDepsPlugin()]
