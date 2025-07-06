@@ -33,6 +33,9 @@ const statusClass = computed(() => {
   }
 
   switch (status) {
+    case '已取消':
+    case 'cancelled':
+      return 'cancelled'
     case '执行中':
     case 'processing':
       return 'processing'
@@ -82,6 +85,10 @@ const displayText = computed(() => {
 
 .rate-limited-waiting {
   background-color: #e6a23c; /* Yellow for rate-limit waiting */
+}
+
+.cancelled {
+  background-color: #b0bec5; /* A cool-toned grey for cancelled tasks */
 }
 
 .processing {
