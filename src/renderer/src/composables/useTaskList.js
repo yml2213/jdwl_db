@@ -50,7 +50,8 @@ export function useTaskList() {
         break
       case 'end':
         task.status = rest.success ? '成功' : '失败'
-        task.result = rest.success ? data : rest.message || '执行失败'
+        // 修正：失败时，错误信息现在也可能在 data 字段中
+        task.result = rest.success ? data : rest.message || data || '执行失败'
         task.isExecuting = false
         task.isWaiting = false // 确保结束时清除等待状态
         break

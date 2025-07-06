@@ -198,7 +198,12 @@ export async function executeWorkflow({
                     if (!result || !result.success) {
                         const errorMsg = `任务 [${handler.description || taskInfo.name}] 失败: ${result ? result.message : '未知错误'
                             }`;
-                        updateFn({ message: errorMsg, type: 'error' });
+                        // 发送 end 事件，以便前端可以正确更新任务最终状态和结果
+                        updateFn({
+                            event: 'end',
+                            success: false,
+                            message: result?.message || '任务执行失败'
+                        });
                         return { success: false, message: errorMsg };
                     }
 
@@ -209,7 +214,12 @@ export async function executeWorkflow({
                 } catch (error) {
                     const errorMsg = `执行任务 [${handler.description || taskInfo.name
                         }] 时发生严重错误: ${error.message}`;
-                    updateFn({ message: errorMsg, type: 'error' });
+                    // 同样发送 end 事件
+                    updateFn({
+                        event: 'end',
+                        success: false,
+                        message: error.message || '任务发生严重错误'
+                    });
                     return { success: false, message: errorMsg };
                 }
             }
