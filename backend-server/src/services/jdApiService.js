@@ -54,7 +54,6 @@ function getAuthInfo(session) {
   }
 
   const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-  console.log('[getAuthInfo] 准备用于请求京东API的Cookie:', cookieString); // 增加日志，用于调试
   const csrfToken = cookies.find((c) => c.name === 'csrfToken')?.value
   if (!csrfToken) {
     // 某些API可能不需要csrfToken，这里只做警告
@@ -72,6 +71,7 @@ function getAuthInfo(session) {
 export async function requestJdApi(config) {
   try {
     const response = await jdApiAxios(config)
+    console.log(response)
     // 检查京东返回的特定错误格式
     if (response.data && response.data.code && response.data.code !== 200) {
       throw new Error(response.data.msg || '京东API返回错误')
@@ -359,7 +359,7 @@ async function fetchShopGoodsPage(skuBatch, status, sessionData, start, length) 
 }
 
 /**
- * 查询指定SKU列表中所有已停用的商品 
+ * 查询指定SKU列表中所有已停用的商品
  * 7.2 优化  新方案查询  getProductData.task.js 查询
  * @param {string[]} skus - 要查询的SKU列表
  * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
@@ -393,7 +393,7 @@ export async function getDisabledProducts(skus, sessionData) {
 }
 
 /**
- * 查询指定SKU列表中所有已停用的商品 
+ * 查询指定SKU列表中所有已停用的商品
  * 7.2 优化  新方案查询  getProductData.task.js 查询
  * @param {string[]} skus - 要查询的SKU列表
  * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
@@ -1291,7 +1291,7 @@ export async function endSessionOperation(operationId, sessionData) {
 }
 
 /**
- * 根据SKU列表查询商品详细数据  通过报表API查询 -- 方案查询 
+ * 根据SKU列表查询商品详细数据  通过报表API查询 -- 方案查询
  * @param {string[]} skus - 商品的SKU数组 (sellerGoodsSign)
  * @param {string} deptId - 事业部ID
  * @param {string} schemeId - 查询方案ID (即 operationId)
@@ -1346,17 +1346,8 @@ export async function getVendorList(session) {
   const { cookieString, csrfToken } = getAuthInfo(session)
 
   const url = `/supplier/querySupplierList.do?rand=${Math.random()}`
-  // const data = qs.stringify({
-  //   csrfToken,
-  //   sellerId: '',
-  //   supplierName: '',
-  //   supplierCode: '',
-  //   page: 1,
-  //   pageSize: 100, // 假设最多100个供应商
-  //   sidx: 'supplierNo',
-  //   sord: 'asc'
-  // })
-  // 构建请求数据
+
+  // 根据您提供的成功的cURL命令，构建正确的请求体
   const data = qs.stringify({
     csrfToken: csrfToken,
     sellerId: '',
@@ -1364,8 +1355,28 @@ export async function getVendorList(session) {
     status: '',
     supplierNo: '',
     supplierName: '',
-    aoData:
-      '[{"name":"sEcho","value":2},{"name":"iColumns","value":6},{"name":"sColumns","value":",,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":1},{"name":"bSortable_1","value":false},{"name":"mDataProp_2","value":"supplierNo"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"supplierName"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"deptName"},{"name":"bSortable_4","value":true},{"name":"mDataProp_5","value":"statusStr"},{"name":"bSortable_5","value":true},{"name":"iSortCol_0","value":2},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
+    aoData: JSON.stringify([
+      { name: 'sEcho', value: 2 },
+      { name: 'iColumns', value: 6 },
+      { name: 'sColumns', value: ',,,,,' },
+      { name: 'iDisplayStart', value: 0 },
+      { name: 'iDisplayLength', value: 100 }, // 获取更多供应商
+      { name: 'mDataProp_0', value: 0 },
+      { name: 'bSortable_0', value: false },
+      { name: 'mDataProp_1', value: 1 },
+      { name: 'bSortable_1', value: false },
+      { name: 'mDataProp_2', value: 'supplierNo' },
+      { name: 'bSortable_2', value: true },
+      { name: 'mDataProp_3', value: 'supplierName' },
+      { name: 'bSortable_3', value: true },
+      { name: 'mDataProp_4', value: 'deptName' },
+      { name: 'bSortable_4', value: true },
+      { name: 'mDataProp_5', value: 'statusStr' },
+      { name: 'bSortable_5', value: true },
+      { name: 'iSortCol_0', value: 2 },
+      { name: 'sSortDir_0', value: 'desc' },
+      { name: 'iSortingCols', value: 1 }
+    ])
   })
 
   const response = await requestJdApi({
@@ -1375,22 +1386,22 @@ export async function getVendorList(session) {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       Cookie: cookieString,
-      Referer: 'https://o.jdl.com/supplier/list'
+      Referer: 'https://o.jdl.com/goToMainIframe.do',
+      Origin: 'https://o.jdl.com'
     }
   })
 
-  // 检查返回的数据结构
-  if (response && response.success && Array.isArray(response.data)) {
-    return response.data.map((item) => ({
-      id: item.supplierNo, // 使用 supplierNo 作为唯一标识
+  console.log(response);
+  // 根据您提供的成功JSON，正确解析响应
+  if (response && response.aaData && Array.isArray(response.aaData)) {
+    console.log(`成功获取到 ${response.aaData.length} 个供应商。`)
+    return response.aaData.map((item) => ({
+      id: item.supplierNo, // 使用 supplierNo 作为唯一ID
       name: item.supplierName,
       supplierNo: item.supplierNo
     }))
   } else if (response && typeof response === 'string' && response.trim().startsWith('<')) {
-    // 如果返回的是一个HTML字符串，很可能是登录页面或者错误页面
     console.error('获取供应商列表失败：收到了HTML响应，可能登录已过期。')
-    throw new Error('NotLogin')
-  } else if (response && response.error === 'NotLogin') {
     throw new Error('NotLogin')
   } else {
     console.warn('获取供应商列表返回数据格式不正确:', response)
@@ -1400,7 +1411,6 @@ export async function getVendorList(session) {
 
 /**
  * 获取事业部列表
- * @param {string} vendorName - 供应商名称
  * @param {object} session - 完整的会话对象
  * @returns {Promise<Array>} - 事业部列表
  */
@@ -1408,9 +1418,37 @@ export async function getDepartmentList(vendorName, session) {
   const { cookieString, csrfToken } = getAuthInfo(session)
 
   const url = `/dept/queryDeptList.do?rand=${Math.random()}`
+
+  // 根据您提供的cURL命令，构建正确的请求体
   const data = qs.stringify({
-    csrfToken,
-    supplierName: vendorName
+    csrfToken: csrfToken,
+    id: '',
+    sellerId: '',
+    status: '',
+    aoData: JSON.stringify([
+      { name: 'sEcho', value: 4 },
+      { name: 'iColumns', value: 7 },
+      { name: 'sColumns', value: ',,,,,,' },
+      { name: 'iDisplayStart', value: 0 },
+      { name: 'iDisplayLength', value: 100 }, // 获取更多
+      { name: 'mDataProp_0', value: 0 },
+      { name: 'bSortable_0', value: false },
+      { name: 'mDataProp_1', value: 1 },
+      { name: 'bSortable_1', value: false },
+      { name: 'mDataProp_2', value: 'deptNo' },
+      { name: 'bSortable_2', value: true },
+      { name: 'mDataProp_3', value: 'deptName' },
+      { name: 'bSortable_3', value: true },
+      { name: 'mDataProp_4', value: 'sellerNo' },
+      { name: 'bSortable_4', value: true },
+      { name: 'mDataProp_5', value: 'sellerName' },
+      { name: 'bSortable_5', value: true },
+      { name: 'mDataProp_6', value: 'statusStr' },
+      { name: 'bSortable_6', value: true },
+      { name: 'iSortCol_0', value: 2 },
+      { name: 'sSortDir_0', value: 'desc' },
+      { name: 'iSortingCols', value: 1 }
+    ])
   })
 
   const response = await requestJdApi({
@@ -1420,23 +1458,23 @@ export async function getDepartmentList(vendorName, session) {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       Cookie: cookieString,
-      Referer: 'https://o.jdl.com/supplier/list' // Referer可以保持一致
+      Referer: 'https://o.jdl.com/goToMainIframe.do', // 使用更通用的Referer
+      Origin: 'https://o.jdl.com'
     }
   })
-
-  if (response && Array.isArray(response)) {
-    return response.map((item) => ({
+  console.log(response);
+  if (response && response.aaData && Array.isArray(response.aaData)) {
+    console.log(`成功获取到 ${response.aaData.length} 个事业部。`)
+    return response.aaData.map((item) => ({
       id: item.deptId,
       name: item.deptName,
       deptNo: item.deptNo,
-      sellerId: item.sellerId, // 确保返回 sellerId
-      sellerNo: item.sellerNo // 确保返回 sellerNo
+      sellerId: item.sellerId,
+      sellerNo: item.sellerNo,
+      sellerName: item.sellerName // 增加sellerName，方便前端筛选
     }))
   } else if (response && typeof response === 'string' && response.trim().startsWith('<')) {
-    // 如果返回的是一个HTML字符串，很可能是登录页面或者错误页面
     console.error('获取事业部列表失败：收到了HTML响应，可能登录已过期。')
-    throw new Error('NotLogin')
-  } else if (response && response.error === 'NotLogin') {
     throw new Error('NotLogin')
   } else {
     console.warn('获取事业部列表返回数据格式不正确:', response)
