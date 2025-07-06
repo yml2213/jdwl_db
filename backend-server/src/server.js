@@ -9,6 +9,7 @@ import fs from 'fs/promises'
 import { unsign } from 'cookie-signature'
 import db from './utils/db.js' // 引入数据库工具
 import { taskManager } from './utils/taskManager.js'
+import { executeWorkflow } from './utils/workflowOrchestrator.js'
 
 import * as jdApiService from './services/jdApiService.js'
 
@@ -314,12 +315,15 @@ const loadHandlers = async (dir, suffix) => {
 }
 
 let taskHandlers = {}
-let flowHandlers = {}
 
 // WebSocket 消息处理
 const handleWebSocketMessage = async (ws, message) => {
+    // 提取 taskId 用于在发生意外错误时也能通知前端
+    let taskId;
     try {
-        const { action, taskId, taskName, isFlow, payload, sessionId } = JSON.parse(message)
+        const parsedMessage = JSON.parse(message)
+        taskId = parsedMessage.taskId; // 尽早获取taskId
+        const { action, payload, sessionId } = parsedMessage
 
         // 核心重构：创建一个全能的 updateFn，所有与前端的任务通信都通过它
         const updateFn = (data) => {
@@ -359,42 +363,50 @@ const handleWebSocketMessage = async (ws, message) => {
         }
 
 
-        if (action === 'start_task') {
+        if (action === 'execute_workflow') {
             const session = await restoreSession(sessionId)
             if (!session) {
                 updateFn({ event: 'end', success: false, message: '无法恢复会话, 请重新登录' });
                 return
             }
 
+            // 从 payload 中解构出工作流和初始上下文
+            const { workflow, initialContext } = payload;
+            if (!workflow || !Array.isArray(workflow) || workflow.length === 0) {
+                throw new Error('无效的工作流：任务列表不能为空。');
+            }
+
             const cancellationToken = taskManager.registerTask(taskId, ws)
 
             try {
-                const handlerModule = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
-                if (handlerModule && typeof handlerModule.execute === 'function') {
-                    // 传递新的 updateFn
-                    const result = await handlerModule.execute(payload, updateFn, session, cancellationToken)
+                // 直接调用通用编排器
+                const result = await executeWorkflow({
+                    workflow,
+                    taskHandlers,
+                    initialContext: { ...initialContext, ...payload },
+                    updateFn,
+                    sessionData: session,
+                    cancellationToken
+                });
 
-                    // 任务自然结束后，检查是否是因为取消而结束
-                    if (!cancellationToken.value) {
-                        console.log(`[Task: ${taskId}] Execution stopped due to cancellation.`)
-                        updateFn({ event: 'end', success: false, message: '任务已被用户取消。' });
-                    } else {
-                        updateFn({
-                            event: 'end',
-                            success: result.success,
-                            data: result.message || result.msg // 'data' 字段用于最终结果
-                        });
-                    }
+                // 任务自然结束后，检查是否是因为取消而结束
+                if (!cancellationToken.value) {
+                    console.log(`[Task: ${taskId}] Workflow stopped due to cancellation.`)
+                    updateFn({ event: 'end', success: false, message: '工作流已被用户取消。' });
                 } else {
-                    throw new Error(`未找到处理器或处理器缺少 execute 方法: ${taskName}`)
+                    updateFn({
+                        event: 'end',
+                        success: result.success,
+                        data: result.message || result.msg // 'data' 字段用于最终结果
+                    });
                 }
             } catch (error) {
                 // 发生错误时也检查是否是因取消任务导致
                 if (!cancellationToken.value) {
-                    console.log(`[Task: ${taskId}] Task was cancelled, ignoring subsequent error.`)
-                    updateFn({ event: 'end', success: false, message: '任务已被用户取消。' });
+                    console.log(`[Task: ${taskId}] Workflow was cancelled, ignoring subsequent error.`)
+                    updateFn({ event: 'end', success: false, message: '工作流已被用户取消。' });
                 } else {
-                    console.error(`执行任务 ${taskName} (ID: ${taskId}) 失败:`, error)
+                    console.error(`执行工作流 (ID: ${taskId}) 失败:`, error)
                     updateFn({ event: 'end', success: false, message: error.message });
                 }
             } finally {
@@ -408,18 +420,13 @@ const handleWebSocketMessage = async (ws, message) => {
     } catch (error) {
         console.error('处理WebSocket消息时发生未知错误:', error)
         // 尝试向客户端发送一个通用错误
-        try {
-            const { taskId } = JSON.parse(message);
-            if (taskId) {
-                ws.send(JSON.stringify({
-                    event: 'end',
-                    taskId,
-                    success: false,
-                    message: `服务器处理消息时发生未知错误: ${error.message}`
-                }));
-            }
-        } catch (e) {
-            // 如果连解析都失败，就无能为力了
+        if (taskId) {
+            ws.send(JSON.stringify({
+                event: 'end',
+                taskId,
+                success: false,
+                message: `服务器处理消息时发生未知错误: ${error.message}`
+            }));
         }
     }
 }
@@ -508,6 +515,5 @@ server.on('upgrade', (request, socket, head) => {
 const PORT = process.env.PORT || 2333
 server.listen(PORT, async () => {
     taskHandlers = await loadHandlers('tasks', '.task.js')
-    flowHandlers = await loadHandlers('flows', '.flow.js')
     console.log(`后端服务已启动在 http://localhost:${PORT}`)
 }) 

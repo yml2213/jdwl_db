@@ -151,46 +151,33 @@ function updateLogisticsOptions(newLogisticsOptions) {
 
 const manualTaskKeys = getAllManualTaskKeys()
 
-function addTask() {
-  const skusAsArray = form.skus.split(/[\n,，\s]+/).filter((sku) => sku.trim())
-  if (
-    skusAsArray.length === 0 &&
-    form.quickSelect !== 'manual' &&
-    !form.options.importProductNames
-  ) {
-    return alert('请输入有效的SKU')
+const addTask = () => {
+  // --- 1. 数据校验 ---
+  if (!selectedStore.value || !selectedWarehouse.value) {
+    return alert('请先选择店铺和仓库！')
+  }
+  const displaySku = form.sku.trim()
+  if (!displaySku) {
+    return alert('请输入有效的SKU！')
   }
 
+  // --- 2. 准备初始上下文 (Initial Context) ---
   const storeInfo = shopsList.value.find((s) => s.shopNo === selectedStore.value)
   const warehouseInfo = warehousesList.value.find((w) => w.warehouseNo === selectedWarehouse.value)
-  const vendorInfo = getSelectedVendor()
-  const departmentInfo = getSelectedDepartment()
-
-  if (!storeInfo) return alert('请选择店铺')
-  if (!warehouseInfo) return alert('请选择仓库')
-  if (!vendorInfo) return alert('缺少供应商信息，请重新登录')
-  if (!departmentInfo) return alert('缺少事业部信息，请重新登录')
-
-  const vendor = {
-    ...vendorInfo,
-    id: vendorInfo.id || vendorInfo.supplierNo
-  }
-
-  const baseExecutionData = {
-    store: {
-      ...storeInfo,
-      name: storeInfo.shopName,
-      spShopNo: storeInfo.spShopNo || storeInfo.shopNo
-    },
+  const initialContext = {
+    sku: displaySku,
+    store: storeInfo,
     warehouse: warehouseInfo,
-    skus: skusAsArray,
-    vendor: vendor,
-    department: departmentInfo
+    vendor: getSelectedVendor(),
+    department: getSelectedDepartment()
   }
 
-  const displaySku = skusAsArray.length > 1 ? `批量(${skusAsArray.length})` : skusAsArray[0]
+  // --- 3. 构建工作流 (Workflow) ---
+  const workflow = []
+  let taskName = ''
 
   if (form.quickSelect === 'manual') {
+    const manualTaskKeys = getAllManualTaskKeys()
     const selectedOptions = Object.keys(form.options).filter(
       (key) => manualTaskKeys.includes(key) && form.options[key]
     )
@@ -200,47 +187,55 @@ function addTask() {
     }
 
     selectedOptions.forEach((optionKey) => {
-      const stepPayload = { ...baseExecutionData }
+      const taskContext = {}
       if (form.payloads && form.payloads[optionKey]) {
-        Object.assign(stepPayload, form.payloads[optionKey])
+        Object.assign(taskContext, form.payloads[optionKey])
       }
       if (optionKey === 'importLogisticsAttributes') {
-        stepPayload.logistics = { ...logisticsOptions }
+        taskContext.logistics = { ...logisticsOptions }
       }
       if (optionKey === 'addInventory') {
-        stepPayload.inventoryAmount = form.options.inventoryAmount || 0
+        taskContext.inventoryAmount = form.options.inventoryAmount || 0
       }
-
-      addTaskToTaskList({
-        sku: displaySku,
-        name: manualTaskLabels[optionKey] || optionKey,
-        type: 'manual',
-        store: storeInfo,
-        warehouse: warehouseInfo,
-        executionType: 'task',
-        executionFeature: optionKey,
-        executionData: stepPayload
-      })
+      workflow.push({ name: optionKey, context: taskContext })
     })
-  } else {
-    // For workflow, we need to pass the options and logistics data
-    const workflowExecutionData = {
-      ...baseExecutionData,
-      options: { ...form.options },
-      logistics: { ...logisticsOptions }
+    
+    taskName = selectedOptions.map(key => manualTaskLabels[key] || key).join(', ')
+    if (taskName.length > 30) {
+        taskName = `手动任务 (${selectedOptions.length}项)`
     }
 
-    addTaskToTaskList({
-      sku: displaySku,
-      name: '工作流: 入仓打标',
-      type: 'workflow',
-      store: storeInfo,
-      warehouse: warehouseInfo,
-      executionType: 'flow',
-      executionFeature: 'warehouseLabeling',
-      executionData: workflowExecutionData
-    })
+  } else { // 'workflow' mode
+    const workflows = getWorkflows()
+    const workflowConfig = workflows.warehouseLabeling
+    taskName = '工作流: 入仓打标'
+    
+    workflowConfig.tasks.forEach(taskDef => {
+        const taskContext = { ...taskDef.context } // 从配置中获取基础上下文
+        // 特殊逻辑：根据UI状态覆盖或添加上下文
+        if (taskDef.name === 'importLogisticsAttributes') {
+            taskContext.logistics = { ...logisticsOptions }
+        }
+         if (taskDef.name === 'addInventory') {
+            taskContext.inventoryAmount = form.options.inventoryAmount || 0
+        }
+        workflow.push({ name: taskDef.name, context: taskContext });
+    });
   }
+
+  // --- 4. 添加到任务列表 ---
+  addTaskToTaskList({
+    sku: displaySku,
+    name: taskName,
+    type: form.quickSelect,
+    store: storeInfo,
+    warehouse: warehouseInfo,
+    // executionData 现在是后端期待的格式
+    executionData: {
+      workflow,
+      initialContext
+    }
+  })
 }
 
 watch(

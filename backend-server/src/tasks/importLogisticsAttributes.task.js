@@ -17,50 +17,31 @@ const TEMP_DIR_NAME = '导入物流属性'
  * @param {object} sessionData 包含会话全部信息的对象
  * @returns {Promise<object>} 任务执行结果
  */
-const execute = async (context, updateFn, sessionData, cancellationToken = { value: true }) => {
-  // 兼容工作流和单任务调用
-  if (typeof updateFn !== 'function') {
-    cancellationToken = sessionData || { value: true }
-    sessionData = updateFn
-    updateFn = () => { }
-  }
-
+async function execute(context, updateFn, sessionData, cancellationToken) {
   try {
     if (!cancellationToken.value) {
       return { success: false, message: '任务已取消。' }
     }
-    // 1. 统一获取物流参数，兼容工作流和单任务模式
-    const logisticsOptions = context.logisticsOptions || context.logistics
-    const { csgList, department, store } = context
+    // 1. 从标准化的 context 中获取所有输入
+    const { itemsToProcess, department, store, logisticsOptions } = context
 
-    // 统一数据源：工作流使用csgList，单任务使用skus
-    const itemsToProcess = csgList || context.skus || []
-
-    // 1. 参数校验
-    if (itemsToProcess.length === 0) {
+    // 2. 参数校验
+    if (!itemsToProcess || itemsToProcess.length === 0) {
       const msg = '商品列表为空，无需操作。'
       updateFn(msg)
       return { success: true, message: msg }
     }
     if (!department || !department.deptNo) {
-      const msg = '缺少有效的事业部信息。'
-      updateFn({ message: msg, error: true })
-      throw new Error(msg)
+      throw new Error('上下文中缺少有效的事业部信息。')
     }
     if (!store) {
-      const msg = '缺少有效的店铺信息。'
-      updateFn({ message: msg, error: true })
-      throw new Error(msg)
+      throw new Error('上下文中缺少有效的店铺信息。')
     }
     if (!sessionData || !sessionData.jdCookies) {
-      const msg = '缺少会话信息'
-      updateFn({ message: msg, error: true })
-      throw new Error(msg)
+      throw new Error('缺少会话信息。')
     }
     if (!logisticsOptions) {
-      const msg = '上下文中缺少有效的物流参数 (logisticsOptions 或 logistics)'
-      updateFn({ message: msg, error: true })
-      throw new Error(msg)
+      throw new Error('上下文中缺少有效的物流参数。')
     }
 
     updateFn(`"导入物流属性" 开始，事业部 [${department.name} - ${department.deptNo}]...`)
@@ -71,7 +52,6 @@ const execute = async (context, updateFn, sessionData, cancellationToken = { val
       // 内部的try-catch保持不变，用于处理单个批次的特定逻辑
       try {
         if (!cancellationToken.value) {
-          // 在批处理函数内部也进行检查
           return { success: false, message: '任务已取消' }
         }
 
@@ -97,14 +77,11 @@ const execute = async (context, updateFn, sessionData, cancellationToken = { val
           return { success: false, message: result.data } // 让批处理器知道需要重试
         } else {
           const errorMessage = result.data || '导入物流属性时发生未知错误'
-          updateFn({ message: `导入失败: ${errorMessage}`, error: true })
           throw new Error(errorMessage) // 抛出错误以在批处理器中被捕获为失败
         }
       } catch (error) {
-        const errorMessage = `批处理失败: ${error.message}`
-        updateFn({ message: errorMessage, error: true })
         // 确保即使在捕获错误后，也能将失败状态正确传播回批处理器
-        return { success: false, message: errorMessage }
+        return { success: false, message: error.message }
       }
     }
 
@@ -113,24 +90,14 @@ const execute = async (context, updateFn, sessionData, cancellationToken = { val
       batchSize: BATCH_SIZE,
       delay: BATCH_DELAY,
       batchFn,
-      log: (logData, level = 'info') => {
-        // 如果 logData 是我们为前端定制的事件对象，直接传递
-        if (typeof logData === 'object' && logData !== null && logData.event) {
-          updateFn(logData)
-        } else {
-          // 否则，作为普通日志消息处理
-          updateFn({ message: `[批处理] ${String(logData)}`, type: level })
-        }
-      },
+      log: updateFn, // 直接传递 updateFn
       isRunning: cancellationToken
     })
 
     if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
     if (!batchResults.success) {
-      const errorMsg = `导入物流属性任务处理完成，但有失败的批次: ${batchResults.message}`
-      updateFn({ message: errorMsg, error: true })
-      throw new Error(errorMsg)
+      throw new Error(`导入物流属性任务处理完成，但有失败的批次: ${batchResults.message}`)
     }
 
     return { success: true, message: `所有批次成功完成。 ${batchResults.message}` }
@@ -141,9 +108,7 @@ const execute = async (context, updateFn, sessionData, cancellationToken = { val
       return { success: false, message: cancelMsg }
     }
     // 如果不是因为取消而出错，则重新抛出原始错误
-    const errorMsg = `[导入物流属性] 任务执行失败: ${error.message}`
-    updateFn({ message: errorMsg, error: true })
-    throw new Error(errorMsg)
+    throw new Error(`[导入物流属性] 任务执行失败: ${error.message}`)
   }
 }
 
@@ -193,5 +158,7 @@ function createLogisticsExcelBuffer(skuList, department, logisticsOptions) {
 export default {
   name: 'importLogisticsAttributes',
   description: '导入物流属性',
+  requiredContext: ['itemsToProcess', 'department', 'store', 'logisticsOptions'],
+  outputContext: [], // 此任务不向共享上下文输出数据
   execute
 }

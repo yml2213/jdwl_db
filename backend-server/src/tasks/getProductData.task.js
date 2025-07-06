@@ -5,16 +5,10 @@ import * as jdApiService from '../services/jdApiService.js'
  * @param {function} updateFn - 用于发送进度更新的函数
  * @param {object} sessionContext - 用户会话上下文，包含认证信息、事业部信息和操作ID
  */
-async function execute(payload, updateFn, sessionContext) {
-    // 兼容工作流调用 (payload, sessionContext) 和单任务调用 (payload, updateFn, sessionContext)
-    if (typeof updateFn !== 'function') {
-        sessionContext = updateFn
-        updateFn = () => { }
-    }
-
-    const { skus } = payload
+async function execute(context, updateFn, sessionContext) {
+    const { skus } = context
     if (!skus || !Array.isArray(skus) || skus.length === 0) {
-        throw new Error('请求负载中必须包含一个非空的SKU数组。--2')
+        throw new Error('上下文中必须包含一个非空的SKU数组。')
     }
 
     const { departmentInfo, operationId } = sessionContext
@@ -28,7 +22,7 @@ async function execute(payload, updateFn, sessionContext) {
     const deptId = departmentInfo.id
 
     try {
-        updateFn({ message: `正在查询 ${skus.length} 个SKU...` })
+        updateFn(`正在查询 ${skus.length} 个SKU...`)
 
         const allProductData = await jdApiService.queryProductDataBySkus(
             skus,
@@ -37,13 +31,17 @@ async function execute(payload, updateFn, sessionContext) {
             sessionContext
         )
 
-        console.log(`任务完成，共获取到 ${allProductData.length} 条商品数据。`)
-        updateFn({ message: '所有商品数据获取完毕。', isCompleted: true, data: allProductData })
+        updateFn(`任务完成，共获取到 ${allProductData.length} 条商品数据。`)
 
-        return { success: true, data: allProductData }
+        // **核心改动**: 返回一个包含 data 字段的对象，data 内部是此任务的输出
+        return {
+            success: true,
+            message: `成功获取到 ${allProductData.length} 条商品数据。`,
+            data: { allProductData: allProductData }
+        }
     } catch (error) {
         console.error(`查询商品数据时出错:`, error)
-        updateFn({ message: `查询失败: ${error.message}`, error: true })
+        // 失败时也返回标准格式
         throw new Error(`查询商品数据时失败: ${error.message}`)
     }
 }
@@ -51,5 +49,7 @@ async function execute(payload, updateFn, sessionContext) {
 export default {
     name: 'getProductData',
     description: '根据SKU列表批量获取商品详细数据',
+    requiredContext: ['skus'], // 声明它需要 skus
+    outputContext: ['allProductData'], // 声明它将产出 allProductData
     execute
 } 
