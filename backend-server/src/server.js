@@ -132,6 +132,8 @@ app.post('/api/create-session', (req, res) => {
 // 新增：更新会话中的选择信息并确保方案ID存在
 app.post('/api/update-selection', requireAuth, async (req, res) => {
     const { supplierInfo, departmentInfo } = req.body
+    console.log('[Debug] /api/update-selection body:', req.body) // 调试日志
+
     if (!supplierInfo || !departmentInfo) {
         return res
             .status(400)
@@ -147,12 +149,15 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
     req.session.context.departmentInfo = departmentInfo
 
     // 2. 更新或创建用户 uniqueKey
-    const pinCookie = req.session.context.cookies?.find(c => c.name === 'pin');
-    let uniqueKey = null;
-    if (pinCookie && departmentInfo.id) {
-        uniqueKey = `${decodeURIComponent(pinCookie.value)}-${departmentInfo.id}`;
-        req.session.user.uniqueKey = uniqueKey;
+    const pinCookie = req.session.context.cookies?.find((c) => c.name === 'pin')
+    console.log('[Debug] Found pinCookie:', pinCookie) // 调试日志
+    let uniqueKey = null
+    const departmentId = departmentInfo.deptNo?.replace('CBU', '')
+    if (pinCookie && departmentId) {
+        uniqueKey = `${decodeURIComponent(pinCookie.value)}-${departmentId}`
+        req.session.user.uniqueKey = uniqueKey
     }
+    console.log('[Debug] Generated uniqueKey:', uniqueKey) // 调试日志
 
     // 3. 检查并确保方案ID (operationId) 存在
     if (uniqueKey) {
