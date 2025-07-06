@@ -23,23 +23,8 @@ export function useTaskList() {
       case 'log':
         // 如果是对象形式的日志，通常是结构化信息
         if (typeof data === 'object' && data !== null) {
-          // 特殊处理等待事件
-          if (data.event === 'waiting') {
-            task.status = '等待中'
-            task.result = data.message || `触发频率限制，将在 ${data.delay / 1000}s 后重试`
-            task.isWaiting = true // 增加一个等待状态标识
-            // 在延迟后自动清除等待状态
-            setTimeout(() => {
-              if (task.status === '等待中') {
-                task.status = '运行中'
-                task.result = '继续执行...'
-              }
-              task.isWaiting = false
-            }, data.delay)
-          } else {
-            // 其他结构化日志，推入日志数组
-            task.logs.push(JSON.stringify(data))
-          }
+          // 其他结构化日志，推入日志数组
+          task.logs.push(JSON.stringify(data))
         } else {
           // 普通字符串日志
           task.logs.push(data)
@@ -48,6 +33,20 @@ export function useTaskList() {
         if (selectedTask.value && selectedTask.value.id === taskId) {
           activeTaskLogs.value = [...task.logs]
         }
+        break
+      case 'waiting':
+        task.status = '等待中'
+        task.result = rest.message || `触发频率限制，将在 ${rest.delay / 1000}s 后重试`
+        task.isWaiting = true // 增加一个等待状态标识
+        // 在延迟后自动清除等待状态
+        setTimeout(() => {
+          // 检查任务是否还处于“等待中”，避免覆盖后续的状态更新
+          if (task.isWaiting) {
+            task.status = '运行中'
+            task.result = '继续执行...'
+            task.isWaiting = false
+          }
+        }, rest.delay)
         break
       case 'end':
         task.status = rest.success ? '成功' : '失败'
