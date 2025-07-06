@@ -374,14 +374,15 @@ export async function getDisabledProducts(skus, sessionData) {
   if (!skus || !Array.isArray(skus) || skus.length === 0) {
     throw new Error('请求负载中必须包含一个非空的SKU数组。--1')
   }
-  if (!departmentInfo || !departmentInfo.id) {
-    throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。')
+  if (!departmentInfo || !departmentInfo.sellerId) {
+    throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)-1。')
   }
   if (!operationId) {
     throw new Error('会话上下文中缺少有效的查询方案ID--1 (operationId)。')
   }
 
-  const deptId = departmentInfo.id
+  // "deptNo": "CBU22010232593780",
+  const deptId = departmentInfo.deptNo.split('CBU')[1]
 
   const allProductData = await queryProductDataBySkus(skus, deptId, operationId, sessionData)
 

@@ -16,30 +16,41 @@ const TEMP_DIR_NAME = '启用店铺商品'
  * @param {object[]} [context.allProductData] - 从工作流传入的完整商品数据
  * @param {string[]} [context.skus] - 从单任务模式传入的SKU列表
  */
-async function execute(context, ...args) {
-  const [legacyUpdateFn, session] = args.length === 2 ? args : [args[0], context.session]
-  const updateFn = typeof legacyUpdateFn === 'function' ? legacyUpdateFn : () => { }
-  const sessionData = session || (args.length === 1 ? args[0] : context.session)
+async function execute(context, updateFn, sessionData, cancellationToken = { value: true }) {
+  // 优雅地处理两种不同的调用方式：
+  // 1. 单项任务调用: execute(context, updateFn, sessionData, cancellationToken)
+  // 2. 工作流调用: execute(context, sessionData, cancellationToken) - (updateFn is sessionData)
+  if (typeof updateFn !== 'function') {
+    // 这是工作流调用
+    cancellationToken = sessionData || { value: true } // cancellationToken is the 3rd arg
+    sessionData = updateFn // sessionData is the 2nd arg
+    updateFn = () => { } // 提供一个无操作的 updateFn
+  }
 
   if (!sessionData || !sessionData.jdCookies) {
-    const errorMsg = '错误: 缺少会话信息';
-    updateFn({ message: errorMsg, error: true });
-    throw new Error(errorMsg);
+    const errorMsg = '错误: 缺少会话信息'
+    updateFn({ message: errorMsg, error: true })
+    throw new Error(errorMsg)
   }
 
   const messages = []
 
   try {
-    updateFn('开始执行 "启用店铺商品" 任务...');
-    const skusToCheck = context.skus || (context.allProductData ? context.allProductData.map(p => p.sellerGoodsSign) : [])
+    updateFn('开始执行 "启用店铺商品" 任务...')
+    const skusToCheck =
+      context.skus || (context.allProductData ? context.allProductData.map((p) => p.sellerGoodsSign) : [])
     if (skusToCheck.length === 0) {
-      const msg = '没有需要检查的SKU，任务结束。';
-      updateFn(msg);
-      return { success: true, message: msg };
+      const msg = '没有需要检查的SKU，任务结束。'
+      updateFn(msg)
+      return { success: true, message: msg }
     }
+
+    if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
     updateFn(`正在查询 ${skusToCheck.length} 个SKU中已停用的商品...`)
     const disabledProducts = await jdApiService.getDisabledProducts(skusToCheck, sessionData)
+
+    if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
     if (disabledProducts.length === 0) {
       const message = '所有被检查的商品状态均为启用，无需操作。'
@@ -53,33 +64,51 @@ async function execute(context, ...args) {
       const numericCmgs = cmgList.map((cmg) => cmg.replace('CMG', ''))
       updateFn(`正在启用 ${numericCmgs.length} 个商品主数据...`)
       const result = await jdApiService.enableStoreProducts(numericCmgs, sessionData)
+
+      if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
+
       if (result.resultCode !== 1) throw new Error(`启用主数据失败: ${result.resultMessage}`)
-      const msg = `启用主数据成功(${numericCmgs.length}个)`;
-      messages.push(msg);
-      updateFn(msg);
+      const msg = `启用主数据成功(${numericCmgs.length}个)`
+      messages.push(msg)
+      updateFn(msg)
     }
 
     const csgList = disabledProducts.map((p) => p.shopGoodsNo).filter(Boolean)
     if (csgList.length > 0) {
       updateFn(`正在通过上传文件启用 ${csgList.length} 个店铺商品...`)
       const fileBuffer = createStatusUpdateExcel(csgList)
-      const filePath = await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store: context.store, extension: 'xls' })
-      updateFn(`状态更新Excel文件已保存到: ${filePath}`);
-      const uploadResult = await jdApiService.uploadStatusUpdateFile(fileBuffer, { ...sessionData, ...context })
+      const filePath = await saveExcelFile(fileBuffer, {
+        dirName: TEMP_DIR_NAME,
+        store: context.store,
+        extension: 'xls'
+      })
+      updateFn(`状态更新Excel文件已保存到: ${filePath}`)
+      const uploadResult = await jdApiService.uploadStatusUpdateFile(fileBuffer, {
+        ...sessionData,
+        ...context
+      })
+
+      if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
+
       const match = uploadResult.message.match(/成功(?:导入|更新)\s*(\d+)\s*条/)
       const successCount = match ? parseInt(match[1], 10) : csgList.length
-      const msg = `启用店铺商品成功(${successCount}个)`;
-      messages.push(msg);
-      updateFn(msg);
+      const msg = `启用店铺商品成功(${successCount}个)`
+      messages.push(msg)
+      updateFn(msg)
     }
 
     const finalMessage = `任务完成: ${messages.join('; ')}`
     updateFn(finalMessage)
     return { success: true, message: finalMessage }
   } catch (error) {
-    const errorMsg = `[启用店铺商品] 任务执行失败: ${error.message}`;
-    updateFn({ message: errorMsg, error: true });
-    throw new Error(errorMsg);
+    if (!cancellationToken.value) {
+      const cancelMsg = '任务在执行中被用户取消。'
+      updateFn({ message: cancelMsg, error: true })
+      return { success: false, message: cancelMsg }
+    }
+    const errorMsg = `[启用店铺商品] 任务执行失败: ${error.message}`
+    updateFn({ message: errorMsg, error: true })
+    throw new Error(errorMsg)
   }
 }
 
