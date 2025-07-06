@@ -351,9 +351,9 @@ const handleWebSocketMessage = async (ws, message) => {
 
 
         if (action === 'execute_workflow') {
-            const session = await restoreSession(sessionId)
+            const session = await restoreAndValidateSession(sessionId) // <-- 重命名函数调用
             if (!session) {
-                updateFn({ event: 'end', success: false, message: '无法恢复会话, 请重新登录' });
+                updateFn({ event: 'end', success: false, message: '无法恢复或验证会话, 请重新登录并选择部门' });
                 return
             }
 
@@ -423,7 +423,7 @@ const handleWebSocketMessage = async (ws, message) => {
  * @param {string} sessionId - 从客户端获取的会话ID
  * @returns {Promise<object|null>} - 解析后的会话数据或null
  */
-const restoreSession = async (sessionId) => {
+const restoreAndValidateSession = async (sessionId) => {
     const sessionPath = path.join(__dirname, '..', 'sessions');
     const fileStore = new FileStore({ path: sessionPath });
 
@@ -431,43 +431,98 @@ const restoreSession = async (sessionId) => {
 
     try {
         const decodedCookie = decodeURIComponent(sessionId);
-        console.log(`[会话恢复] 2. 解码后的cookie值: ${decodedCookie}`);
-
-        if (!decodedCookie.startsWith('s:')) {
-            console.error(`[会话恢复] 失败。Cookie不是一个已签名的会话cookie。`);
+        const signedSid = decodedCookie.startsWith('s:') ? decodedCookie.substring(2) : null;
+        if (!signedSid) {
+            console.error(`[会话恢复] 失败。Cookie不是一个有效的签名会话cookie。`);
             return null;
         }
 
-        // Cookie值格式为 "s:sid.signature", unsign需要 "sid.signature"
-        const signedSid = decodedCookie.substring(2);
-
-        // 解签名获取原始会话ID
         const rawSid = unsign(signedSid, sessionSecret);
-
-        console.log(`[会话恢复] 3. 解签名后获得原始会话ID: ${rawSid}`);
-
         if (!rawSid) {
             console.error(`[会话恢复] 失败。Cookie签名无效。`);
             return null;
         }
+        console.log(`[会话恢复] 2. 成功解签名，获得原始会话ID: ${rawSid}`);
 
-        return new Promise((resolve, reject) => {
-            fileStore.get(rawSid, (err, session) => {
-                if (err) {
-                    console.error(`[会话恢复] 从存储中获取会话失败，会话ID=${rawSid}。错误:`, err);
-                    return reject(err);
-                }
-                if (!session) {
-                    console.log(`[会话恢复] 未找到会话，会话ID=${rawSid}。`);
-                    return resolve(null);
-                }
-                console.log(`[会话恢复] 成功恢复会话，会话ID=${rawSid}。`);
-                resolve(session);
+
+        let session = await new Promise((resolve, reject) => {
+            fileStore.get(rawSid, (err, sessionData) => {
+                if (err) return reject(err);
+                resolve(sessionData);
             });
         });
+
+        if (!session) {
+            console.log(`[会话恢复] 未找到会话文件，会话ID=${rawSid}。`);
+            return null;
+        }
+        console.log(`[会话恢复] 3. 成功从存储中恢复会话。`);
+
+        // --- 核心验证与修复逻辑 ---
+        console.log('[会话验证] 4. 开始验证会话的完整性...');
+
+        // 检查执行工作流所需的最基本信息
+        if (!session.jdCookies || !session.supplierInfo || !session.departmentInfo) {
+            console.error('[会话验证] 失败。会话缺少 jdCookies, supplierInfo, 或 departmentInfo。');
+            return null; // 返回null，让调用者通知前端重新选择
+        }
+
+        const pinCookie = session.jdCookies.find((c) => c.name === 'pin');
+        const departmentId = session.departmentInfo.deptNo?.replace('CBU', '');
+
+        if (!pinCookie || !departmentId) {
+            console.error('[会话验证] 失败。无法从会话中构造 uniqueKey。');
+            return null;
+        }
+
+        const uniqueKey = `${decodeURIComponent(pinCookie.value)}-${departmentId}`;
+        console.log(`[会话验证] 5. 生成的 uniqueKey: "${uniqueKey}"`);
+
+        try {
+            let operationId = await db.getScheme(uniqueKey);
+
+            if (operationId) {
+                console.log(`[会话验证] 6a. 从数据库找到已存在的方案ID: ${operationId}`);
+                session.operationId = operationId;
+            } else {
+                console.log(`[会话验证] 6b. 未找到方案ID，调用京东API创建新方案...`);
+                const result = await jdApiService.startSessionOperation(session);
+                if (result.success) {
+                    operationId = result.operationId;
+                    console.log(`[会话验证] 7. 新方案创建成功，ID: ${operationId}`);
+                    session.operationId = operationId;
+
+                    // 将新ID异步保存到数据库和会话文件，不阻塞当前流程
+                    db.saveScheme(uniqueKey, operationId)
+                        .then(() => console.log(`[会话验证] 新方案ID已保存到数据库。`))
+                        .catch(dbErr => console.error('[会话验证] 新方案ID保存到数据库失败:', dbErr));
+
+                    fileStore.set(rawSid, session, (err) => {
+                        if (err) {
+                            console.error('[会话验证] 更新会话文件失败:', err);
+                        } else {
+                            console.log('[会话验证] 已将新方案ID更新到会话文件。');
+                        }
+                    });
+
+                } else {
+                    console.error('[会话验证] 京东API报告创建新方案失败:', result.message || '无具体错误信息');
+                    // 如果创建失败，这是一个严重问题，可能JD服务暂时不可用
+                    return null;
+                }
+            }
+            console.log(`[会话验证] 8. 会话验证成功，最终方案ID: ${session.operationId}`);
+            return session;
+
+        } catch (error) {
+            console.error('[会话验证] 在检查或创建方案ID时发生严重错误:', error);
+            return null; // 出现任何错误都认为验证失败
+        }
+        // --- 核心验证与修复逻辑结束 ---
+
     } catch (error) {
-        console.error(`[会话恢复] 失败。在恢复会话过程中发生意外错误，cookie=${sessionId}。错误:`, error);
-        throw error;
+        console.error(`[会话恢复] 失败。在恢复和验证会话过程中发生意外错误:`, error);
+        return null; // 修改：在顶层catch中返回null而不是抛出异常
     }
 };
 
