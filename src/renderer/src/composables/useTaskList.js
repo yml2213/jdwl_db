@@ -28,9 +28,8 @@ export function useTaskList() {
         break
       case 'end':
         task.status = rest.success ? '成功' : '失败'
-        task.result = rest.success
-          ? rest.data?.message || '执行成功'
-          : rest.message || '执行失败'
+        task.result = rest.success ? data : rest.message || '执行失败'
+        task.isExecuting = false
         break
       case 'error':
         task.status = '失败'
