@@ -42,15 +42,16 @@ const handleAddTask = () => {
       sku: `订单: ${orderNum}`,
       name: '退货入库',
       warehouse: { warehouseName: 'N/A' },
-      executionFeature: 'returnStorage',
-      executionType: 'task',
       executionData: {
-        orderNumber: orderNum,
-        year: form.value.year,
-        returnReason: form.value.returnReason,
-        store: selectedStore.value,
-        vendor: selectedVendor.value,
-        department: selectedDepartment.value
+        initialContext: {
+          orderNumber: orderNum,
+          year: form.value.year,
+          returnReason: form.value.returnReason,
+          store: selectedStore.value,
+          vendor: selectedVendor.value,
+          department: selectedDepartment.value
+        },
+        stages: [{ name: '退货入库阶段', tasks: [{ name: 'returnStorage', context: {} }] }]
       }
     })
   }

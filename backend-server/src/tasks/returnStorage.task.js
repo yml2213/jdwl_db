@@ -8,8 +8,8 @@
 import * as jdApiService from '../services/jdApiService.js'
 import logService from '../utils/logService.js'
 
-async function execute(context, updateFn, sessionData) {
-  const { orderNumber, year, returnReason } = context
+async function execute(context, sessionData) {
+  const { orderNumber, year, returnReason, updateFn } = context
 
   updateFn(`开始退货入库流程，订单号: ${orderNumber}, 年份: ${year}`)
 
