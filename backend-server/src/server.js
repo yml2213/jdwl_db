@@ -321,61 +321,69 @@ const handleWebSocketMessage = async (ws, message) => {
     try {
         const { action, taskId, taskName, isFlow, payload, sessionId } = JSON.parse(message)
 
+        // 核心重构：创建一个全能的 updateFn，所有与前端的任务通信都通过它
+        const updateFn = (data) => {
+            // 如果任务已被取消，则不应发送任何更新，除了最终的取消消息（在其他地方处理）
+            // 注意：这里需要从 taskManager 获取最新的状态，因为 cancellationToken 可能是旧的引用
+            const isCancelled = taskManager.isCancelled(taskId);
+            if (isCancelled && data?.event !== 'end') {
+                // console.log(`[UpdateFn] Task ${taskId} is cancelled. Suppressing message:`, data);
+                return;
+            }
+
+            if (ws.readyState !== WebSocket.OPEN) return;
+
+            let eventPayload;
+
+            if (typeof data === 'string') {
+                // 1. 处理纯字符串日志
+                eventPayload = { event: 'log', message: data };
+            } else if (data && typeof data === 'object') {
+                if (data.event) {
+                    // 2. 处理已经格式化的事件 (如 'waiting', 'end')
+                    eventPayload = data;
+                } else {
+                    // 3. 处理日志对象 (如 { message, error, type })
+                    eventPayload = { event: 'log', ...data };
+                }
+            } else {
+                // 忽略无效数据
+                return;
+            }
+
+            // 自动为所有事件附加 taskId
+            const finalPayload = { ...eventPayload, taskId };
+
+            console.log(`[UpdateFn] ws发送到前端 ->`, JSON.stringify(finalPayload));
+            ws.send(JSON.stringify(finalPayload));
+        }
+
+
         if (action === 'start_task') {
             const session = await restoreSession(sessionId)
             if (!session) {
-                ws.send(
-                    JSON.stringify({
-                        event: 'end',
-                        taskId,
-                        success: false,
-                        message: '无法恢复会话, 请重新登录'
-                    })
-                )
+                updateFn({ event: 'end', success: false, message: '无法恢复会话, 请重新登录' });
                 return
             }
 
-            const cancellationToken = taskManager.registerTask(taskId)
-
-            const log = (logMessage) => {
-                if (!cancellationToken.value) return // 如果任务已取消，则不发送日志
-
-                console.log(`[Task: ${taskId}]  日志:`, logMessage)
-                // 统一将日志内容包装在 data 字段中，确保前端能一致地处理
-                const eventData = {
-                    event: 'log',
-                    taskId,
-                    data: logMessage
-                }
-                ws.send(JSON.stringify(eventData))
-            }
+            const cancellationToken = taskManager.registerTask(taskId, ws)
 
             try {
                 const handlerModule = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
                 if (handlerModule && typeof handlerModule.execute === 'function') {
-                    const result = await handlerModule.execute(payload, log, session, cancellationToken)
+                    // 传递新的 updateFn
+                    const result = await handlerModule.execute(payload, updateFn, session, cancellationToken)
 
                     // 任务自然结束后，检查是否是因为取消而结束
                     if (!cancellationToken.value) {
                         console.log(`[Task: ${taskId}] Execution stopped due to cancellation.`)
-                        // 可选：发送一个取消成功的消息
-                        ws.send(
-                            JSON.stringify({
-                                event: 'end',
-                                taskId,
-                                success: false,
-                                message: '任务已被用户取消。'
-                            })
-                        )
+                        updateFn({ event: 'end', success: false, message: '任务已被用户取消。' });
                     } else {
-                        let data = {
+                        updateFn({
                             event: 'end',
-                            taskId,
                             success: result.success,
-                            data: result.message || result.msg
-                        }
-                        console.log(`[Task: ${taskId}] ws发送到前端数据: ${JSON.stringify(data)}`)
-                        ws.send(JSON.stringify(data))
+                            data: result.message || result.msg // 'data' 字段用于最终结果
+                        });
                     }
                 } else {
                     throw new Error(`未找到处理器或处理器缺少 execute 方法: ${taskName}`)
@@ -384,24 +392,10 @@ const handleWebSocketMessage = async (ws, message) => {
                 // 发生错误时也检查是否是因取消任务导致
                 if (!cancellationToken.value) {
                     console.log(`[Task: ${taskId}] Task was cancelled, ignoring subsequent error.`)
-                    ws.send(
-                        JSON.stringify({
-                            event: 'end',
-                            taskId,
-                            success: false,
-                            message: '任务已被用户取消。'
-                        })
-                    )
+                    updateFn({ event: 'end', success: false, message: '任务已被用户取消。' });
                 } else {
                     console.error(`执行任务 ${taskName} (ID: ${taskId}) 失败:`, error)
-                    ws.send(
-                        JSON.stringify({
-                            event: 'end',
-                            taskId,
-                            success: false,
-                            message: error.message
-                        })
-                    )
+                    updateFn({ event: 'end', success: false, message: error.message });
                 }
             } finally {
                 taskManager.deregisterTask(taskId)
@@ -409,17 +403,24 @@ const handleWebSocketMessage = async (ws, message) => {
         } else if (action === 'cancel_task') {
             console.log(`[WebSocket] Received cancel request for task ${taskId}`)
             taskManager.cancelTask(taskId)
-            // 可选: 立即向前端反馈取消请求已被接收
-            ws.send(
-                JSON.stringify({
-                    event: 'log',
-                    taskId,
-                    data: { message: '取消请求已发送...', type: 'warn' }
-                })
-            )
+            updateFn({ message: '取消请求已发送...', type: 'warn' });
         }
     } catch (error) {
         console.error('处理WebSocket消息时发生未知错误:', error)
+        // 尝试向客户端发送一个通用错误
+        try {
+            const { taskId } = JSON.parse(message);
+            if (taskId) {
+                ws.send(JSON.stringify({
+                    event: 'end',
+                    taskId,
+                    success: false,
+                    message: `服务器处理消息时发生未知错误: ${error.message}`
+                }));
+            }
+        } catch (e) {
+            // 如果连解析都失败，就无能为力了
+        }
     }
 }
 
@@ -486,6 +487,7 @@ wss.on('connection', (ws, request) => {
     ws.on('close', () => {
         // 可以在这里添加一些断开连接时的清理逻辑
         console.log(`[WebSocket] 客户端已断开`)
+        taskManager.cleanup(ws); // 当WebSocket连接关闭时，取消该连接下的所有任务
     })
 
     ws.on('error', (error) => {
