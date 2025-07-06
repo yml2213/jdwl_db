@@ -1263,6 +1263,9 @@ export async function startSessionOperation(sessionData) {
 
   const operationId = newScheme.id
   console.log(`[jdApiService] 报表方案已创建，ID: ${operationId}`)
+
+  // 3. 删除id
+  await endSessionOperation(operationId, sessionData)
   return { success: true, operationId }
 }
 
