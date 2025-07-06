@@ -81,7 +81,8 @@ export async function executeWorkflow({
                     ? allSkus
                     : allSkus.filter((sku) => sku.completedTasks.has(source));
 
-            if (skusForSource.length === 0) {
+            // 如果不是整店模式且没有SKU，则跳过
+            if (initialContext.scope !== 'whole_store' && skusForSource.length === 0) {
                 updateFn({
                     message: `阶段 ${i + 1}, 数据源 '${source}': 没有需要处理的SKU，跳过。`,
                     type: 'info',
