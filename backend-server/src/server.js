@@ -6,6 +6,7 @@ import FileStoreFactory from 'session-file-store'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs/promises'
+import db from './utils/db.js' // 引入数据库工具
 
 import * as jdApiService from './services/jdApiService.js'
 
@@ -128,8 +129,8 @@ app.post('/api/create-session', (req, res) => {
     }
 })
 
-// 新增：更新会话中的选择信息
-app.post('/api/update-selection', requireAuth, (req, res) => {
+// 新增：更新会话中的选择信息并确保方案ID存在
+app.post('/api/update-selection', requireAuth, async (req, res) => {
     const { supplierInfo, departmentInfo } = req.body
     if (!supplierInfo || !departmentInfo) {
         return res
@@ -141,16 +142,48 @@ app.post('/api/update-selection', requireAuth, (req, res) => {
         return res.status(400).json({ success: false, message: '无效的会话，找不到上下文。' })
     }
 
-    // 更新会话上下文
+    // 1. 更新会话上下文
     req.session.context.supplierInfo = supplierInfo
     req.session.context.departmentInfo = departmentInfo
 
-    // 更新用户 uniqueKey
+    // 2. 更新或创建用户 uniqueKey
     const pinCookie = req.session.context.cookies?.find(c => c.name === 'pin');
+    let uniqueKey = null;
     if (pinCookie && departmentInfo.id) {
-        req.session.user.uniqueKey = `${pinCookie.value}-${departmentInfo.id}`;
+        uniqueKey = `${decodeURIComponent(pinCookie.value)}-${departmentInfo.id}`;
+        req.session.user.uniqueKey = uniqueKey;
     }
 
+    // 3. 检查并确保方案ID (operationId) 存在
+    if (uniqueKey) {
+        try {
+            console.log(`[Session] 正在为 key "${uniqueKey}" 检查方案ID...`);
+            let operationId = await db.getScheme(uniqueKey);
+
+            if (operationId) {
+                console.log(`[Session] 找到了已存在的方案ID: ${operationId}`);
+                req.session.context.operationId = operationId;
+            } else {
+                console.log(`[Session] 未找到方案ID，正在创建新的方案...`);
+                const result = await jdApiService.startSessionOperation(req.session);
+                if (result.success) {
+                    operationId = result.operationId;
+                    console.log(`[Session] 新方案创建成功，ID: ${operationId}`);
+                    req.session.context.operationId = operationId;
+                    await db.saveScheme(uniqueKey, operationId);
+                    console.log(`[Session] 新方案ID已保存到数据库。`);
+                } else {
+                    // 如果创建失败，记录错误但不要中断流程
+                    console.error('[Session] 创建新方案ID时出错:', result.message);
+                }
+            }
+        } catch (dbError) {
+            console.error('[Session] 读写方案ID数据库时出错:', dbError);
+            // 数据库错误不应中断整个登录流程
+        }
+    }
+
+    // 4. 保存会话
     req.session.save((err) => {
         if (err) {
             console.error('[API /api/update-selection] 更新会话失败:', err)

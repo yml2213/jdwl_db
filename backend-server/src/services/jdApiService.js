@@ -1391,7 +1391,6 @@ export async function getVendorList(session) {
     }
   })
 
-  console.log(response);
   // 根据您提供的成功JSON，正确解析响应
   if (response && response.aaData && Array.isArray(response.aaData)) {
     console.log(`成功获取到 ${response.aaData.length} 个供应商。`)
@@ -1462,7 +1461,6 @@ export async function getDepartmentList(vendorName, session) {
       Origin: 'https://o.jdl.com'
     }
   })
-  console.log(response);
   if (response && response.aaData && Array.isArray(response.aaData)) {
     console.log(`成功获取到 ${response.aaData.length} 个事业部。`)
     return response.aaData.map((item) => ({
