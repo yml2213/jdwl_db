@@ -358,9 +358,9 @@ const handleWebSocketMessage = async (ws, message) => {
             }
 
             // 从 payload 中解构出工作流和初始上下文
-            const { workflow, initialContext } = payload;
-            if (!workflow || !Array.isArray(workflow) || workflow.length === 0) {
-                throw new Error('无效的工作流：任务列表不能为空。');
+            const { stages, initialContext } = payload;
+            if (!stages || !Array.isArray(stages) || stages.length === 0) {
+                throw new Error('无效的工作流：阶段(stages)列表不能为空。');
             }
 
             const cancellationToken = taskManager.registerTask(taskId, ws)
@@ -368,9 +368,9 @@ const handleWebSocketMessage = async (ws, message) => {
             try {
                 // 直接调用通用编排器
                 const result = await executeWorkflow({
-                    workflow,
+                    stages, // 使用新的 stages 结构
                     taskHandlers,
-                    initialContext: { ...initialContext, ...payload },
+                    initialContext, // initialContext 已经包含了所需的一切
                     updateFn,
                     sessionData: session,
                     cancellationToken

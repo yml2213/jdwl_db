@@ -25,6 +25,7 @@ export async function executeInBatches({
   let failureCount = 0
   const totalBatches = Math.ceil(items.length / batchSize)
   const messages = []
+  const processedData = [] // 新增：用于聚合从 batchFn 返回的数据
 
   for (let i = 0; i < items.length; i += batchSize) {
     if (!isRunning.value) {
@@ -76,6 +77,12 @@ export async function executeInBatches({
     if (result.success) {
       successCount++
       if (result.message) messages.push(result.message)
+
+      // 新增：如果批处理函数返回了数据，则进行聚合
+      if (result.data && Array.isArray(result.data)) {
+        processedData.push(...result.data)
+      }
+
       // 如果成功且不是最后一批，并且设置了批次间延迟，则等待
       if (i + batchSize < items.length && delayBetweenBatches > 0) {
         log(`--- 第 ${batchNumber} 批完成。等待 ${delayBetweenBatches / 1000} 秒... ---`, 'info')
@@ -95,6 +102,7 @@ export async function executeInBatches({
     successCount,
     failureCount,
     messages: messages,
-    message: messages.join('; ')
+    message: messages.join('; '),
+    data: processedData // 新增：在最终结果中返回聚合后的数据
   }
 }

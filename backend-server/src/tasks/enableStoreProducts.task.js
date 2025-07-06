@@ -13,48 +13,49 @@ const TEMP_DIR_NAME = '启用店铺商品'
 
 /**
  * @param {object} context
- * @param {object[]} [context.allProductData] - 从工作流传入的完整商品数据
- * @param {string[]} [context.skus] - 从单任务模式传入的SKU列表
+ * @param {object[]} context.skus - SKU 生命周期对象数组
  */
 async function execute(context, sessionData, cancellationToken = { value: true }) {
-  const { updateFn } = context; // 从上下文中解构出 updateFn
+  const { updateFn, skus: skuLifecycles } = context;
 
   if (!sessionData || !sessionData.jdCookies) {
     const errorMsg = '错误: 缺少会话信息'
-    updateFn({ message: errorMsg, error: true })
+    updateFn({ message: errorMsg, type: 'error' })
     throw new Error(errorMsg)
   }
 
   const messages = []
 
   try {
-    updateFn('开始执行 "启用店铺商品" 任务...')
-    const skusToCheck =
-      context.skus || (context.allProductData ? context.allProductData.map((p) => p.sellerGoodsSign) : [])
-    if (skusToCheck.length === 0) {
+    updateFn({ message: '开始执行 "启用店铺商品" 任务...' });
+
+    if (!skuLifecycles || skuLifecycles.length === 0) {
       const msg = '没有需要检查的SKU，任务结束。'
-      updateFn(msg)
-      return { success: true, message: msg }
+      updateFn({ message: msg, type: 'info' })
+      return { success: true, message: msg, data: [] }
     }
+
+    const skusToCheck = skuLifecycles.map(item => item.sku);
 
     if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
-    updateFn(`正在查询 ${skusToCheck.length} 个SKU中已停用的商品...`)
+    updateFn({ message: `正在查询 ${skusToCheck.length} 个SKU中已停用的商品...` })
     const disabledProducts = await jdApiService.getDisabledProducts(skusToCheck, sessionData)
 
     if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
     if (disabledProducts.length === 0) {
       const message = '所有被检查的商品状态均为启用，无需操作。'
-      updateFn(message)
-      return { success: true, message }
+      updateFn({ message, type: 'info' })
+      // 即使没有禁用的商品，任务也算成功完成了对所有SKU的“检查”
+      return { success: true, message, data: skusToCheck.map(sku => ({ sku })) };
     }
-    updateFn(`查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...`)
+    updateFn({ message: `查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...` })
 
     const cmgList = disabledProducts.map((p) => p.goodsNo).filter(Boolean)
     if (cmgList.length > 0) {
       const numericCmgs = cmgList.map((cmg) => cmg.replace('CMG', ''))
-      updateFn(`正在启用 ${numericCmgs.length} 个商品主数据...`)
+      updateFn({ message: `正在启用 ${numericCmgs.length} 个商品主数据...` })
       const result = await jdApiService.enableStoreProducts(numericCmgs, sessionData)
 
       if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
@@ -62,19 +63,19 @@ async function execute(context, sessionData, cancellationToken = { value: true }
       if (result.resultCode !== 1) throw new Error(`启用主数据失败: ${result.resultMessage}`)
       const msg = `启用主数据成功(${numericCmgs.length}个)`
       messages.push(msg)
-      updateFn(msg)
+      updateFn({ message: msg, type: 'success' })
     }
 
     const csgList = disabledProducts.map((p) => p.shopGoodsNo).filter(Boolean)
     if (csgList.length > 0) {
-      updateFn(`正在通过上传文件启用 ${csgList.length} 个店铺商品...`)
+      updateFn({ message: `正在通过上传文件启用 ${csgList.length} 个店铺商品...` })
       const fileBuffer = createStatusUpdateExcel(csgList)
       const filePath = await saveExcelFile(fileBuffer, {
         dirName: TEMP_DIR_NAME,
         store: context.store,
         extension: 'xls'
       })
-      updateFn(`状态更新Excel文件已保存到: ${filePath}`)
+      updateFn({ message: `状态更新Excel文件已保存到: ${filePath}` })
       const uploadResult = await jdApiService.uploadStatusUpdateFile(fileBuffer, {
         ...sessionData,
         ...context
@@ -86,20 +87,24 @@ async function execute(context, sessionData, cancellationToken = { value: true }
       const successCount = match ? parseInt(match[1], 10) : csgList.length
       const msg = `启用店铺商品成功(${successCount}个)`
       messages.push(msg)
-      updateFn(msg)
+      updateFn({ message: msg, type: 'success' })
     }
 
     const finalMessage = `任务完成: ${messages.join('; ')}`
-    updateFn(finalMessage)
-    return { success: true, message: finalMessage }
+    updateFn({ message: finalMessage, type: 'success' });
+
+    // 返回已处理（即之前被禁用）的商品的SKU列表
+    const processedSkus = disabledProducts.map(p => ({ sku: p.sellerGoodsSign }));
+
+    return { success: true, message: finalMessage, data: processedSkus }
   } catch (error) {
     if (!cancellationToken.value) {
       const cancelMsg = '任务在执行中被用户取消。'
-      updateFn({ message: cancelMsg, error: true })
+      updateFn({ message: cancelMsg, type: 'error' })
       return { success: false, message: cancelMsg }
     }
     const errorMsg = `[启用店铺商品] 任务执行失败: ${error.message}`
-    updateFn({ message: errorMsg, error: true })
+    updateFn({ message: errorMsg, type: 'error' })
     throw new Error(errorMsg)
   }
 }
@@ -116,7 +121,5 @@ function createStatusUpdateExcel(csgList) {
 export default {
   name: 'enableStoreProducts',
   description: '启用店铺商品（包含主数据和店铺内状态）',
-  requiredContext: ['skus', 'store'], // 定义任务执行所必需的上下文参数
-  outputContext: [], // 定义任务不向上层输出参数
   execute,
 }

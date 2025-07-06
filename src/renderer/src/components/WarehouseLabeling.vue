@@ -179,8 +179,9 @@ const addTask = () => {
   }
 
   // --- 4. 构建工作流 (Workflow) ---
-  const workflow = []
-  let taskName = ''
+  // 新的编排器需要一个 `stages` 数组
+  let stages = [];
+  let taskNameForUI = '';
 
   if (form.quickSelect === 'manual') {
     const manualTaskKeys = getAllManualTaskKeys()
@@ -191,62 +192,72 @@ const addTask = () => {
     if (selectedOptions.length === 0) {
       return alert('请至少选择一个手动任务！')
     }
-
-    selectedOptions.forEach((optionKey) => {
-      const taskContext = {}
+    
+    const manualTasks = selectedOptions.map(optionKey => {
+      const taskContext = {};
       if (form.payloads && form.payloads[optionKey]) {
-        Object.assign(taskContext, form.payloads[optionKey])
+        Object.assign(taskContext, form.payloads[optionKey]);
       }
       if (optionKey === 'importLogisticsAttributes') {
-        // 在手动模式下，我们假设它可能是一个 ref
-        taskContext.logisticsOptions = { ...(logisticsOptions.value || logisticsOptions) }
+        taskContext.logisticsOptions = { ...logisticsOptions };
       }
       if (optionKey === 'addInventory') {
-        taskContext.inventoryAmount = form.inventoryAmount || 1000
+        taskContext.inventoryAmount = form.inventoryAmount || 1000;
       }
-      workflow.push({ name: optionKey, context: taskContext })
-    })
+      // 手动模式下，所有任务都视为初始任务，可以并行
+      return { name: optionKey, context: taskContext, source: 'initial' };
+    });
 
-    taskName = selectedOptions.map((key) => manualTaskLabels[key] || key).join(', ')
-    if (taskName.length > 30) {
-      taskName = `手动任务 (${selectedOptions.length}项)`
+    stages.push({
+        name: '手动执行的任务',
+        tasks: manualTasks
+    });
+
+    const taskOptionLabels = taskOptions.reduce((acc, opt) => {
+        acc[opt.key] = opt.label;
+        return acc;
+    }, {});
+
+    taskNameForUI = selectedOptions.map((key) => taskOptionLabels[key] || key).join(', ');
+    if (taskNameForUI.length > 30) {
+      taskNameForUI = `手动任务 (${selectedOptions.length}项)`;
     }
   } else {
-    // 'workflow' mode
-    const workflows = getWorkflows()
-    const workflowConfig = workflows.warehouseLabeling
-    taskName = '工作流: 入仓打标'
-
-    // 从 options 中构建工作流任务，而不是不存在的 tasks 数组
-    const workflowOptions = workflowConfig.options || {};
-    const validTaskKeys = getAllManualTaskKeys(); // 获取所有有效的任务键
-
-    for (const taskName in workflowOptions) {
-        // 只处理值为 true 且是有效任务键的选项
-        if (workflowOptions[taskName] === true && validTaskKeys.includes(taskName)) {
-            const taskContext = {};
-            // 特殊逻辑：根据UI状态覆盖或添加上下文
-            if (taskName === 'importLogisticsAttributes') {
-                taskContext.logisticsOptions = { ...logisticsOptions };
-            }
-            if (taskName === 'addInventory') {
-                taskContext.inventoryAmount = form.inventoryAmount || 1000;
-            }
-            workflow.push({ name: taskName, context: taskContext });
-        }
+    // 'workflow' mode, e.g., 'warehouseLabeling'
+    const workflows = getWorkflows();
+    const workflowConfig = workflows[form.quickSelect];
+    if (!workflowConfig || !workflowConfig.stages) {
+        return alert('选择的工作流配置无效或缺少阶段定义。');
     }
+    taskNameForUI = workflowConfig.name || `工作流: ${form.quickSelect}`;
+
+    // 深拷贝配置中的 stages，以避免修改原始对象
+    stages = JSON.parse(JSON.stringify(workflowConfig.stages));
+
+    // 遍历 stages 为需要动态上下文的任务注入数据
+    stages.forEach(stage => {
+        stage.tasks.forEach(task => {
+            if (!task.context) task.context = {};
+            if (task.name === 'importLogisticsAttributes') {
+                task.context.logisticsOptions = { ...logisticsOptions };
+            }
+            if (task.name === 'addInventory') {
+                task.context.inventoryAmount = form.inventoryAmount || 1000;
+            }
+        });
+    });
   }
 
   // --- 5. 添加到任务列表 ---
   addTaskToTaskList({
     sku: skuForDisplay, // 用于UI显示
-    name: taskName,
+    name: taskNameForUI,
     type: form.quickSelect,
     store: storeInfo,
     warehouse: warehouseInfo,
     // executionData 现在是后端期待的格式
     executionData: {
-      workflow,
+      stages,
       initialContext
     }
   })
@@ -287,7 +298,10 @@ function handleRowClick(task) {
 <style scoped>
 .warehouse-labeling-container {
   display: flex;
-  height: 100%;
-  overflow: hidden; /* 防止内容溢出 */
+  height: calc(100vh - 120px);
+  padding: 10px;
+  gap: 10px;
+  background-color: #f0f2f5;
+  overflow: hidden;
 }
 </style>

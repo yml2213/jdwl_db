@@ -10,115 +10,99 @@ const TEMP_DIR_NAME = '启用库存商品分配';
 /**
  * 启用商品库存分配的任务
  * @param {object} context - 来自工作流或前端的数据
- * @param {object[]} [context.allProductData] - 包含完整商品信息的对象数组
- * @param {string[]} [context.skus] - 商品SKU列表（单任务模式）
+ * @param {object[]} context.skus - SKU 生命周期对象数组
  * @param {object} context.store - 店铺信息
  * @param {object} context.department - 事业部信息
  */
 async function execute(context, sessionData, cancellationToken = { value: true }) {
-  const { updateFn, skus, store, department } = context;
-  let { allProductData } = context;
+  const { updateFn, skus: skuLifecycles, store, department } = context;
 
   if (!sessionData || !sessionData.jdCookies) {
-    updateFn('错误：缺少会话信息。');
+    updateFn({ message: '错误：缺少会话信息。', type: 'error' });
     throw new Error('缺少会话信息');
   }
 
-  // 如果没有直接提供 allProductData，但提供了 skus，则通过 skus 查询
-  if ((!allProductData || allProductData.length === 0) && skus && skus.length > 0) {
-    updateFn(`单任务模式：通过 ${skus.length} 个SKU查询商品数据...`);
-    try {
-      const operationId = sessionData.operationId
-      allProductData = await jdApiService.queryProductDataBySkus(
-        skus,
-        department.id,
-        operationId,
-        sessionData
-      );
-
-      if (allProductData && allProductData.length > 0) {
-        updateFn(`成功查询到 ${allProductData.length} 个商品的详细数据。`);
-      } else {
-        const message = '未能通过SKU查询到任何商品数据。';
-        updateFn(message);
-        return { success: true, message };
-      }
-    } catch (error) {
-      const errorMessage = `通过SKU查询商品数据时出错: ${error.message}`;
-      updateFn({ message: errorMessage, error: true });
-      throw new Error(errorMessage);
-    }
+  // 在新编排器模式下，数据已由前置任务提供，直接使用即可。
+  if (!skuLifecycles || skuLifecycles.length === 0) {
+    updateFn({ message: '没有需要处理的商品数据。', type: 'info' });
+    return { success: true, message: '没有需要处理的商品数据。', data: [] };
   }
 
-  if (!allProductData || allProductData.length === 0) {
-    updateFn('没有需要处理的商品数据。');
-    return { success: true, message: '没有需要处理的商品数据。' };
-  }
+  updateFn({ message: `总共需要为 ${skuLifecycles.length} 个商品启用库存分配，将分批处理...` });
 
-  updateFn(`总共需要为 ${allProductData.length} 个商品启用库存分配，将分批处理...`);
-
-  const batchFn = async (batchItems) => {
+  const batchFn = async (batchOfLifecycles) => {
     try {
-      const fileBuffer = createExcelFile(batchItems, department, store);
+      // batchOfLifecycles 是一组生命周期对象
+      const fileBuffer = createExcelFile(batchOfLifecycles, department, store);
       const filePath = await saveExcelFile(fileBuffer, { dirName: TEMP_DIR_NAME, store, extension: 'xlsx' });
-      updateFn(`库存分配文件已保存到: ${filePath}`);
+      updateFn({ message: `库存分配文件已保存到: ${filePath}` });
 
-      const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn);
-      updateFn(`API 响应: ${JSON.stringify(response)}`);
+      const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, (log) => updateFn(log));
+      updateFn({ message: `API 响应: ${JSON.stringify(response)}` });
 
-      // 检查是否触发频率限制
       if (response && response.resultMessage && response.resultMessage.includes('频繁操作')) {
-        // 返回 success: false 会让 batchProcessor 自动触发重试和等待
         return { success: false, message: response.resultMessage };
       }
 
       if (response && (response.resultCode === '1' || response.resultCode === 1 || response.resultCode === '2' || response.resultCode === 2)) {
-        const msg = response.resultData || `批处理成功，影响 ${batchItems.length} 个商品。`;
-        updateFn(msg);
-        return { success: true, message: msg };
+        const msg = response.resultData || `批处理成功，影响 ${batchOfLifecycles.length} 个商品。`;
+        updateFn({ message: msg, type: 'success' });
+        return {
+          success: true,
+          message: msg,
+          data: batchOfLifecycles.map(item => ({ sku: item.sku }))
+        };
       }
 
       const errorMessage = response.resultMessage || JSON.stringify(response);
-      updateFn({ message: `批处理失败: ${errorMessage}`, error: true });
+      updateFn({ message: `批处理失败: ${errorMessage}`, type: 'error' });
       return { success: false, message: errorMessage };
     } catch (error) {
       const errorMessage = `批处理时发生严重错误: ${error.message}`;
-      updateFn({ message: errorMessage, error: true });
+      updateFn({ message: errorMessage, type: 'error' });
       return { success: false, message: errorMessage };
     }
   };
 
   const batchResult = await executeInBatches({
-    items: allProductData,
+    items: skuLifecycles,
     batchSize: API_BATCH_SIZE,
     delay: BATCH_DELAY,
     batchFn,
-    log: updateFn,
+    log: (logData) => updateFn(typeof logData === 'string' ? { message: logData } : logData),
     isRunning: cancellationToken,
   });
 
   if (!batchResult.success) {
     const errorMsg = `任务未完全成功: ${batchResult.message}`;
-    updateFn({ message: errorMsg, error: true });
+    updateFn({ message: errorMsg, type: 'error' });
     throw new Error(errorMsg);
   }
 
-  updateFn(`任务完成: 成功 ${batchResult.successCount} 批, 失败 ${batchResult.failureCount} 批。`);
-  return { success: true, message: batchResult.message || '任务执行完毕。' };
+  updateFn({ message: `任务完成: 成功 ${batchResult.successCount} 批, 失败 ${batchResult.failureCount} 批。` });
+  return {
+    success: true,
+    message: batchResult.message || '任务执行完毕。',
+    data: batchResult.data
+  };
 };
 
-function createExcelFile(productDataList, department, store) {
+function createExcelFile(lifecycleItems, department, store) {
   const headers = ['事业部编码', '主商品编码', '商家商品标识', '店铺编码', '库存管理方式', '库存比例/数值', '仓库编号'];
   const introRow = ['CBU开头的事业部编码', 'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个', '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个', 'CSP开头的店铺编码', '纯数值，1-独占，2-共享，3-固定值', '库存方式为独占或共享时，此处填写大于等于0的正整数...', '可空...'];
-  const rows = productDataList.map((p) => [
-    department.deptNo,
-    p.goodsNo, // 主商品编码 (CMG)
-    p.sellerGoodsSign, // 商家商品标识 (SKU)
-    store.shopNo,
-    1, // 1-独占
-    100,
-    '',
-  ]);
+  const rows = lifecycleItems.map((item) => {
+    // 从生命周期对象的 data 属性中获取所需信息
+    const productData = item.data;
+    return [
+      department.deptNo,
+      productData.goodsNo, // 主商品编码 (CMG)
+      productData.sellerGoodsSign, // 商家商品标识 (SKU)
+      store.shopNo,
+      1, // 1-独占
+      100,
+      '',
+    ];
+  });
 
   const excelData = [headers, introRow, ...rows];
   const worksheet = XLSX.utils.aoa_to_sheet(excelData);
@@ -130,7 +114,5 @@ function createExcelFile(productDataList, department, store) {
 export default {
   name: 'enableInventoryAllocation',
   description: '启用库存商品分配（文件上传, 内置分批）',
-  requiredContext: ['skus', 'store', 'department'],
-  outputContext: [],
   execute,
 };

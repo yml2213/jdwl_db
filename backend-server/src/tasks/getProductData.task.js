@@ -1,55 +1,67 @@
 import * as jdApiService from '../services/jdApiService.js'
 
 /**
- * @param {object} payload - 任务负载，需要包含 `skus` 数组
- * @param {function} updateFn - 用于发送进度更新的函数
- * @param {object} sessionContext - 用户会话上下文，包含认证信息、事业部信息和操作ID
+ * @param {object} context - 任务上下文
+ * @param {object[]} context.skus - SKU 生命周期对象数组
+ * @param {function} context.updateFn - 用于发送进度更新的函数
+ * @param {object} sessionData - 用户会话上下文
+ * @param {object} cancellationToken - 取消令牌
  */
-async function execute(context, updateFn, sessionContext) {
-    const { skus } = context
-    if (!skus || !Array.isArray(skus) || skus.length === 0) {
-        throw new Error('上下文中必须包含一个非空的SKU数组。')
+async function execute(context, sessionData, cancellationToken = { value: true }) {
+    const { skus: skuLifecycles, updateFn } = context;
+
+    if (!skuLifecycles || !Array.isArray(skuLifecycles) || skuLifecycles.length === 0) {
+        throw new Error('上下文中必须包含一个非空的SKU生命周期对象数组。');
     }
 
-    const { departmentInfo, operationId } = sessionContext
+    // 从生命周期对象中提取SKU字符串列表
+    const skuStrings = skuLifecycles.map(item => item.sku);
+
+    const { departmentInfo, operationId } = sessionData;
     if (!departmentInfo || !departmentInfo.id) {
-        throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。')
+        throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。');
     }
     if (!operationId) {
-        throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+        throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。');
     }
 
-    const deptId = departmentInfo.id
+    const deptId = departmentInfo.id;
 
     try {
-        updateFn(`正在查询 ${skus.length} 个SKU...`)
+        updateFn({ message: `正在为 ${skuStrings.length} 个SKU查询商品数据...` });
 
+        // API调用保持不变，它接收一个简单的SKU字符串数组
         const allProductData = await jdApiService.queryProductDataBySkus(
-            skus,
+            skuStrings,
             deptId,
             operationId,
-            sessionContext
-        )
+            sessionData
+        );
 
-        updateFn(`任务完成，共获取到 ${allProductData.length} 条商品数据。`)
+        if (!cancellationToken.value) return { success: false, message: '任务已取消' };
 
-        // **核心改动**: 返回一个包含 data 字段的对象，data 内部是此任务的输出
+        updateFn({ message: `查询完成，共获取到 ${allProductData.length} 条商品数据。` });
+
+        // 构建返回给编排器的数据
+        // 核心改动：返回一个对象数组，每个对象都包含 'sku' 键和从API获取的数据
+        const updatedSkuData = allProductData.map(product => ({
+            sku: product.sellerGoodsSign, // 使用 sellerGoodsSign 作为 SKU 标识符
+            ...product // 将查询到的所有其他商品数据也一并返回
+        }));
+
         return {
             success: true,
             message: `成功获取到 ${allProductData.length} 条商品数据。`,
-            data: { allProductData: allProductData }
-        }
+            data: updatedSkuData
+        };
     } catch (error) {
-        console.error(`查询商品数据时出错:`, error)
-        // 失败时也返回标准格式
-        throw new Error(`查询商品数据时失败: ${error.message}`)
+        console.error(`查询商品数据时出错:`, error);
+        throw new Error(`查询商品数据时失败: ${error.message}`);
     }
 }
 
 export default {
     name: 'getProductData',
     description: '根据SKU列表批量获取商品详细数据',
-    requiredContext: ['skus'], // 声明它需要 skus
-    outputContext: ['allProductData'], // 声明它将产出 allProductData
     execute
-} 
+}; 

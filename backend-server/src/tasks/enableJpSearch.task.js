@@ -13,100 +13,92 @@ const BATCH_DELAY = 1000  // 1秒
 
 /**
  * 主执行函数 - 为一批CSG启用京配打标
- * @param {object} context 包含 csgList 和 store 信息
- * @param {string[]} [context.csgList] - CSG编码列表 (工作流模式)
- * @param {string[]} [context.skus] - SKU列表 (单任务模式)
+ * @param {object} context 包含 skus (生命周期对象) 和 store 信息
+ * @param {object[]} context.skus - SKU 生命周期对象数组
  * @param {object} context.store - 店铺信息
  */
 async function execute(context, sessionData, cancellationToken = { value: true }) {
-  const { updateFn } = context
-  let { csgList, skus, store, department } = context
+  const { updateFn, skus: skuLifecycles, store } = context;
 
   if (!sessionData || !sessionData.jdCookies) {
-    updateFn('错误: 缺少会话信息。')
-    throw new Error('缺少会话信息')
+    updateFn({ message: '错误: 缺少会话信息。', type: 'error' });
+    throw new Error('缺少会话信息');
   }
 
   try {
-    // 如果没有直接提供 csgList，但提供了 skus，则通过 skus 查询
-    if ((!csgList || csgList.length === 0) && skus && skus.length > 0) {
-      updateFn(`未提供CSG列表，将通过 ${skus.length} 个SKU进行查询...`)
-      const operationId = sessionData.operationId
-      if (!operationId) {
-        throw new Error('会话数据中缺少 operationId，无法查询商品数据。')
-      }
+    const itemsToProcess = skuLifecycles.filter(item => item.data && item.data.shopGoodsNo);
 
-      const productDataList = await jdApiService.queryProductDataBySkus(
-        skus,
-        department.id,
-        operationId,
-        sessionData
-      )
-
-      if (productDataList && productDataList.length > 0) {
-        csgList = productDataList.map((p) => p.shopGoodsNo).filter(Boolean)
-        updateFn(`成功查询到 ${csgList.length} 个商品的CSG编码。`)
-      } else {
-        updateFn('未能通过SKU查询到任何有效的商品CSG编码。')
-      }
+    if (itemsToProcess.length === 0) {
+      updateFn({ message: '没有需要启用京配打标的商品 (未找到CSG编码)。', type: 'info' });
+      return { success: true, message: '没有可处理的商品。', data: [] };
     }
 
-    if (!csgList || !Array.isArray(csgList) || csgList.length === 0) {
-      updateFn('没有需要启用京配打标的商品。')
-      return { success: true, message: '没有需要处理的商品。' }
-    }
+    updateFn({ message: `总共需要为 ${itemsToProcess.length} 个商品启用京配打标，将分批处理...` });
 
-    updateFn(`总共需要为 ${csgList.length} 个商品启用京配打标，将分批处理...`)
-
-    const batchFn = async (batchCsgList) => {
+    const batchFn = async (batchOfLifecycles) => {
       try {
-        const fileBuffer = createJpSearchExcelBuffer(batchCsgList)
+        const csgBatch = batchOfLifecycles.map(item => item.data.shopGoodsNo);
+        const fileBuffer = createJpSearchExcelBuffer(csgBatch);
+
         const filePath = await saveExcelFile(fileBuffer, {
           dirName: TEMP_DIR_NAME,
           store: store,
           extension: 'xls'
-        })
-        updateFn(`京配打标文件已保存到: ${filePath}`)
+        });
+        updateFn({ message: `京配打标文件已保存到: ${filePath}` });
 
-        const response = await jdApiService.uploadJpSearchFile(fileBuffer, sessionData)
-        updateFn(`API 响应: ${JSON.stringify(response)}`)
+        const response = await jdApiService.uploadJpSearchFile(fileBuffer, sessionData);
+        updateFn({ message: `API 响应: ${JSON.stringify(response)}` });
 
         if (response && (response.resultCode === 1 || response.resultCode === '1')) {
-          const msg = response.resultData || `批处理成功，影响 ${batchCsgList.length} 个商品。`
-          return { success: true, message: msg }
-        } else if (response.resultCode === 2000) {
-          const msg = response.resultMessage || '京配打标任务--商品已开启,无需重复开启。'
-          return { success: false, message: msg }
+          const msg = response.resultData || `批处理成功，影响 ${csgBatch.length} 个商品。`;
+          return {
+            success: true,
+            message: msg,
+            data: batchOfLifecycles.map(item => ({ sku: item.sku }))
+          };
+        } else if (response.resultCode === 2000 || response.resultMessage?.includes('无需重复开启')) {
+          const msg = response.resultMessage || '京配打标任务--商品已开启,无需重复开启。';
+          // 即使是重复开启，也视为此SKU已成功完成该步骤
+          return {
+            success: true,
+            message: msg,
+            data: batchOfLifecycles.map(item => ({ sku: item.sku }))
+          };
         }
-        const errorMessage = response.resultMessage || '启用京配打标时发生未知错误'
-        return { success: false, message: errorMessage }
+        const errorMessage = response.resultMessage || '启用京配打标时发生未知错误';
+        return { success: false, message: errorMessage };
       } catch (error) {
-        return { success: false, message: `批处理时发生严重错误: ${error.message}` }
+        return { success: false, message: `批处理时发生严重错误: ${error.message}` };
       }
-    }
+    };
 
     const batchResult = await executeInBatches({
-      items: csgList,
+      items: itemsToProcess,
       batchSize: API_BATCH_SIZE,
       delay: BATCH_DELAY,
       batchFn,
-      log: updateFn,
+      log: (logData) => updateFn(typeof logData === 'string' ? { message: logData } : logData),
       isRunning: cancellationToken
-    })
+    });
 
     if (!batchResult.success) {
-      throw new Error(`启用京配打标任务未完全成功: ${batchResult.message}`)
+      throw new Error(`启用京配打标任务未完全成功: ${batchResult.message}`);
     }
 
-    updateFn(`任务完成: 成功 ${batchResult.successCount} 批, 失败 ${batchResult.failureCount} 批。`)
-    return { success: true, message: batchResult.message || '任务执行完毕。' }
+    updateFn({ message: `任务完成: 成功 ${batchResult.successCount} 批, 失败 ${batchResult.failureCount} 批。` });
+    return {
+      success: true,
+      message: batchResult.message || '任务执行完毕。',
+      data: batchResult.data
+    };
   } catch (error) {
     if (!cancellationToken.value) {
-      return { success: false, message: '任务在执行中被用户取消。' }
+      return { success: false, message: '任务在执行中被用户取消。' };
     }
-    const finalMessage = `[启用京配打标] 任务执行失败: ${error.message}`
-    updateFn({ message: finalMessage, error: true })
-    throw new Error(finalMessage)
+    const finalMessage = `[启用京配打标] 任务执行失败: ${error.message}`;
+    updateFn({ message: finalMessage, type: 'error' });
+    throw new Error(finalMessage);
   }
 }
 
@@ -130,7 +122,5 @@ function createJpSearchExcelBuffer(items) {
 export default {
   name: 'enableJpSearch',
   description: '启用京配打标生效 (内置分批)',
-  requiredContext: ['skus', 'store', 'department'],
-  outputContext: ['csgList'],
   execute
-} 
+}; 

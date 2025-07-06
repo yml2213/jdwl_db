@@ -14,56 +14,45 @@ const BATCH_DELAY = 1000 // 1秒
  * @returns {Promise<object>} 任务执行结果
  */
 async function execute(context, sessionData, cancellationToken = { value: true }) {
-    const { updateFn } = context;
-    let { allProductData, csgList, warehouse, vendor, department } = context;
+    const { updateFn, skus: skuLifecycles, warehouse, vendor, department } = context;
     const inventoryAmount = context.options?.inventoryAmount || context.inventoryAmount || 1000;
 
     try {
-        updateFn('开始执行添加库存任务...')
+        updateFn({ message: '开始执行添加库存任务...' });
 
-        // 2. 验证核心参数
-        if (!warehouse?.id) throw new Error('未选择仓库，无法添加库存。')
-        if (!vendor?.id) throw new Error('供应商信息不完整，无法创建采购单。')
-        if (!sessionData?.jdCookies) throw new Error('缺少会话信息')
+        // 验证核心参数
+        if (!warehouse?.id) throw new Error('未选择仓库，无法添加库存。');
+        if (!vendor?.id) throw new Error('供应商信息不完整，无法创建采购单。');
+        if (!sessionData?.jdCookies) throw new Error('缺少会话信息');
 
-        updateFn('正在准备商品信息...');
-
-        // 3. 区分模式准备商品数据
-        if (!allProductData || allProductData.length === 0) {
-            const skus = context.skus || [];
-            updateFn(`单任务模式: 将为 ${skus.length} 个 SKU 查询商品详情...`);
-            if (skus.length === 0) return { success: true, message: 'SKU列表为空' };
-
-            try {
-                const operationId = sessionData.operationId;
-                if (!operationId) throw new Error('会话数据中缺少 operationId，无法查询商品数据。');
-
-                allProductData = await jdApiService.queryProductDataBySkus(skus, department.id, operationId, sessionData);
-                updateFn(`成功查询到 ${allProductData.length} 条商品数据。`);
-            } catch (error) {
-                throw new Error(`获取商品详情失败: ${error.message || '未知错误'}`);
-            }
-        } else {
-            updateFn(`工作流模式: 使用上下文提供的 ${allProductData.length} 条商品数据。`);
+        if (!skuLifecycles || skuLifecycles.length === 0) {
+            updateFn({ message: '没有可处理的商品，任务结束。', type: 'info' });
+            return { success: true, message: '没有可处理的商品，任务结束。', data: [] };
         }
 
-        if (!allProductData || allProductData.length === 0) {
-            updateFn('没有可处理的商品，任务结束。');
-            return { success: true, message: '没有可处理的商品，任务结束。' };
-        }
+        updateFn({ message: '正在准备商品信息...' });
 
-        // 4. 定义批处理函数
-        const batchFn = async (productBatch) => {
+        // 定义批处理函数
+        const batchFn = async (lifecycleBatch) => {
+            // lifecycleBatch is an array of SKU lifecycle objects
             try {
+                // Extract product data from lifecycle objects for the API
+                const productBatch = lifecycleBatch.map(item => item.data);
+
                 const response = await jdApiService.createPurchaseOrder(
                     productBatch,
                     { vendor, inventoryAmount, warehouse, department },
                     sessionData
                 );
-                updateFn(`API响应: ${JSON.stringify(response)}`);
+                updateFn({ message: `API响应: ${JSON.stringify(response)}` });
 
                 if (response.resultCode === 1) {
-                    return { success: true, message: response.resultMessage || `成功创建采购单。`, data: response.resultData };
+                    return {
+                        success: true,
+                        message: response.resultMessage || `成功创建采购单。`,
+                        // Return the SKUs that were processed in this batch
+                        data: lifecycleBatch.map(item => ({ sku: item.sku }))
+                    };
                 } else {
                     return { success: false, message: response.resultMessage || '创建采购单失败' };
                 }
@@ -72,14 +61,14 @@ async function execute(context, sessionData, cancellationToken = { value: true }
             }
         };
 
-        // 5. 执行批处理
-        updateFn(`总共将为 ${allProductData.length} 个商品创建采购单。`);
+        // 执行批处理
+        updateFn({ message: `总共将为 ${skuLifecycles.length} 个商品创建采购单。` });
         const result = await executeInBatches({
-            items: allProductData,
+            items: skuLifecycles,
             batchSize: BATCH_SIZE,
             delay: BATCH_DELAY,
             batchFn,
-            log: updateFn,
+            log: (logData) => updateFn(typeof logData === 'string' ? { message: logData } : logData),
             isRunning: cancellationToken
         });
 
@@ -87,14 +76,18 @@ async function execute(context, sessionData, cancellationToken = { value: true }
             throw new Error(`添加库存失败: ${result.message}`);
         }
 
-        return { success: true, message: `所有采购单创建成功: ${result.message}` };
+        return {
+            success: true,
+            message: `所有采购单创建成功: ${result.message}`,
+            data: result.data // Pass aggregated data back to orchestrator
+        };
 
     } catch (error) {
         if (!cancellationToken.value) {
             return { success: false, message: '任务在执行中被用户取消。' }
         }
         const finalMessage = `[添加库存] 任务执行失败: ${error.message}`;
-        updateFn({ message: finalMessage, error: true });
+        updateFn({ message: finalMessage, type: 'error' });
         throw new Error(finalMessage);
     }
 }
@@ -102,8 +95,6 @@ async function execute(context, sessionData, cancellationToken = { value: true }
 export default {
     name: 'addInventory',
     description: '添加库存',
-    requiredContext: ['warehouse', 'vendor', 'department', 'skus'],
-    outputContext: [],
     execute
 };
 
