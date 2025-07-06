@@ -4,7 +4,7 @@ import * as jdApiService from '../services/jdApiService.js';
 import { saveExcelFile } from '../utils/fileUtils.js';
 
 const API_BATCH_SIZE = 2000; // 2000个商品 一个批次
-const BATCH_DELAY = 1000;  // 1秒
+const BATCH_DELAY = 5 * 60 * 1000 + 3000; // 5分3秒
 const TEMP_DIR_NAME = '启用库存商品分配';
 
 /**
@@ -66,11 +66,18 @@ async function execute(context, sessionData, cancellationToken = { value: true }
       const response = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn);
       updateFn(`API 响应: ${JSON.stringify(response)}`);
 
+      // 检查是否触发频率限制
+      if (response && response.resultMessage && response.resultMessage.includes('频繁操作')) {
+        // 返回 success: false 会让 batchProcessor 自动触发重试和等待
+        return { success: false, message: response.resultMessage };
+      }
+
       if (response && (response.resultCode === '1' || response.resultCode === 1 || response.resultCode === '2' || response.resultCode === 2)) {
         const msg = response.resultData || `批处理成功，影响 ${batchItems.length} 个商品。`;
         updateFn(msg);
         return { success: true, message: msg };
       }
+
       const errorMessage = response.resultMessage || JSON.stringify(response);
       updateFn({ message: `批处理失败: ${errorMessage}`, error: true });
       return { success: false, message: errorMessage };
