@@ -1481,3 +1481,199 @@ export async function getDepartmentList(vendorName, session) {
     return []
   }
 }
+
+/**
+ * 获取店铺列表 (后端实现)
+ * @param {string} deptId - 事业部ID
+ * @param {object} session - 完整的会话对象
+ * @returns {Promise<Array>} 店铺列表数组
+ */
+export async function getShopList(deptId, session) {
+  const { cookieString, csrfToken } = getAuthInfo(session);
+  if (!deptId) {
+    throw new Error('获取店铺列表需要提供事业部ID (deptId)');
+  }
+
+  const allShops = [];
+  let currentStart = 0;
+  const pageSize = 100;
+  let hasMoreData = true;
+
+  console.log(`[jdApiService] 开始获取店铺列表, 事业部ID: ${deptId}`);
+
+  while (hasMoreData) {
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      shopNo: '',
+      deptId: deptId,
+      type: '',
+      spSource: '',
+      bizType: '',
+      isvShopNo: '',
+      sourceChannel: '',
+      status: '1', // 启用状态
+      iDisplayStart: String(currentStart),
+      iDisplayLength: String(pageSize),
+      remark: '',
+      shopName: '',
+      jdDeliverStatus: '',
+      originSend: '',
+      // 注意: 此接口的 aoData 格式比较特殊
+      aoData: `${currentStart},${pageSize}`
+    });
+
+    try {
+      const response = await requestJdApi({
+        method: 'POST',
+        url: `/shop/queryShopList.do?rand=${Math.random()}`,
+        data,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Cookie: cookieString,
+          Origin: 'https://o.jdl.com',
+          Referer: 'https://o.jdl.com/goToMainIframe.do'
+        }
+      });
+
+      if (response && response.aaData && Array.isArray(response.aaData)) {
+        const pageShops = response.aaData.map(shop => ({
+          id: shop.id,
+          shopNo: shop.shopNo,
+          shopName: shop.shopName,
+          spShopNo: shop.spShopNo,
+          status: shop.statusName,
+          bizTypeName: shop.bizTypeName,
+          typeName: shop.typeName,
+          spSourceName: shop.spSourceName,
+          deptId: shop.deptId,
+          deptName: shop.deptName,
+          sellerId: shop.sellerId,
+          sellerNo: shop.sellerNo,
+          jdDeliver: shop.jdDeliver,
+          jdDeliverStatus: shop.jdDeliverStatus
+        }));
+
+        allShops.push(...pageShops);
+
+        const totalRecords = response.iTotalRecords || 0;
+        currentStart += pageShops.length;
+
+        if (currentStart >= totalRecords || pageShops.length === 0) {
+          hasMoreData = false;
+        }
+      } else {
+        console.warn('[jdApiService] 获取店铺列表响应格式不正确:', response);
+        hasMoreData = false;
+      }
+    } catch (error) {
+      console.error(`[jdApiService] 获取店铺列表分页时出错:`, error);
+      throw error; // 重新抛出错误
+    }
+  }
+
+  console.log(`[jdApiService] 店铺列表获取完成，共获取 ${allShops.length} 个店铺`);
+  return allShops;
+}
+
+/**
+ * 获取仓库列表 (后端实现, 带分页优化)
+ * @param {string} sellerId - 供应商ID
+ * @param {string} deptId - 事业部ID
+ * @param {object} session - 完整的会话对象
+ * @returns {Promise<Array>} 仓库列表数组
+ */
+export async function getWarehouseList(sellerId, deptId, session) {
+  const { cookieString, csrfToken } = getAuthInfo(session);
+  if (!sellerId || !deptId) {
+    throw new Error('获取仓库列表需要提供供应商ID和事业部ID');
+  }
+
+  const allWarehouses = [];
+  let currentStart = 0;
+  const pageSize = 100;
+  let hasMoreData = true;
+
+  console.log(`[jdApiService] 开始获取仓库列表, 供应商ID: ${sellerId}, 事业部ID: ${deptId}`);
+
+  // 原始的aoData模板
+  const aoDataTemplate = [
+    { "name": "sEcho", "value": 1 },
+    { "name": "iColumns", "value": 5 },
+    { "name": "sColumns", "value": ",,,,," },
+    { "name": "iDisplayStart", "value": 0 },
+    { "name": "iDisplayLength", "value": 10 },
+    { "name": "mDataProp_0", "value": 0 },
+    { "name": "bSortable_0", "value": false },
+    { "name": "mDataProp_1", "value": "warehouseNo" },
+    { "name": "bSortable_1", "value": true },
+    { "name": "mDataProp_2", "value": "warehouseName" },
+    { "name": "bSortable_2", "value": true },
+    { "name": "mDataProp_3", "value": "warehouseAddress" },
+    { "name": "bSortable_3", "value": true },
+    { "name": "mDataProp_4", "value": "statusStr" },
+    { "name": "bSortable_4", "value": true },
+    { "name": "iSortCol_0", "value": 1 },
+    { "name": "sSortDir_0", "value": "desc" },
+    { "name": "iSortingCols", "value": 1 }
+  ];
+
+  while (hasMoreData) {
+    // 动态修改aoData的分页参数
+    const aoData = [...aoDataTemplate];
+    aoData.find(item => item.name === 'iDisplayStart').value = currentStart;
+    aoData.find(item => item.name === 'iDisplayLength').value = pageSize;
+
+    const data = qs.stringify({
+      csrfToken: csrfToken,
+      sellerId: sellerId,
+      deptId: deptId,
+      status: '1', // 启用状态
+      aoData: JSON.stringify(aoData)
+    });
+
+    try {
+      const response = await requestJdApi({
+        method: 'POST',
+        url: `/warehouseOpen/queryWarehouseOpenList.do?rand=${Math.random()}`,
+        data,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Cookie: cookieString,
+          Origin: 'https://o.jdl.com',
+          Referer: 'https://o.jdl.com/goToMainIframe.do'
+        }
+      });
+
+      if (response && response.aaData && Array.isArray(response.aaData)) {
+        const pageWarehouses = response.aaData.map(w => ({
+          id: w.warehouseId,
+          warehouseId: w.warehouseId,
+          warehouseNo: w.warehouseNo,
+          warehouseName: w.warehouseName,
+          warehouseType: w.warehouseType,
+          warehouseTypeStr: w.warehouseTypeStr,
+          deptName: w.deptName,
+          effectTime: w.effectTime,
+          updateTime: w.updateTime
+        }));
+
+        allWarehouses.push(...pageWarehouses);
+
+        const totalRecords = response.iTotalRecords || 0;
+        currentStart += pageWarehouses.length;
+
+        if (currentStart >= totalRecords || pageWarehouses.length === 0) {
+          hasMoreData = false;
+        }
+      } else {
+        console.warn('[jdApiService] 获取仓库列表响应格式不正确:', response);
+        hasMoreData = false;
+      }
+    } catch (error) {
+      console.error(`[jdApiService] 获取仓库列表分页时出错:`, error);
+      throw error; // 重新抛出错误
+    }
+  }
+  console.log(`[jdApiService] 仓库列表获取完成，共获取 ${allWarehouses.length} 个仓库`);
+  return allWarehouses;
+}

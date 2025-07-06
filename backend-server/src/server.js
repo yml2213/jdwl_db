@@ -170,6 +170,44 @@ app.get('/api/session-status', (req, res) => {
     }
 })
 
+// 新增：获取店铺列表
+app.get('/api/shops', requireAuth, async (req, res) => {
+    const { deptId } = req.query;
+    if (!deptId) {
+        return res.status(400).json({ error: 'BadRequest', message: '缺少 deptId 查询参数' });
+    }
+    try {
+        const shops = await jdApiService.getShopList(deptId, req.session);
+        res.json(shops);
+    } catch (error) {
+        console.error(`获取事业部 ${deptId} 的店铺列表失败:`, error);
+        if (error.message === 'NotLogin') {
+            res.status(401).json({ error: 'NotLogin', message: '会话无效或已过期' });
+        } else {
+            res.status(500).json({ error: 'InternalServerError', message: error.message });
+        }
+    }
+});
+
+// 新增：获取仓库列表
+app.get('/api/warehouses', requireAuth, async (req, res) => {
+    const { sellerId, deptId } = req.query;
+    if (!sellerId || !deptId) {
+        return res.status(400).json({ error: 'BadRequest', message: '缺少 sellerId 或 deptId 查询参数' });
+    }
+    try {
+        const warehouses = await jdApiService.getWarehouseList(sellerId, deptId, req.session);
+        res.json(warehouses);
+    } catch (error) {
+        console.error(`获取仓库列表失败 (sellerId: ${sellerId}, deptId: ${deptId}):`, error);
+        if (error.message === 'NotLogin') {
+            res.status(401).json({ error: 'NotLogin', message: '会话无效或已过期' });
+        } else {
+            res.status(500).json({ error: 'InternalServerError', message: error.message });
+        }
+    }
+});
+
 // 检查会话状态接口
 app.get('/api/session', (req, res) => {
     if (req.session && req.session.user) {

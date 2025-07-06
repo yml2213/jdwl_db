@@ -160,125 +160,31 @@ async function fetchApi(
 }
 
 /**
- * 获取店铺列表
+ * 获取店铺列表 (已优化)
  * @param {string} deptId - 事业部ID
  * @returns {Promise<Array>} 店铺列表数组
  */
 export async function getShopList(deptId) {
   if (!deptId) {
-    console.error('获取店铺列表失败: 未提供事业部ID')
-    return []
+    console.error('获取店铺列表失败: 未提供事业部ID');
+    return [];
   }
+  // 注意：fetchApi 内部会自动拼接 API_BASE_URL
+  return await fetchApi(`/api/shops?deptId=${deptId}`);
+}
 
-  console.log('开始获取店铺列表, 事业部ID:', deptId)
-  const url = `${BASE_URL}/shop/queryShopList.do`
-  const csrfToken = await getCsrfToken()
-
-  console.log('获取店铺列表, csrfToken:', csrfToken ? '已获取' : '未获取')
-
-  // 使用分页方式获取所有店铺
-  let allShops = []
-  let currentStart = 0
-  const pageSize = 100 // 每页请求的数量，增大以减少请求次数
-  let totalRecords = null
-  let hasMoreData = true
-
-  // 循环获取所有页的店铺数据
-  while (hasMoreData) {
-    console.log(`获取店铺列表分页数据: 起始位置=${currentStart}, 每页数量=${pageSize}`)
-
-    // 构建aoData参数
-    const aoDataStr = `${currentStart},${pageSize}`
-
-    // 构建请求数据
-    const data = qs.stringify({
-      csrfToken: csrfToken,
-      shopNo: '',
-      deptId: deptId,
-      type: '',
-      spSource: '',
-      bizType: '',
-      isvShopNo: '',
-      sourceChannel: '',
-      status: '1', // 启用状态
-      iDisplayStart: String(currentStart),
-      iDisplayLength: String(pageSize),
-      remark: '',
-      shopName: '',
-      jdDeliverStatus: '',
-      originSend: '',
-      aoData: aoDataStr
-    })
-
-    try {
-      console.log(`发送店铺列表请求: 页码=${currentStart / pageSize + 1}`)
-      const response = await fetchApi(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          Origin: BASE_URL,
-          Referer: `${BASE_URL}/goToMainIframe.do`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: data
-      })
-
-      // 处理响应数据
-      if (response && response.aaData) {
-        // 首次获取时记录总记录数
-        if (totalRecords === null) {
-          totalRecords = response.iTotalRecords || 0
-          console.log(`店铺总数量: ${totalRecords}`)
-        }
-
-        // 处理本页的店铺数据
-        const pageShops = response.aaData.map((shop) => ({
-          id: shop.id,
-          shopNo: shop.shopNo,
-          shopName: shop.shopName,
-          spShopNo: shop.spShopNo,
-          status: shop.statusName,
-          bizTypeName: shop.bizTypeName,
-          typeName: shop.typeName,
-          spSourceName: shop.spSourceName,
-          deptId: shop.deptId,
-          deptName: shop.deptName,
-          sellerId: shop.sellerId,
-          sellerNo: shop.sellerNo,
-          jdDeliver: shop.jdDeliver,
-          jdDeliverStatus: shop.jdDeliverStatus
-        }))
-
-        // 合并到总结果中
-        allShops = [...allShops, ...pageShops]
-
-        console.log(`当前已获取店铺: ${allShops.length}/${totalRecords}`)
-
-        // 判断是否还有更多数据
-        currentStart += response.aaData.length
-        hasMoreData = currentStart < totalRecords
-
-        // 如果没有更多数据或已获取所有记录，退出循环
-        if (!hasMoreData || allShops.length >= totalRecords) {
-          break
-        }
-
-        // 添加短暂延迟避免频繁请求
-        if (hasMoreData) {
-          await new Promise((resolve) => setTimeout(resolve, 300))
-        }
-      } else {
-        console.error('响应数据格式不正确:', response)
-        hasMoreData = false
-      }
-    } catch (error) {
-      console.error(`获取店铺列表页码${currentStart / pageSize + 1}失败:`, error)
-      hasMoreData = false
-    }
+/**
+ * 获取仓库列表 (已优化)
+ * @param {string} sellerId - 供应商ID
+ * @param {string} deptId - 事业部ID
+ * @returns {Promise<Array>} 仓库列表数组
+ */
+export async function getWarehouseList(sellerId, deptId) {
+  if (!sellerId || !deptId) {
+    console.error('获取仓库列表失败: 未提供供应商ID或事业部ID');
+    return [];
   }
-
-  console.log(`店铺列表获取完成，共获取${allShops.length}个店铺`)
-  return allShops
+  return await fetchApi(`/api/warehouses?sellerId=${sellerId}&deptId=${deptId}`);
 }
 
 /**
@@ -286,7 +192,7 @@ export async function getShopList(deptId) {
  * @returns {Promise<Array>} 供应商列表
  */
 export async function getVendorList() {
-  return await fetchApi('/api/vendors')
+  return await fetchApi('/api/vendors');
 }
 
 /**
@@ -298,95 +204,7 @@ export async function getDepartmentsByVendor(vendorName) {
   return await fetchApi('/api/departments', {
     method: 'POST',
     body: { vendorName }
-  })
-}
-
-/**
- * 获取仓库列表
- * @param {string} sellerId - 供应商ID
- * @param {string} deptId - 事业部ID
- * @returns {Promise<Array>} 仓库列表数组
- */
-export async function getWarehouseList(sellerId, deptId) {
-  if (!sellerId || !deptId) {
-    console.error('获取仓库列表失败: 未提供供应商ID或事业部ID')
-    return []
-  }
-
-  console.log('开始获取仓库列表, 供应商ID:', sellerId, '事业部ID:', deptId)
-  const url = `${BASE_URL}/warehouseOpen/queryWarehouseOpenList.do?rand=${Math.random()}`
-
-  // 先获取 cookies 并检查登录状态
-  const cookies = await getAllCookies()
-  if (!cookies || cookies.length === 0) {
-    console.error('获取仓库列表失败: 未找到有效的 cookies，可能未登录')
-    return []
-  }
-
-  const csrfToken = await getCsrfToken()
-  if (!csrfToken) {
-    console.error('获取仓库列表失败: 未找到 csrfToken，可能登录状态无效')
-    return []
-  }
-
-  console.log('获取仓库列表, csrfToken:', csrfToken ? '已获取' : '未获取')
-  console.log('当前 cookies 数量:', cookies.length)
-
-  // 构建请求数据
-  const data = qs.stringify({
-    csrfToken: csrfToken,
-    sellerId: sellerId,
-    deptId: deptId,
-    status: '1', // 启用状态
-    aoData:
-      '[{"name":"sEcho","value":1},{"name":"iColumns","value":5},{"name":"sColumns","value":",,,,,"},{"name":"iDisplayStart","value":0},{"name":"iDisplayLength","value":10},{"name":"mDataProp_0","value":0},{"name":"bSortable_0","value":false},{"name":"mDataProp_1","value":"warehouseNo"},{"name":"bSortable_1","value":true},{"name":"mDataProp_2","value":"warehouseName"},{"name":"bSortable_2","value":true},{"name":"mDataProp_3","value":"warehouseAddress"},{"name":"bSortable_3","value":true},{"name":"mDataProp_4","value":"statusStr"},{"name":"bSortable_4","value":true},{"name":"iSortCol_0","value":1},{"name":"sSortDir_0","value":"desc"},{"name":"iSortingCols","value":1}]'
-  })
-
-  try {
-    console.log('发送仓库列表请求')
-
-    // 获取完整的 Cookie 字符串
-    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
-    console.log('使用完整的 Cookie 字符串，长度:', cookieString.length)
-
-    const response = await fetchApi(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'Origin': BASE_URL,
-        'Referer': `${BASE_URL}/goToMainIframe.do`,
-        'X-Requested-With': 'XMLHttpRequest',
-        'Cookie': cookieString // 直接设置完整的 Cookie 字符串
-      },
-      body: data
-    })
-
-    console.log('仓库列表响应:', response ? '获取成功' : '未获取数据')
-
-    // 处理响应数据，提取仓库列表
-    if (response && response.aaData) {
-      console.log('获取到仓库数量:', response.aaData.length)
-
-      // 转换为更简单的数据结构
-      return response.aaData.map((warehouse) => ({
-        id: warehouse.warehouseId,
-        warehouseId: warehouse.warehouseId,
-        warehouseNo: warehouse.warehouseNo,
-        warehouseName: warehouse.warehouseName,
-        warehouseType: warehouse.warehouseType,
-        warehouseTypeStr: warehouse.warehouseTypeStr,
-        deptName: warehouse.deptName,
-        effectTime: warehouse.effectTime,
-        updateTime: warehouse.updateTime
-      }))
-    } else {
-      console.error('响应数据格式不正确:', response)
-      return []
-    }
-  } catch (error) {
-    console.error('获取仓库列表失败:', error)
-    return []
-  }
+  });
 }
 
 /**
