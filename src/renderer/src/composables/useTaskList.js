@@ -21,7 +21,30 @@ export function useTaskList() {
 
     switch (event) {
       case 'log':
-        task.logs.push(data)
+        // 如果是对象形式的日志，通常是结构化信息
+        if (typeof data === 'object' && data !== null) {
+          // 特殊处理等待事件
+          if (data.event === 'waiting') {
+            task.status = '等待中'
+            task.result = data.message || `触发频率限制，将在 ${data.delay / 1000}s 后重试`
+            task.isWaiting = true // 增加一个等待状态标识
+            // 在延迟后自动清除等待状态
+            setTimeout(() => {
+              if (task.status === '等待中') {
+                task.status = '运行中'
+                task.result = '继续执行...'
+              }
+              task.isWaiting = false
+            }, data.delay)
+          } else {
+            // 其他结构化日志，推入日志数组
+            task.logs.push(JSON.stringify(data))
+          }
+        } else {
+          // 普通字符串日志
+          task.logs.push(data)
+        }
+
         if (selectedTask.value && selectedTask.value.id === taskId) {
           activeTaskLogs.value = [...task.logs]
         }
@@ -30,10 +53,12 @@ export function useTaskList() {
         task.status = rest.success ? '成功' : '失败'
         task.result = rest.success ? data : rest.message || '执行失败'
         task.isExecuting = false
+        task.isWaiting = false // 确保结束时清除等待状态
         break
       case 'error':
         task.status = '失败'
         task.result = rest.message || '任务执行出错'
+        task.isWaiting = false // 确保错误时清除等待状态
         break
     }
   }
@@ -61,6 +86,7 @@ export function useTaskList() {
       status: '等待中',
       result: '',
       logs: [],
+      isWaiting: false, // 初始化 isWaiting 状态
       createdAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     }
     taskList.value.push(newTask)

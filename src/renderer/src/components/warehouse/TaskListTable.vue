@@ -34,8 +34,11 @@
           <td class="task-cell">{{ task.store?.shopName }}</td>
           <td class="task-cell">{{ task.warehouse?.warehouseName }}</td>
           <td class="task-cell">{{ task.createdAt }}</td>
-          <td class="task-cell">
-            <StatusTag :status="task.status" />
+          <td class="task-cell status-cell">
+            <div class="status-content">
+              <div v-if="task.isWaiting" class="spinner"></div>
+              <StatusTag :status="task.status" />
+            </div>
           </td>
           <td class="task-cell result-cell">{{ task.result }}</td>
           <td class="task-cell actions-cell">
@@ -116,6 +119,31 @@ watch(
   border-bottom: 1px solid #e0e0e0;
   white-space: nowrap;
   color: #374151;
+}
+
+.status-cell {
+  width: 120px; /* 给状态列一个固定宽度 */
+}
+
+.status-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .task-header-cell {

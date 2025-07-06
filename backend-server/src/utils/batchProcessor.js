@@ -35,6 +35,12 @@ export async function executeInBatches({ items, batchSize, delay, batchFn, log, 
       (result.message.includes('频繁操作') || result.message.includes('只能导入一次'))
     ) {
       log(`第 ${batchNumber} 批因频率限制失败。将在 ${delay / 1000} 秒后重试...`, 'warn')
+      // 向前端发送等待状态
+      log({
+        event: 'waiting',
+        message: `第 ${batchNumber} 批触发频率限制，将在 ${delay / 1000} 秒后重试...`,
+        delay: delay
+      })
       await new Promise((resolve) => setTimeout(resolve, delay))
       log(`--- 重试第 ${batchNumber}/${totalBatches} 批 ---`, 'info')
       result = await batchFn(batch, context, i / batchSize, totalBatches) // Retry the batch

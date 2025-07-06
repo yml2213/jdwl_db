@@ -75,9 +75,9 @@ export async function requestJdApi(config) {
     if (response.data && response.data.code && response.data.code !== 200) {
       throw new Error(response.data.msg || '京东API返回错误')
     }
-    // 特殊处理字符串响应，例如"频繁操作"
+    // 特殊处理字符串响应，例如"频繁操作"，直接返回响应体，让调用者处理
     if (typeof response.data === 'string' && response.data.includes('频繁操作')) {
-      throw new Error('API_RATE_LIMIT')
+      return { result: false, msg: response.data }
     }
     return response.data
   } catch (error) {
@@ -128,28 +128,31 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
     Referer: `https://o.jdl.com/shopGoods/showImportPopSG.do?spShopNo=${store.spShopNo}&deptId=${department.deptId}`
   }
 
-  const MAX_RETRIES = 3
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  console.log(`[jdApiService] 尝试上传店铺商品文件...`)
+  const response = await requestJdApi({
+    method: 'POST',
+    url,
+    data: formData,
+    headers
+  })
+  // 检查是否是JSON字符串
+  if (typeof response === 'string') {
     try {
-      console.log(`[jdApiService] 尝试上传店铺商品文件... (第 ${attempt} 次)`)
-      const responseText = await requestJdApi({
-        method: 'POST',
-        url,
-        data: formData,
-        headers
-      })
-      console.log('[jdApiService] 文件上传成功，响应:', responseText)
-      return responseText
-    } catch (error) {
-      console.error(`[jdApiService] 上传失败 (尝试 ${attempt}):`, error.message)
-      if (error.message === 'API_RATE_LIMIT' && attempt < MAX_RETRIES) {
-        console.log('[jdApiService] 触发频率限制，将在65秒后重试...')
-        await new Promise((resolve) => setTimeout(resolve, 65000))
-      } else {
-        throw new Error(`文件上传在达到最大重试次数后失败: ${error.message}`)
+      const parsed = JSON.parse(response)
+      console.log('[jdApiService] 文件上传完成，响应:', parsed)
+      return parsed
+    } catch (e) {
+      // 不是JSON字符串，可能是"频繁操作"等纯文本
+      console.log('[jdApiService] 文件上传完成，纯文本响应:', response)
+      if (response.includes('频繁操作')) {
+        return { result: false, msg: response }
       }
+      return { result: true, msg: response } // 或者根据需要构造成其他格式
     }
   }
+
+  console.log('[jdApiService] 文件上传完成，响应:', response)
+  return response
 }
 
 /**
