@@ -756,7 +756,8 @@ export async function fetchProductDetails(skus, sessionData) {
 export async function createPurchaseOrder(products, context, sessionData) {
   const { warehouse, vendor, department } = context
   const { cookieString } = getAuthInfo(sessionData)
-
+  // "deptNo": "CBU22010232593780"
+  const deptId = department.deptNo.split('CBU')[1]
   // console.log('createPurchaseOrder---1  context===>', context)
   // console.log('createPurchaseOrder---2  products===>', products)
 
@@ -782,7 +783,7 @@ export async function createPurchaseOrder(products, context, sessionData) {
   formData.append('id', '')
   formData.append('poNo', '')
   formData.append('goods', JSON.stringify(goodsArray))
-  formData.append('deptId', department.id)
+  formData.append('deptId', deptId)
   formData.append('deptName', department.name)
   formData.append('supplierId', vendor.id.replace('CMS', ''))  //  id: 'CMS4418047117122',
   formData.append('warehouseId', warehouse.id)
