@@ -334,7 +334,7 @@ const handleWebSocketMessage = async (ws, message) => {
         }
 
         const log = (logMessage) => {
-            console.log(`[Task: ${taskId}] ${logMessage}`)
+            console.log(`[Task: ${taskId}]  日志: ${logMessage}`)
             ws.send(JSON.stringify({ event: 'log', taskId, data: logMessage }))
         }
 
@@ -342,14 +342,14 @@ const handleWebSocketMessage = async (ws, message) => {
             const handlerModule = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
             if (handlerModule && typeof handlerModule.execute === 'function') {
                 const result = await handlerModule.execute(payload, log, session)
-                ws.send(
-                    JSON.stringify({
-                        event: 'end',
-                        taskId,
-                        success: true,
-                        data: result
-                    })
-                )
+                let data = {
+                    event: 'end',
+                    taskId,
+                    success: result.success,
+                    data: result.message || result.msg
+                }
+                console.log(`[Task: ${taskId}] ws发送到前端数据: ${JSON.stringify(data)}`)
+                ws.send(JSON.stringify(data))
             } else {
                 throw new Error(`未找到处理器或处理器缺少 execute 方法: ${taskName}`)
             }
