@@ -18,7 +18,7 @@ async function execute(context, sessionData) {
     console.warn('[Task: checkProductStatus] SKU列表为空，任务提前结束。')
     return { success: true, disabledProducts: [], enabledProducts: [] }
   }
-  if (!sessionData || !sessionData.cookies) {
+  if (!sessionData || !sessionData.jdCookies) {
     throw new Error('缺少有效的会话信息 (sessionData)')
   }
   if (!store || !department) {

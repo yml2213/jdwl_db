@@ -63,7 +63,7 @@ async function execute(context, updateFn, sessionData) {
       updateFn({ message: errorMsg, error: true });
       throw new Error(errorMsg);
     }
-    if (!sessionData || !sessionData.cookies) {
+    if (!sessionData || !sessionData.jdCookies) {
       const errorMsg = '缺少会话信息';
       updateFn({ message: errorMsg, error: true });
       throw new Error(errorMsg);

@@ -26,7 +26,7 @@ const execute = async (context, ...args) => {
 
   let { csgList, skus, store, department } = context;
 
-  if (!sessionData || !sessionData.cookies) {
+  if (!sessionData || !sessionData.jdCookies) {
     updateFn('错误: 缺少会话信息。');
     throw new Error('缺少会话信息');
   }

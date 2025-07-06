@@ -21,7 +21,7 @@ async function execute(context, ...args) {
   const updateFn = typeof legacyUpdateFn === 'function' ? legacyUpdateFn : () => { }
   const sessionData = session || (args.length === 1 ? args[0] : context.session)
 
-  if (!sessionData || !sessionData.cookies) {
+  if (!sessionData || !sessionData.jdCookies) {
     const errorMsg = '错误: 缺少会话信息';
     updateFn({ message: errorMsg, error: true });
     throw new Error(errorMsg);

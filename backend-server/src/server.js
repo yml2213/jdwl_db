@@ -339,9 +339,9 @@ const handleWebSocketMessage = async (ws, message) => {
         }
 
         try {
-            const handler = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
-            if (handler) {
-                const result = await handler(payload, session, log)
+            const handlerModule = isFlow ? flowHandlers[taskName] : taskHandlers[taskName]
+            if (handlerModule && typeof handlerModule.execute === 'function') {
+                const result = await handlerModule.execute(payload, log, session)
                 ws.send(
                     JSON.stringify({
                         event: 'end',
@@ -351,7 +351,7 @@ const handleWebSocketMessage = async (ws, message) => {
                     })
                 )
             } else {
-                throw new Error(`未找到处理器: ${taskName}`)
+                throw new Error(`未找到处理器或处理器缺少 execute 方法: ${taskName}`)
             }
         } catch (error) {
             console.error(`执行任务 ${taskName} (ID: ${taskId}) 失败:`, error)

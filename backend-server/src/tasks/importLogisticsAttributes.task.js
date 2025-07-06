@@ -46,7 +46,7 @@ const execute = async (context, ...args) => {
     updateFn({ message: msg, error: true });
     throw new Error(msg);
   }
-  if (!sessionData || !sessionData.cookies) {
+  if (!sessionData || !sessionData.jdCookies) {
     const msg = '缺少会话信息';
     updateFn({ message: msg, error: true });
     throw new Error(msg);

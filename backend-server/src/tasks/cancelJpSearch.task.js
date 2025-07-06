@@ -101,9 +101,9 @@ async function processInBatches(itemsToProcess, store, sessionData, updateFn) {
 const execute = async (context, updateFn, sessionData) => {
     const { skus, store, department } = context
     let itemsToProcess = []
-    const mode=context.scope
+    const mode = context.scope
 
-    if (!sessionData || !sessionData.cookies) {
+    if (!sessionData || !sessionData.jdCookies) {
         const error = new Error('缺少会话信息')
         updateFn(error.message, 'error')
         throw error
