@@ -13,7 +13,9 @@ const form = ref({
   sku: '',
   options: {
     clearStockAllocation: true,
-    cancelJpSearch: false
+    cancelJpSearch: false,
+    disableStoreProducts: false,
+    disableProductMasterData: false
   }
 })
 
@@ -66,7 +68,12 @@ const handleStoreUpdate = (newStore) => {
 
 const handleAddTask = () => {
   if (!currentShopInfo.value) return alert('请选择店铺')
-  if (!form.value.options.clearStockAllocation && !form.value.options.cancelJpSearch)
+  if (
+    !form.value.options.clearStockAllocation &&
+    !form.value.options.cancelJpSearch &&
+    !form.value.options.disableStoreProducts &&
+    !form.value.options.disableProductMasterData
+  )
     return alert('请至少选择一个功能选项')
 
   const isWholeStore = form.value.mode === 'whole_store'
@@ -137,6 +144,36 @@ const handleAddTask = () => {
             name: '取消京配打标阶段',
             tasks: [{ name: 'cancelJpSearch', context: {} }]
           }
+        ]
+      }
+    })
+  }
+
+  // 当选择“停用店铺商品”时
+  if (form.value.options.disableStoreProducts) {
+    addTask({
+      sku: skuDisplayName,
+      name: '停用店铺商品',
+      store: currentShopInfo.value,
+      warehouse: { warehouseName: 'N/A' },
+      executionData: {
+        initialContext: { ...commonData },
+        stages: [{ name: '停用店铺商品阶段', tasks: [{ name: 'disableStoreProducts', context: {} }] }]
+      }
+    })
+  }
+
+  // 当选择“停用商品主数据”时
+  if (form.value.options.disableProductMasterData) {
+    addTask({
+      sku: skuDisplayName,
+      name: '停用商品主数据',
+      store: currentShopInfo.value,
+      warehouse: { warehouseName: 'N/A' },
+      executionData: {
+        initialContext: { ...commonData },
+        stages: [
+          { name: '停用商品主数据阶段', tasks: [{ name: 'disableProductMasterData', context: {} }] }
         ]
       }
     })

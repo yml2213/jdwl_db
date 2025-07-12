@@ -60,6 +60,22 @@
             />
             取消京配打标
           </label>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="form.options.disableStoreProducts"
+              @change="updateOption('disableStoreProducts', $event.target.checked)"
+            />
+            停用店铺商品
+          </label>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="form.options.disableProductMasterData"
+              @change="updateOption('disableProductMasterData', $event.target.checked)"
+            />
+            停用商品主数据
+          </label>
         </div>
       </div>
 
@@ -151,10 +167,15 @@ const handleFileChange = (file) => {
   font-size: 14px;
 }
 
-.radio-group,
-.checkbox-group {
+.radio-group {
   display: flex;
   gap: 1.5rem;
+}
+
+.checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
 }
 
 .radio-label,

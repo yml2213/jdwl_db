@@ -3,6 +3,40 @@
  * 用于跟踪、取消和管理正在进行的后端任务。
  */
 
+import getProductDataTask from '../tasks/getProductData.task.js'
+import importLogisticsAttributesTask from '../tasks/importLogisticsAttributes.task.js'
+import enableInventoryAllocationTask from '../tasks/enableInventoryAllocation.task.js'
+import addInventoryTask from '../tasks/addInventory.task.js'
+import enableJpSearchTask from '../tasks/enableJpSearch.task.js'
+import importStoreProductsTask from '../tasks/importStoreProducts.task.js'
+import enableStoreProductsTask from '../tasks/enableStoreProducts.task.js'
+import importProductNamesTask from '../tasks/importProductNames.task.js'
+import returnStorageTask from '../tasks/returnStorage.task.js'
+import clearStockAllocation from '../tasks/clearStockAllocation.task.js'
+import cancelJpSearch from '../tasks/cancelJpSearch.task.js'
+import disableStoreProducts from '../tasks/disableStoreProducts.task.js'
+import disableProductMasterData from '../tasks/disableProductMasterData.task.js'
+
+const taskModules = [
+    getProductDataTask,
+    importLogisticsAttributesTask,
+    enableInventoryAllocationTask,
+    addInventoryTask,
+    enableJpSearchTask,
+    importStoreProductsTask,
+    enableStoreProductsTask,
+    importProductNamesTask,
+    returnStorageTask,
+    clearStockAllocation,
+    cancelJpSearch,
+    disableStoreProducts,
+    disableProductMasterData
+]
+
+/**
+ * 任务处理器的集合
+ */
+
 // 使用 Map 来存储正在运行的任务，键为 taskId，值为取消令牌
 const runningTasks = new Map()
 
