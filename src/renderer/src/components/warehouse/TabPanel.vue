@@ -29,6 +29,7 @@
         <task-list-table
           v-if="activeTab === 'tasks'"
           :tasks="tasks"
+          :countdown-timers="countdownTimers"
           @delete-task="$emit('delete-task', $event)"
           @execute-one="$emit('execute-one', $event)"
           @update:selected="$emit('update:selected', $event)"
@@ -68,7 +69,11 @@ defineProps({
       progress: '初始化...'
     })
   },
-  activeTab: String
+  activeTab: String,
+  countdownTimers: {
+    type: Object,
+    default: () => ({})
+  }
 })
 
 const emit = defineEmits([

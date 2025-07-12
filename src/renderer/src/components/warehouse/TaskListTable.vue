@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import StatusTag from './StatusTag.vue'
 import { ElIcon } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
@@ -86,59 +86,16 @@ const props = defineProps({
   tasks: {
     type: Array,
     required: true
+  },
+  countdownTimers: {
+    type: Object,
+    default: () => ({})
   }
 })
 
 const emit = defineEmits(['delete-task', 'execute-one', 'update:selected', 'select-task', 'cancel-task'])
 
 const selectedTasks = ref([])
-const countdownTimers = ref({})
-const intervals = {}
-
-// 解析重试时间
-const parseRetryAfter = (resultText) => {
-  if (!resultText) return null
-  const match = resultText.match(/将在 (\d+) 秒后重试/)
-  return match ? parseInt(match[1], 10) : null
-}
-
-// 监控任务列表变化以设置或清除计时器
-watch(
-  () => props.tasks,
-  (newTasks) => {
-    // 清理不再存在的任务的计时器
-    Object.keys(intervals).forEach((taskId) => {
-      if (!newTasks.some((task) => task.id === taskId)) {
-        clearInterval(intervals[taskId])
-        delete intervals[taskId]
-        delete countdownTimers.value[taskId]
-      }
-    })
-
-    newTasks.forEach((task) => {
-      const retryAfter = parseRetryAfter(task.result)
-      if (task.status === '等待中' && retryAfter !== null && !intervals[task.id]) {
-        countdownTimers.value[task.id] = retryAfter
-        intervals[task.id] = setInterval(() => {
-          if (countdownTimers.value[task.id] > 0) {
-            countdownTimers.value[task.id]--
-          } else {
-            clearInterval(intervals[task.id])
-            delete intervals[task.id]
-            // 可选：当倒计时结束时，可以发送一个事件来自动重试或更新状态
-            // emit('retry-task', task.id)
-          }
-        }, 1000)
-      } else if (task.status !== '等待中' && intervals[task.id]) {
-        // 如果任务状态不再是等待中，清除计时器
-        clearInterval(intervals[task.id])
-        delete intervals[task.id]
-        delete countdownTimers.value[task.id]
-      }
-    })
-  },
-  { deep: true, immediate: true }
-)
 
 const isAllSelected = computed(() => {
   return props.tasks.length > 0 && selectedTasks.value.length === props.tasks.length
@@ -158,18 +115,11 @@ watch(selectedTasks, (newSelection) => {
 
 watch(
   () => props.tasks,
-  (newTasks, oldTasks) => {
-    // 当任务列表变化 (例如，被清除) 时，重置选择
-    if (newTasks.length === 0 && oldTasks.length > 0) {
-      selectedTasks.value = []
-    }
+  () => {
+    // When tasks list changes (e.g., cleared), reset selection
+    selectedTasks.value = []
   }
 )
-
-// 组件卸载时清除所有计时器
-onUnmounted(() => {
-  Object.values(intervals).forEach(clearInterval)
-})
 </script>
 
 <style scoped>

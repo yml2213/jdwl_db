@@ -26,6 +26,7 @@
       @update:selected="updateSelectedTasks"
       @select-task="$emit('select-task', $event)"
       @cancel-task="$emit('cancel-task', $event)"
+      :countdown-timers="countdownTimers"
     />
   </div>
 </template>
@@ -50,6 +51,10 @@ defineProps({
   activeTab: {
     type: String,
     default: 'tasks'
+  },
+  countdownTimers: {
+    type: Object,
+    default: () => ({})
   }
 })
 

@@ -11,6 +11,18 @@ export function useTaskList() {
   const taskList = ref([])
   const activeTaskLogs = ref([])
   const selectedTask = ref(null)
+  const countdownTimers = ref({})
+  const intervals = {}
+
+  const clearTimerForTask = (taskId) => {
+    if (intervals[taskId]) {
+      clearInterval(intervals[taskId])
+      delete intervals[taskId]
+    }
+    if (countdownTimers.value[taskId] !== undefined) {
+      delete countdownTimers.value[taskId]
+    }
+  }
 
   const handleWebSocketMessage = (message) => {
     const { event, taskId, data, ...rest } = message
@@ -39,14 +51,17 @@ export function useTaskList() {
         task.result = rest.message || `触发频率限制，将在 ${rest.delay / 1000}s 后重试`
         task.isWaiting = true // 增加一个等待状态标识
         // 在延迟后自动清除等待状态
-        setTimeout(() => {
-          // 检查任务是否还处于“等待中”，避免覆盖后续的状态更新
-          if (task.isWaiting) {
-            task.status = '运行中'
-            task.result = '继续执行...'
+        clearTimerForTask(taskId) // 清除旧计时器以防万一
+        countdownTimers.value[taskId] = Math.floor(rest.delay / 1000)
+        intervals[taskId] = setInterval(() => {
+          if (countdownTimers.value[taskId] > 0) {
+            countdownTimers.value[taskId]--
+          } else {
+            clearTimerForTask(taskId)
             task.isWaiting = false
+            task.status = '运行中'
           }
-        }, rest.delay)
+        }, 1000)
         break
       case 'end':
         task.status = rest.success ? '成功' : '失败'
@@ -54,11 +69,13 @@ export function useTaskList() {
         task.result = rest.success ? data : rest.message || data || '执行失败'
         task.isExecuting = false
         task.isWaiting = false // 确保结束时清除等待状态
+        clearTimerForTask(taskId)
         break
       case 'error':
         task.status = '失败'
         task.result = rest.message || '任务执行出错'
         task.isWaiting = false // 确保错误时清除等待状态
+        clearTimerForTask(taskId)
         break
     }
   }
@@ -69,6 +86,7 @@ export function useTaskList() {
 
   onBeforeUnmount(() => {
     webSocketService.off('message', handleWebSocketMessage)
+    Object.values(intervals).forEach(clearInterval) // 清除所有计时器
   })
 
   watch(selectedTask, (newTask) => {
@@ -144,6 +162,7 @@ export function useTaskList() {
     task.result = '任务已被用户请求取消。'
     task.isExecuting = false
     task.isWaiting = false
+    clearTimerForTask(taskId)
 
     // 向后端发送取消请求
     webSocketService.send({
@@ -177,11 +196,13 @@ export function useTaskList() {
    * @description 清空整个任务队列。
    */
   const clearAllTasks = () => {
+    taskList.value.forEach(task => clearTimerForTask(task.id));
     taskList.value = []
     selectedTask.value = null
   }
 
   const deleteTask = (taskId) => {
+    clearTimerForTask(taskId)
     const taskIndex = taskList.value.findIndex((t) => t.id === taskId)
     if (taskIndex !== -1) {
       if (selectedTask.value && selectedTask.value.id === taskId) {
@@ -200,6 +221,7 @@ export function useTaskList() {
     taskList,
     selectedTask,
     activeTaskLogs,
+    countdownTimers, // 导出倒计时状态
     addTask,
     executeTask,
     deleteTask,

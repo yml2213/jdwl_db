@@ -21,6 +21,7 @@
       :task-list="tasks"
       :logs="activeTaskLogs"
       :activeTab="state.activeTab"
+      :countdown-timers="countdownTimers"
       @update:activeTab="(newTab) => (state.activeTab = newTab)"
       @execute-tasks="runAllTasks"
       @clear-tasks="clearAllTasks"
@@ -55,6 +56,7 @@ const {
   taskList: tasks,
   selectedTask,
   activeTaskLogs,
+  countdownTimers,
   addTask: addTaskToTaskList,
   executeTask,
   deleteTask,
