@@ -83,7 +83,7 @@ export function useTaskList() {
     const newTask = {
       ...taskDetails,
       id: `task-${Date.now()}-${Math.random()}`,
-      status: '等待中',
+      status: '待执行',
       result: '',
       logs: [],
       isWaiting: false, // 初始化 isWaiting 状态
@@ -154,11 +154,11 @@ export function useTaskList() {
   }
 
   /**
-   * @description 按顺序执行队列中所有状态为"等待中"的任务。
+   * @description 按顺序执行队列中所有状态为"待执行"的任务。
    */
   const runAllTasks = async () => {
     for (const task of taskList.value) {
-      if (task.status === '等待中') {
+      if (task.status === '待执行') {
         await executeTask(task)
       }
     }
@@ -169,7 +169,7 @@ export function useTaskList() {
    */
   const clearFinishedTasks = () => {
     taskList.value = taskList.value.filter(
-      (t) => t.status === '等待中' || t.status === '运行中'
+      (t) => t.status === '待执行' || t.status === '运行中'
     )
   }
 
