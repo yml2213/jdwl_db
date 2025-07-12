@@ -1,7 +1,6 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
-import { resolve } from 'path'
 
 export default defineConfig({
   main: {

@@ -1,6 +1,5 @@
 import { getAllCookies } from '../utils/cookieHelper'
 
-// 恢复动态设置API地址，并为本地开发提供默认值
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:2333'
 
 /**

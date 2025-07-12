@@ -18,16 +18,22 @@ const workflows = {
         name: '入仓打标',
         stages: [
             {
-                name: '阶段一：商品准备 (并行)',
+                name: '阶段一：商品导入 (串行)',
+                sequential: true,
                 tasks: [
-                    // 这三个任务可以并行执行，它们都只依赖最初的SKU列表
                     { name: 'importStoreProducts', source: 'initial' },
-                    { name: 'getProductData', source: 'initial' }, // 这个任务负责获取详细的商品数据
-                    { name: 'enableStoreProducts', source: 'initial' }
+                    { type: 'delay', delay: 60000 } // 等待1分钟
                 ]
             },
             {
-                name: '阶段二：核心流程 (并行管道)',
+                name: '阶段二：商品处理 (并行)',
+                tasks: [
+                    { name: 'getProductData', source: 'importStoreProducts' },
+                    { name: 'enableStoreProducts', source: 'importStoreProducts' }
+                ]
+            },
+            {
+                name: '阶段三：核心流程 (并行管道)',
                 tasks: [
                     // 这两个任务都依赖 'getProductData' 的输出，可以并行启动
                     { name: 'importLogisticsAttributes', source: 'getProductData' },
@@ -35,7 +41,7 @@ const workflows = {
                 ]
             },
             {
-                name: '阶段三：依赖性收尾 (串行)',
+                name: '阶段四：依赖性收尾 (串行)',
                 tasks: [
                     // 这个任务依赖 'importLogisticsAttributes'
                     { name: 'addInventory', source: 'importLogisticsAttributes' },
