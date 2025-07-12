@@ -1181,7 +1181,8 @@ export async function startSessionOperation(sessionData) {
         { dataField: 'status', seq: 2 },
         { dataField: 'jdDeliver', seq: 3 },
         { dataField: 'goodsNo', seq: 4 },
-        { dataField: 'sellerGoodsSign', seq: 5 }
+        { dataField: 'sellerGoodsSign', seq: 5 },
+        { dataField: 'enableFlag', seq: 6 }
       ],
       reportSchemeConditionList: [
         { dataField: 'shopGoodsNo', seq: 0 },
