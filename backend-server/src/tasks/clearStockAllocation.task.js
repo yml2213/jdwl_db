@@ -119,7 +119,7 @@ function createExcelFile(skuList, department, store) {
     '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100库存方为固定值时，填写正整数，不能大于当前商品的库存总数',
     '可空，只有在库存管理方式为3-固定值时，读取仓库编码，若为空则按全部仓库执行'
   ]
-  const rows = skuList.map((sku) => [department.deptNo, '', sku, store.shopNo, 1, 0, '']) // 核心：库存比例为0
+  const rows = skuList.map((item) => [department.deptNo, '', item.sku, store.shopNo, 1, 0, '']) // 核心：库存比例为0
   const excelData = [headers, introRow, ...rows]
   const worksheet = XLSX.utils.aoa_to_sheet(excelData)
   const workbook = XLSX.utils.book_new()
