@@ -1476,19 +1476,19 @@ export async function getDepartmentList(vendorName, session) {
  * @returns {Promise<Array>} 店铺列表数组
  */
 export async function getShopList(deptId, shopName, session) {
-  const { cookieString, csrfToken } = getAuthInfo(session);
+  const { cookieString, csrfToken } = getAuthInfo(session)
   if (!deptId) {
-    throw new Error('获取店铺列表需要提供事业部ID (deptId)');
+    throw new Error('获取店铺列表需要提供事业部ID (deptId)')
   }
   // console.log('获取店铺列表 (后端实现) getShopList  ====> deptId', deptId);
   // console.log('获取店铺列表 (后端实现) getShopList  ====> shopName', shopName);
 
-  const allShops = [];
-  let currentStart = 0;
-  const pageSize = 100;
-  let hasMoreData = true;
+  const allShops = []
+  let currentStart = 0
+  const pageSize = 100
+  let hasMoreData = true
 
-  console.log(`[jdApiService] 开始获取店铺列表, 事业部ID: ${deptId}, 事业部名字: ${shopName}`);
+  console.log(`[jdApiService] 开始获取店铺列表, 事业部ID: ${deptId}, 事业部名字: ${shopName}`)
 
   while (hasMoreData) {
     const data = qs.stringify({
@@ -1509,7 +1509,7 @@ export async function getShopList(deptId, shopName, session) {
       originSend: '',
       // 注意: 此接口的 aoData 格式比较特殊
       aoData: `${currentStart},${pageSize}`
-    });
+    })
 
     try {
       const response = await requestJdApi({
@@ -1522,7 +1522,7 @@ export async function getShopList(deptId, shopName, session) {
           Origin: 'https://o.jdl.com',
           Referer: 'https://o.jdl.com/goToMainIframe.do'
         }
-      });
+      })
 
       if (response && response.aaData && Array.isArray(response.aaData)) {
         const pageShops = response.aaData.map(shop => ({
@@ -1540,28 +1540,28 @@ export async function getShopList(deptId, shopName, session) {
           sellerNo: shop.sellerNo,
           jdDeliver: shop.jdDeliver,
           jdDeliverStatus: shop.jdDeliverStatus
-        }));
+        }))
 
-        allShops.push(...pageShops);
+        allShops.push(...pageShops)
 
-        const totalRecords = response.iTotalRecords || 0;
-        currentStart += pageShops.length;
+        const totalRecords = response.iTotalRecords || 0
+        currentStart += pageShops.length
 
         if (currentStart >= totalRecords || pageShops.length === 0) {
-          hasMoreData = false;
+          hasMoreData = false
         }
       } else {
-        console.warn('[jdApiService] 获取店铺列表响应格式不正确:', response);
-        hasMoreData = false;
+        console.warn('[jdApiService] 获取店铺列表响应格式不正确:', response)
+        hasMoreData = false
       }
     } catch (error) {
-      console.error(`[jdApiService] 获取店铺列表分页时出错:`, error);
-      throw error; // 重新抛出错误
+      console.error(`[jdApiService] 获取店铺列表分页时出错:`, error)
+      throw error // 重新抛出错误
     }
   }
 
-  console.log(`[jdApiService] 店铺列表获取完成，共获取 ${allShops.length} 个店铺`);
-  return allShops;
+  console.log(`[jdApiService] 店铺列表获取完成，共获取 ${allShops.length} 个店铺`)
+  return allShops
 }
 
 /**
@@ -1572,17 +1572,17 @@ export async function getShopList(deptId, shopName, session) {
  * @returns {Promise<Array>} 仓库列表数组
  */
 export async function getWarehouseList(sellerId, deptId, session) {
-  const { cookieString, csrfToken } = getAuthInfo(session);
+  const { cookieString, csrfToken } = getAuthInfo(session)
   if (!sellerId || !deptId) {
-    throw new Error('获取仓库列表需要提供供应商ID和事业部ID');
+    throw new Error('获取仓库列表需要提供供应商ID和事业部ID')
   }
 
-  const allWarehouses = [];
-  let currentStart = 0;
-  const pageSize = 100;
-  let hasMoreData = true;
+  const allWarehouses = []
+  let currentStart = 0
+  const pageSize = 100
+  let hasMoreData = true
 
-  console.log(`[jdApiService] 开始获取仓库列表, 供应商ID: ${sellerId}, 事业部ID: ${deptId}`);
+  console.log(`[jdApiService] 开始获取仓库列表, 供应商ID: ${sellerId}, 事业部ID: ${deptId}`)
 
   // 原始的aoData模板
   const aoDataTemplate = [
@@ -1604,13 +1604,13 @@ export async function getWarehouseList(sellerId, deptId, session) {
     { "name": "iSortCol_0", "value": 1 },
     { "name": "sSortDir_0", "value": "desc" },
     { "name": "iSortingCols", "value": 1 }
-  ];
+  ]
 
   while (hasMoreData) {
     // 动态修改aoData的分页参数
-    const aoData = [...aoDataTemplate];
-    aoData.find(item => item.name === 'iDisplayStart').value = currentStart;
-    aoData.find(item => item.name === 'iDisplayLength').value = pageSize;
+    const aoData = [...aoDataTemplate]
+    aoData.find(item => item.name === 'iDisplayStart').value = currentStart
+    aoData.find(item => item.name === 'iDisplayLength').value = pageSize
 
     const data = qs.stringify({
       csrfToken: csrfToken,
@@ -1618,7 +1618,7 @@ export async function getWarehouseList(sellerId, deptId, session) {
       deptId: deptId,
       status: '1', // 启用状态
       aoData: JSON.stringify(aoData)
-    });
+    })
 
     try {
       const response = await requestJdApi({
@@ -1631,7 +1631,7 @@ export async function getWarehouseList(sellerId, deptId, session) {
           Origin: 'https://o.jdl.com',
           Referer: 'https://o.jdl.com/goToMainIframe.do'
         }
-      });
+      })
 
       if (response && response.aaData && Array.isArray(response.aaData)) {
         const pageWarehouses = response.aaData.map(w => ({
@@ -1644,25 +1644,198 @@ export async function getWarehouseList(sellerId, deptId, session) {
           deptName: w.deptName,
           effectTime: w.effectTime,
           updateTime: w.updateTime
-        }));
+        }))
 
-        allWarehouses.push(...pageWarehouses);
+        allWarehouses.push(...pageWarehouses)
 
-        const totalRecords = response.iTotalRecords || 0;
-        currentStart += pageWarehouses.length;
+        const totalRecords = response.iTotalRecords || 0
+        currentStart += pageWarehouses.length
 
         if (currentStart >= totalRecords || pageWarehouses.length === 0) {
-          hasMoreData = false;
+          hasMoreData = false
         }
       } else {
-        console.warn('[jdApiService] 获取仓库列表响应格式不正确:', response);
-        hasMoreData = false;
+        console.warn('[jdApiService] 获取仓库列表响应格式不正确:', response)
+        hasMoreData = false
       }
     } catch (error) {
-      console.error(`[jdApiService] 获取仓库列表分页时出错:`, error);
-      throw error; // 重新抛出错误
+      console.error(`[jdApiService] 获取仓库列表分页时出错:`, error)
+      throw error // 重新抛出错误
     }
   }
-  console.log(`[jdApiService] 仓库列表获取完成，共获取 ${allWarehouses.length} 个仓库`);
-  return allWarehouses;
+  console.log(`[jdApiService] 仓库列表获取完成，共获取 ${allWarehouses.length} 个仓库`)
+  return allWarehouses
+}
+
+/**
+ * 查询指定SKU列表中所有已启用的商品
+ * @param {string[]} skus - 要查询的SKU列表
+ * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
+ * @returns {Promise<Array<object>>} - 返回启用商品对象的列表，每个对象包含shopGoodsNo等信息
+ */
+export async function getEnabledProductsBySkus(skus, sessionData) {
+  getAuthInfo(sessionData)
+  const { departmentInfo, operationId } = sessionData
+
+  if (!skus || !Array.isArray(skus) || skus.length === 0) {
+    throw new Error('请求负载中必须包含一个非空的SKU数组。')
+  }
+
+  // 检查skus数组的第一个元素，判断是字符串数组还是对象数组
+  const skuList =
+    typeof skus[0] === 'object' && skus[0] !== null ? skus.map((item) => item.sku) : skus
+
+  if (!departmentInfo || !departmentInfo.sellerId) {
+    throw new Error('会话上下文中缺少有效的事业部信息 (departmentInfo)。')
+  }
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+  }
+
+  const deptId = departmentInfo.deptNo.split('CBU')[1]
+
+  const allProductData = await queryProductDataBySkus(skuList, deptId, operationId, sessionData)
+
+  console.log(`任务完成，共获取到 ${allProductData.length} 条商品数据。`)
+
+  // 过滤出状态为"启用"的商品
+  const enabledProducts = allProductData.filter((product) => product.status === '启用')
+
+  console.log(`[jdApiService] 总共获取了 ${enabledProducts.length} 个已启用的商品。`)
+  return enabledProducts
+}
+
+/**
+ * 停用店铺商品 https://o.jdl.com/shopGoods/batchOffShopGoods.do
+ * @param {string[]} shopGoodsNos - 商品CSG数组
+ * @param {object} sessionData - 完整的会话对象
+ * @param {function} updateFn - 更新函数
+ * @param {object} [cancellationToken] - 任务取消令牌
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function disableStoreProducts(
+  shopGoodsNos,
+  sessionData,
+  updateFn = () => { },
+  cancellationToken
+) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const batchSize = 100
+  const delay = 1500 // 1.5 seconds
+
+  const results = []
+  const totalBatches = Math.ceil(shopGoodsNos.length / batchSize)
+
+  for (let i = 0; i < shopGoodsNos.length; i += batchSize) {
+    if (cancellationToken && cancellationToken.isCancellationRequested) {
+      const message = '用户取消了操作'
+      updateFn(message)
+      throw new Error(message)
+    }
+
+    const batch = shopGoodsNos.slice(i, i + batchSize)
+    const currentBatchNum = i / batchSize + 1
+    const map = {}
+    batch.forEach((csg) => {
+      const id = csg.replace('CSG', '')
+      map[id] = []
+    })
+
+    const params = {
+      csrfToken,
+      map: JSON.stringify(map)
+    }
+
+    updateFn(`正在停用店铺商品，第 ${currentBatchNum}/${totalBatches} 批，数量: ${batch.length}`)
+
+    const result = await requestJdApi({
+      method: 'POST',
+      url: '/shopGoods/batchOffShopGoods.do',
+      data: qs.stringify(params),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://o.jdl.com/goToMainIframe.do'
+      }
+    })
+
+    results.push(result)
+
+    if (i + batchSize < shopGoodsNos.length) {
+      updateFn(`批次 ${currentBatchNum} 处理完成，等待 ${delay / 1000} 秒...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  updateFn('所有商品停用操作已完成。')
+  // 可以考虑对 results 做一些处理，返回一个更友好的结果
+  return { success: true, results }
+}
+
+/**
+ * 获取指定店铺中所有已启用的商品 (用于整店停用)
+ * @param {object} context - 包含店铺和部门信息
+ * @param {object} sessionData - 完整的会话对象, 包含 operationId
+ * @returns {Promise<Array<object>>} 返回已启用的商品对象列表
+ */
+export async function getEnabledProductsForStore(context, sessionData) {
+  const { cookieString } = getAuthInfo(sessionData)
+  const { store, department } = context
+  const { operationId } = sessionData
+
+  if (!store || !department || !department.deptNo || !store.shopName) {
+    throw new Error('获取店铺启用商品列表失败：缺少店铺或事业部信息。')
+  }
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+  }
+
+  const dataRequest = {
+    source: 2,
+    menuId: 'gs',
+    querySchemaID: operationId,
+    condition: {
+      shopName: store.shopName,
+      status: '1', // '1' 代表已启用
+      deptId: String(department.deptNo.split('CBU')[1])
+    }
+  }
+
+  const aaData = [
+    { name: 'iDisplayStart', value: 0 },
+    { name: 'iDisplayLength', value: 200000 } // 设置一个足够大的值以获取所有结果
+  ]
+
+  const form = new URLSearchParams()
+  form.append('dataRequest', JSON.stringify(dataRequest))
+  form.append('aaData', JSON.stringify(aaData))
+
+  try {
+    const data = await requestReportApi({
+      method: 'POST',
+      url: '/report/scheme/queryByPage.do',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://reportp.jclps.com/reportIndex',
+        Origin: 'https://reportp.jclps.com'
+      },
+      data: form.toString(),
+      responseType: 'json'
+    })
+
+    if (data && data.resultCode === 1 && data.resultData && data.resultData.aaData) {
+      return data.resultData.aaData // 返回完整的商品对象数组
+    } else if (data && data.resultCode === 1 && (!data.resultData || !data.resultData.aaData)) {
+      return [] // 没有找到商品
+    }
+
+    const errorMessage = data?.resultMessage || '查询店铺启用商品列表时，API返回错误。'
+    console.error('[getEnabledProductsForStore] Failed to fetch enabled products:', data)
+    throw new Error(errorMessage)
+  } catch (error) {
+    console.error('[getEnabledProductsForStore] Error fetching enabled products:', error)
+    throw error
+  }
 }
