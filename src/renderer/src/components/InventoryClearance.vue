@@ -103,81 +103,68 @@ const handleAddTask = () => {
       ? `批量任务 (${skus.length}个SKU)`
       : skus[0]
 
-  // 当选择“库存分配清零”时
-  if (form.value.options.clearStockAllocation) {
-    addTask({
-      sku: skuDisplayName,
-      name: '库存清零',
-      store: currentShopInfo.value,
-      warehouse: { warehouseName: 'N/A' },
-      // 使用新的工作流编排器格式
-      executionData: {
-        initialContext: { ...commonData },
-        stages: [
-          {
-            name: '库存分配清零阶段',
-            tasks: [{ name: 'clearStockAllocation', context: {} }]
-          }
-        ]
-      }
-    })
-  }
+  // 收集所有选中的功能，创建一个综合任务
+  const stages = []
+  const selectedTaskNames = []
 
-  // 当选择“取消京配打标”时
-  if (form.value.options.cancelJpSearch) {
-    addTask({
-      sku: skuDisplayName,
-      name: '取消京配打标',
-      store: currentShopInfo.value,
-      warehouse: { warehouseName: 'N/A' },
-      executionData: {
-        initialContext: {
-          ...commonData
-          // scope 已在 commonData 中正确设置，此处无需覆盖
-        },
-        stages: [
-          {
-            name: '查询商品信息阶段',
-            tasks: [{ name: 'getProductData', context: {} }]
-          },
-          {
-            name: '取消京配打标阶段',
-            tasks: [{ name: 'cancelJpSearch', context: {} }]
-          }
-        ]
-      }
-    })
-  }
+  // 按照指定顺序收集任务：停用店铺商品 - 停用商品主数据 - 库存分配清零 - 取消京配打标
 
-  // 当选择“停用店铺商品”时
+  // 1. 停用店铺商品
   if (form.value.options.disableStoreProducts) {
-    addTask({
-      sku: skuDisplayName,
-      name: '停用店铺商品',
-      store: currentShopInfo.value,
-      warehouse: { warehouseName: 'N/A' },
-      executionData: {
-        initialContext: { ...commonData },
-        stages: [{ name: '停用店铺商品阶段', tasks: [{ name: 'disableStoreProducts', context: {} }] }]
-      }
+    stages.push({
+      name: '停用店铺商品阶段',
+      tasks: [{ name: 'disableStoreProducts', context: {} }]
     })
+    selectedTaskNames.push('停用店铺商品')
   }
 
-  // 当选择“停用商品主数据”时
+  // 2. 停用商品主数据
   if (form.value.options.disableProductMasterData) {
-    addTask({
-      sku: skuDisplayName,
-      name: '停用商品主数据',
-      store: currentShopInfo.value,
-      warehouse: { warehouseName: 'N/A' },
-      executionData: {
-        initialContext: { ...commonData },
-        stages: [
-          { name: '停用商品主数据阶段', tasks: [{ name: 'disableProductMasterData', context: {} }] }
-        ]
-      }
+    stages.push({
+      name: '停用商品主数据阶段',
+      tasks: [{ name: 'disableProductMasterData', context: {} }]
     })
+    selectedTaskNames.push('停用商品主数据')
   }
+
+  // 3. 库存分配清零
+  if (form.value.options.clearStockAllocation) {
+    stages.push({
+      name: '库存分配清零阶段',
+      tasks: [{ name: 'clearStockAllocation', context: {} }]
+    })
+    selectedTaskNames.push('库存分配清零')
+  }
+
+  // 4. 取消京配打标
+  if (form.value.options.cancelJpSearch) {
+    // 取消京配打标需要先查询商品信息，分为两个连续的阶段
+    stages.push({
+      name: '查询商品信息阶段',
+      tasks: [{ name: 'getProductData', context: {} }]
+    })
+    stages.push({
+      name: '取消京配打标阶段',
+      tasks: [{ name: 'cancelJpSearch', context: {} }]
+    })
+    selectedTaskNames.push('取消京配打标')
+  }
+
+  // 创建一个综合任务，包含所有选中的子任务，每个子任务为独立的stage确保顺序执行
+  const taskName = selectedTaskNames.length > 1 
+    ? `清库下架 (${selectedTaskNames.join(' + ')})` 
+    : selectedTaskNames[0]
+
+  addTask({
+    sku: skuDisplayName,
+    name: taskName,
+    store: currentShopInfo.value,
+    warehouse: { warehouseName: 'N/A' },
+    executionData: {
+      initialContext: { ...commonData },
+      stages: stages
+    }
+  })
 }
 
 // --- 侦听器和生命周期 ---
