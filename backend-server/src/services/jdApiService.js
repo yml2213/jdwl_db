@@ -1774,6 +1774,73 @@ export async function disableStoreProducts(
 }
 
 /**
+ * 获取指定店铺中所有商品 (用于整店操作，不限制状态)
+ * @param {object} context - 包含店铺和部门信息
+ * @param {object} sessionData - 完整的会话对象, 包含 operationId
+ * @returns {Promise<Array<object>>} 返回所有商品对象列表
+ */
+export async function getAllProductsForStore(context, sessionData) {
+  const { cookieString } = getAuthInfo(sessionData)
+  const { store, department } = context
+  const { operationId } = sessionData
+
+  if (!store || !department || !department.deptNo || !store.shopName) {
+    throw new Error('获取店铺商品列表失败：缺少店铺或事业部信息。')
+  }
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+  }
+
+  const dataRequest = {
+    source: 2,
+    menuId: 'gs',
+    querySchemaID: operationId,
+    condition: {
+      shopName: store.shopName,
+      // 不设置status条件，获取所有商品
+      deptId: String(department.deptNo.split('CBU')[1])
+    }
+  }
+
+  const aaData = [
+    { name: 'iDisplayStart', value: 0 },
+    { name: 'iDisplayLength', value: 200000 } // 设置一个足够大的值以获取所有结果
+  ]
+
+  const form = new URLSearchParams()
+  form.append('dataRequest', JSON.stringify(dataRequest))
+  form.append('aaData', JSON.stringify(aaData))
+
+  try {
+    const data = await requestReportApi({
+      method: 'POST',
+      url: '/report/scheme/queryByPage.do',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://reportp.jclps.com',
+        Origin: 'https://reportp.jclps.com'
+      },
+      data: form.toString(),
+      responseType: 'json'
+    })
+
+    if (data && data.resultCode === 1 && data.resultData && data.resultData.aaData) {
+      return data.resultData.aaData // 返回完整的商品对象数组
+    } else if (data && data.resultCode === 1 && (!data.resultData || !data.resultData.aaData)) {
+      return [] // 没有找到商品
+    }
+
+    const errorMessage = data?.resultMessage || '查询店铺商品列表时，API返回错误。'
+    console.error('[getAllProductsForStore] Failed to fetch all products:', data)
+    throw new Error(errorMessage)
+  } catch (error) {
+    console.error('[getAllProductsForStore] Error fetching all products:', error)
+    throw error
+  }
+}
+
+/**
  * 获取指定店铺中所有已启用的商品 (用于整店停用)
  * @param {object} context - 包含店铺和部门信息
  * @param {object} sessionData - 完整的会话对象, 包含 operationId
@@ -1838,4 +1905,110 @@ export async function getEnabledProductsForStore(context, sessionData) {
     console.error('[getEnabledProductsForStore] Error fetching enabled products:', error)
     throw error
   }
+}
+
+/**
+ * 根据SKU列表查询启用的商品主数据
+ * @param {Array<string|object>} skus - SKU数组，可以是字符串数组或包含sku属性的对象数组
+ * @param {object} sessionData - 完整的会话对象，包含 operationId 和部门信息
+ * @returns {Promise<Array<object>>} - 返回启用商品主数据对象的列表，包含goodsNo等信息
+ */
+export async function getEnabledProductMasterDataBySkus(skus, sessionData) {
+  getAuthInfo(sessionData)
+  const { departmentInfo, operationId } = sessionData
+
+  if (!skus || !Array.isArray(skus) || skus.length === 0) {
+    throw new Error('请求负载中必须包含一个非空的SKU数组。')
+  }
+
+  // 检查skus数组的第一个元素，判断是字符串数组还是对象数组
+  const skuList =
+    typeof skus[0] === 'object' && skus[0] !== null ? skus.map((item) => item.sku) : skus
+
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+  }
+
+  if (!departmentInfo || !departmentInfo.deptNo) {
+    throw new Error('会话上下文中缺少有效的部门信息。')
+  }
+
+  const deptId = String(departmentInfo.deptNo.split('CBU')[1])
+
+  // 调用通用的查询方法
+  const allProducts = await queryProductDataBySkus(skuList, deptId, operationId, sessionData)
+
+  // 过滤出启用的商品主数据（enableFlag 为 "启用"）
+  const enabledProducts = allProducts.filter((product) => product.enableFlag === '启用')
+
+  console.log(
+    `[getEnabledProductMasterDataBySkus] 从 ${skuList.length} 个SKU中查询到 ${allProducts.length} 个商品，其中 ${enabledProducts.length} 个商品主数据已启用。`
+  )
+
+  return enabledProducts
+}
+
+/**
+ * 批量停用商品主数据
+ * @param {Array<string>} goodsNos - 商品主数据goodsNo数组（CMG开头的完整编号）
+ * @param {object} sessionData - 完整的会话对象
+ * @param {function} updateFn - 进度更新函数
+ * @param {object} cancellationToken - 取消令牌
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function disableProductMasterData(
+  goodsNos,
+  sessionData,
+  updateFn = () => {},
+  cancellationToken
+) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const batchSize = 100
+  const delay = 1500 // 1.5 seconds
+
+  const results = []
+  const totalBatches = Math.ceil(goodsNos.length / batchSize)
+
+  for (let i = 0; i < goodsNos.length; i += batchSize) {
+    if (cancellationToken && cancellationToken.isCancellationRequested) {
+      const message = '用户取消了操作'
+      updateFn(message)
+      throw new Error(message)
+    }
+
+    const batch = goodsNos.slice(i, i + batchSize)
+    const currentBatchNum = i / batchSize + 1
+    
+    // 去掉CMG前缀，获取纯数字ID
+    const ids = batch.map((goodsNo) => goodsNo.replace('CMG', ''))
+
+    const params = {
+      csrfToken,
+      ids: JSON.stringify(ids)
+    }
+
+    updateFn(`正在停用商品主数据，第 ${currentBatchNum}/${totalBatches} 批，数量: ${batch.length}`)
+
+    const result = await requestJdApi({
+      method: 'POST',
+      url: '/goods/batchOffGoods.do',
+      data: qs.stringify(params),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://o.jdl.com/goToMainIframe.do'
+      }
+    })
+
+    results.push(result)
+
+    if (i + batchSize < goodsNos.length) {
+      updateFn(`批次 ${currentBatchNum} 处理完成，等待 ${delay / 1000} 秒...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  updateFn('所有商品主数据停用操作已完成。')
+  return { success: true, results }
 }
