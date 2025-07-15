@@ -44,15 +44,33 @@ async function execute(context, sessionData, cancellationToken = { value: true }
 
     if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
-    if (disabledProducts.length === 0) {
-      const message = '所有被检查的商品状态均为启用，无需操作。'
-      updateFn({ message, type: 'info' })
-      // 即使没有禁用的商品，任务也算成功完成了对所有SKU的“检查”
-      return { success: true, message, data: skusToCheck.map(sku => ({ sku })) };
-    }
-    updateFn({ message: `查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...` })
+    // 查询已停用的商品主数据
+    const disabledProductsMasterData = await jdApiService.getDisabledProductMasterDataBySkus(skusToCheck, sessionData)
 
-    const cmgList = disabledProducts.map((p) => p.goodsNo).filter(Boolean)
+
+    // 检查是否有需要启用的商品
+    const hasDisabledItems = disabledProducts.length > 0 || disabledProductsMasterData.length > 0
+
+    if (!hasDisabledItems) {
+      const message = '所有被检查的商品和商品主数据均为启用状态，无需操作。'
+      updateFn({ message, type: 'info' })
+      // 即使没有禁用的商品，任务也算成功完成了对所有SKU的"检查"
+      return { success: true, message, data: skusToCheck.map(sku => ({ sku })) }
+    }
+
+    // 输出详细的检查结果
+    updateFn({
+      message: `检查结果: 发现${disabledProducts.length}个停用商品, ${disabledProductsMasterData.length}个停用商品主数据`,
+      type: 'info'
+    })
+
+
+
+
+    // 启用商品主数据 是根据商品主数据编号（CMG编码）来启用的，所以需要查询已停用的商品主数据
+    const disabledProductsMasterDataSkus = disabledProductsMasterData.map(item => item.goodsNo)
+    const cmgList = disabledProductsMasterDataSkus.filter(Boolean)
+
     if (cmgList.length > 0) {
       const numericCmgs = cmgList.map((cmg) => cmg.replace('CMG', ''))
       updateFn({ message: `正在启用 ${numericCmgs.length} 个商品主数据...` })
@@ -66,6 +84,8 @@ async function execute(context, sessionData, cancellationToken = { value: true }
       updateFn({ message: msg, type: 'success' })
     }
 
+    // 启用店铺商品 是根据店铺商品编号（CSG编码）来启用的，所以需要查询已停用的店铺商品
+    updateFn({ message: `查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...` })
     const csgList = disabledProducts.map((p) => p.shopGoodsNo).filter(Boolean)
     if (csgList.length > 0) {
       updateFn({ message: `正在通过上传文件启用 ${csgList.length} 个店铺商品...` })

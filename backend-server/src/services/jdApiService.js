@@ -1948,6 +1948,49 @@ export async function getEnabledProductMasterDataBySkus(skus, sessionData) {
   return enabledProducts
 }
 
+
+/**
+ * 根据SKU列表查询停用的商品主数据
+ * @param {Array<string|object>} skus - SKU数组，可以是字符串数组或包含sku属性的对象数组
+ * @param {object} sessionData - 完整的会话对象，包含 operationId 和部门信息
+ * @returns {Promise<Array<object>>} - 返回启用商品主数据对象的列表，包含goodsNo等信息
+ */
+export async function getDisabledProductMasterDataBySkus(skus, sessionData) {
+  getAuthInfo(sessionData)
+  const { departmentInfo, operationId } = sessionData
+
+  if (!skus || !Array.isArray(skus) || skus.length === 0) {
+    throw new Error('请求负载中必须包含一个非空的SKU数组。')
+  }
+
+  // 检查skus数组的第一个元素，判断是字符串数组还是对象数组
+  const skuList =
+    typeof skus[0] === 'object' && skus[0] !== null ? skus.map((item) => item.sku) : skus
+
+  if (!operationId) {
+    throw new Error('会话上下文中缺少有效的查询方案ID (operationId)。')
+  }
+
+  if (!departmentInfo || !departmentInfo.deptNo) {
+    throw new Error('会话上下文中缺少有效的部门信息。')
+  }
+
+  const deptId = String(departmentInfo.deptNo.split('CBU')[1])
+
+  // 调用通用的查询方法
+  const allProducts = await queryProductDataBySkus(skuList, deptId, operationId, sessionData)
+
+  // 过滤出停用的商品主数据（enableFlag 为 "停用"）
+  const disabledProducts = allProducts.filter((product) => product.enableFlag === '停用')
+
+  console.log(
+    `[getDisabledProductMasterDataBySkus] 从 ${skuList.length} 个SKU中查询到 ${allProducts.length} 个商品，其中 ${disabledProducts.length} 个商品主数据已停用。`
+  )
+
+  return disabledProducts
+}
+
+
 /**
  * 批量停用商品主数据
  * @param {Array<string>} goodsNos - 商品主数据goodsNo数组（CMG开头的完整编号）
@@ -1959,7 +2002,7 @@ export async function getEnabledProductMasterDataBySkus(skus, sessionData) {
 export async function disableProductMasterData(
   goodsNos,
   sessionData,
-  updateFn = () => {},
+  updateFn = () => { },
   cancellationToken
 ) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
@@ -1979,7 +2022,7 @@ export async function disableProductMasterData(
 
     const batch = goodsNos.slice(i, i + batchSize)
     const currentBatchNum = i / batchSize + 1
-    
+
     // 去掉CMG前缀，获取纯数字ID
     const ids = batch.map((goodsNo) => goodsNo.replace('CMG', ''))
 
