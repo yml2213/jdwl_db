@@ -96,8 +96,8 @@ function createExcelFile(lifecycleItems, department, store) {
     const productData = item.data;
     return [
       department.deptNo,
-      productData.goodsNo, // 主商品编码 (CMG)
-      productData.sellerGoodsSign, // 商家商品标识 (SKU)
+      productData.goodsNo || '', // 主商品编码 (CMG)
+      item.sku || productData.sellerGoodsSign || '', // 商家商品标识 (SKU)
       store.shopNo,
       1, // 1-独占
       100,

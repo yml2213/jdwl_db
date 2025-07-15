@@ -27,7 +27,7 @@ const reportApiAxios = axios.create({
 // 创建一个专门用于京东API请求的axios实例
 const jdApiAxios = axios.create({
   baseURL: 'https://o.jdl.com',
-  timeout: 120000, // 120秒超时
+  timeout: 360000, // 360秒超时（6分钟），支持库存分配等长时间任务
   headers: {
     'User-Agent':
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
