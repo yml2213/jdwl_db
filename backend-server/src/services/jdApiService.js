@@ -144,6 +144,7 @@ export async function uploadStoreProducts(fileBuffer, sessionData) {
     } catch (e) {
       // 不是JSON字符串，可能是"频繁操作"等纯文本
       console.log('[jdApiService] 文件上传完成，纯文本响应:', response)
+      console.log('[jdApiService] 文件上传完成，纯文本响应:', e)
       if (response.includes('频繁操作')) {
         return { result: false, msg: response }
       }

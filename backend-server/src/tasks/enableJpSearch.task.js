@@ -9,7 +9,7 @@ import { executeInBatches } from '../utils/batchProcessor.js'
 
 const TEMP_DIR_NAME = '启用京配打标生效'
 const API_BATCH_SIZE = 5000 // Excel上传类任务的批次可以大一些
-const BATCH_DELAY = 1000  // 1秒
+const BATCH_DELAY = 1000 * 10  // 10秒
 
 /**
  * 主执行函数 - 为一批CSG启用京配打标
