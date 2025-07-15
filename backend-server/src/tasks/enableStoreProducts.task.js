@@ -2,20 +2,10 @@
  * 后端任务：启用店铺商品
  * 这个任务有双重职责:
  *   1. 启用商品主数据 (使用CMG编码，直接调用API)
- *   2. 启用店铺内商品 (使用CSG编码，通过上传Excel)
+ *   2. 启用店铺内商品 (使用CSG编码，直接调用API)
  * 核心逻辑是先找出已停用的商品，然后只对它们执行以上两个操作。
- * 
- * [jdApiService] 尝试上传商品状态更新文件 (importUpdateShopGoodsStatus.do)...
- * [jdApiService] 文件上传成功，响应: { resultCode: 0, resultMessage: '超过限制的最大数500' }
- * 
- * 
- * 
  */
 import * as jdApiService from '../services/jdApiService.js'
-import * as XLSX from 'xlsx'
-import { saveExcelFile } from '../utils/fileUtils.js'
-
-const TEMP_DIR_NAME = '启用店铺商品'
 
 /**
  * @param {object} context
@@ -103,24 +93,24 @@ async function execute(context, sessionData, cancellationToken = { value: true }
     updateFn({ message: `查询到 ${disabledProducts.length} 个已停用的商品，准备执行启用操作...` })
     const csgList = disabledProducts.map((p) => p.shopGoodsNo).filter(Boolean)
     if (csgList.length > 0) {
-      updateFn({ message: `正在通过上传文件启用 ${csgList.length} 个店铺商品...` })
-      const fileBuffer = createStatusUpdateExcel(csgList)
-      const filePath = await saveExcelFile(fileBuffer, {
-        dirName: TEMP_DIR_NAME,
-        store: context.store,
-        extension: 'xls'
-      })
-      updateFn({ message: `状态更新Excel文件已保存到: ${filePath}` })
-      const uploadResult = await jdApiService.uploadStatusUpdateFile(fileBuffer, {
-        ...sessionData,
-        ...context
-      })
+      updateFn({ message: `正在通过API启用 ${csgList.length} 个店铺商品...` })
+      
+      // 创建进度更新函数
+      const progressUpdateFn = (message) => {
+        updateFn({ message, type: 'info' })
+      }
+      
+      const enableResult = await jdApiService.enableStoreShopGoods(
+        csgList,
+        sessionData,
+        progressUpdateFn,
+        cancellationToken
+      )
 
       if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
-      const match = uploadResult.message.match(/成功(?:导入|更新)\s*(\d+)\s*条/)
-      const successCount = match ? parseInt(match[1], 10) : csgList.length
-      const msg = `启用店铺商品成功(${successCount}个)`
+      if (!enableResult.success) throw new Error(`启用店铺商品失败`)
+      const msg = `启用店铺商品成功(${csgList.length}个)`
       messages.push(msg)
       updateFn({ message: msg, type: 'success' })
     }
@@ -142,15 +132,6 @@ async function execute(context, sessionData, cancellationToken = { value: true }
     updateFn({ message: errorMsg, type: 'error' })
     throw new Error(errorMsg)
   }
-}
-
-function createStatusUpdateExcel(csgList) {
-  const headers = ['店铺商品编号 (CSG编码)', '商品状态(1启用, 2停用)']
-  const dataRows = csgList.map((csg) => [csg, 1]) // 1 = 启用
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'sheet1')
-  return XLSX.write(wb, { bookType: 'xls', type: 'buffer' })
 }
 
 export default {

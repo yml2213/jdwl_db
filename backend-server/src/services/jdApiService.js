@@ -1746,6 +1746,71 @@ export async function getEnabledProductsBySkus(skus, sessionData) {
 }
 
 /**
+ * 启用店铺商品 https://o.jdl.com/shopGoods/batchOnShopGoods.do
+ * @param {string[]} shopGoodsNos - 商品CSG数组
+ * @param {object} sessionData - 完整的会话对象
+ * @param {function} updateFn - 更新函数
+ * @param {object} [cancellationToken] - 任务取消令牌
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function enableStoreShopGoods(
+  shopGoodsNos,
+  sessionData,
+  updateFn = () => { },
+  cancellationToken
+) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const batchSize = 100
+  const delay = 1500 // 1.5 seconds
+
+  const results = []
+  const totalBatches = Math.ceil(shopGoodsNos.length / batchSize)
+
+  for (let i = 0; i < shopGoodsNos.length; i += batchSize) {
+    if (cancellationToken && !cancellationToken.value) {
+      const message = '用户取消了操作'
+      updateFn(message)
+      throw new Error(message)
+    }
+
+    const batch = shopGoodsNos.slice(i, i + batchSize)
+    const currentBatchNum = i / batchSize + 1
+    
+    // 去掉CSG前缀，获取纯数字ID数组
+    const ids = batch.map((csg) => csg.replace('CSG', ''))
+
+    const params = {
+      csrfToken,
+      ids: JSON.stringify(ids)
+    }
+
+    updateFn(`正在启用店铺商品，第 ${currentBatchNum}/${totalBatches} 批，数量: ${batch.length}`)
+
+    const result = await requestJdApi({
+      method: 'POST',
+      url: '/shopGoods/batchOnShopGoods.do',
+      data: qs.stringify(params),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://o.jdl.com/goToMainIframe.do'
+      }
+    })
+
+    results.push(result)
+
+    if (i + batchSize < shopGoodsNos.length) {
+      updateFn(`批次 ${currentBatchNum} 处理完成，等待 ${delay / 1000} 秒...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  updateFn('所有店铺商品启用操作已完成。')
+  return { success: true, results }
+}
+
+/**
  * 停用店铺商品 https://o.jdl.com/shopGoods/batchOffShopGoods.do
  * @param {string[]} shopGoodsNos - 商品CSG数组
  * @param {object} sessionData - 完整的会话对象
@@ -1768,7 +1833,7 @@ export async function disableStoreProducts(
   const totalBatches = Math.ceil(shopGoodsNos.length / batchSize)
 
   for (let i = 0; i < shopGoodsNos.length; i += batchSize) {
-    if (cancellationToken && cancellationToken.isCancellationRequested) {
+    if (cancellationToken && !cancellationToken.value) {
       const message = '用户取消了操作'
       updateFn(message)
       throw new Error(message)
