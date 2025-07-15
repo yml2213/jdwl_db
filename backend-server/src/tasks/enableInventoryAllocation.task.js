@@ -68,6 +68,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
     items: skuLifecycles,
     batchSize: API_BATCH_SIZE,
     delay: BATCH_DELAY,
+    delayBetweenBatches: BATCH_DELAY, // 成功批次之间也等待300秒
     batchFn,
     log: (logData) => updateFn(typeof logData === 'string' ? { message: logData } : logData),
     isRunning: cancellationToken,
