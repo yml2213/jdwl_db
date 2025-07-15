@@ -4,6 +4,12 @@
  *   1. 启用商品主数据 (使用CMG编码，直接调用API)
  *   2. 启用店铺内商品 (使用CSG编码，通过上传Excel)
  * 核心逻辑是先找出已停用的商品，然后只对它们执行以上两个操作。
+ * 
+ * [jdApiService] 尝试上传商品状态更新文件 (importUpdateShopGoodsStatus.do)...
+ * [jdApiService] 文件上传成功，响应: { resultCode: 0, resultMessage: '超过限制的最大数500' }
+ * 
+ * 
+ * 
  */
 import * as jdApiService from '../services/jdApiService.js'
 import * as XLSX from 'xlsx'
@@ -68,18 +74,27 @@ async function execute(context, sessionData, cancellationToken = { value: true }
 
 
     // 启用商品主数据 是根据商品主数据编号（CMG编码）来启用的，所以需要查询已停用的商品主数据
-    const disabledProductsMasterDataSkus = disabledProductsMasterData.map(item => item.goodsNo)
-    const cmgList = disabledProductsMasterDataSkus.filter(Boolean)
+    const cmgList = disabledProductsMasterData.map(item => item.goodsNo).filter(Boolean)
 
     if (cmgList.length > 0) {
-      const numericCmgs = cmgList.map((cmg) => cmg.replace('CMG', ''))
-      updateFn({ message: `正在启用 ${numericCmgs.length} 个商品主数据...` })
-      const result = await jdApiService.enableStoreProducts(numericCmgs, sessionData)
+      updateFn({ message: `正在启用 ${cmgList.length} 个商品主数据...` })
+
+      // 创建进度更新函数
+      const progressUpdateFn = (message) => {
+        updateFn({ message, type: 'info' })
+      }
+
+      const result = await jdApiService.enableStoreProducts(
+        cmgList,
+        sessionData,
+        progressUpdateFn,
+        cancellationToken
+      )
 
       if (!cancellationToken.value) return { success: false, message: '任务已取消。' }
 
-      if (result.resultCode !== 1) throw new Error(`启用主数据失败: ${result.resultMessage}`)
-      const msg = `启用主数据成功(${numericCmgs.length}个)`
+      if (!result.success) throw new Error(`启用主数据失败`)
+      const msg = `启用主数据成功(${cmgList.length}个)`
       messages.push(msg)
       updateFn({ message: msg, type: 'success' })
     }

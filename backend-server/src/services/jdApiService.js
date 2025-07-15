@@ -1054,27 +1054,67 @@ export async function clearStockForWholeStore(shopId, deptId, sessionData, updat
 
 /**
  * 启用商品主数据 https://o.jdl.com/goods/batchOnGoods.do
- * @param {string[]} cmgs_enableStoreProducts - 商品CMG数组  --- 去掉 CMG 开头 4422471628225 4422471628225
+ * @param {string[]} goodsNos - 商品主数据goodsNo数组（CMG开头的完整编号）
  * @param {object} sessionData - 完整的会话对象
+ * @param {function} updateFn - 进度更新函数
+ * @param {object} cancellationToken - 取消令牌
  * @returns {Promise<object>} - 操作结果
  */
-export async function enableStoreProducts(cmgs_enableStoreProducts, sessionData) {
+export async function enableStoreProducts(
+  goodsNos,
+  sessionData,
+  updateFn = () => { },
+  cancellationToken
+) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
-  const params = {
-    csrfToken,
-    ids: JSON.stringify(cmgs_enableStoreProducts)
-  }
-  console.log('启用商品主数据 ===>', params)
-  return await requestJdApi({
-    method: 'POST',
-    url: '/goods/batchOnGoods.do',
-    data: params,
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      Cookie: cookieString,
-      Referer: 'https://o.jdl.com/goToMainIframe.do'
+
+  const batchSize = 100
+  const delay = 1500 // 1.5 seconds
+
+  const results = []
+  const totalBatches = Math.ceil(goodsNos.length / batchSize)
+
+  for (let i = 0; i < goodsNos.length; i += batchSize) {
+    if (cancellationToken && !cancellationToken.value) {
+      const message = '用户取消了操作'
+      updateFn(message)
+      throw new Error(message)
     }
-  })
+
+    const batch = goodsNos.slice(i, i + batchSize)
+    const currentBatchNum = i / batchSize + 1
+
+    // 去掉CMG前缀，获取纯数字ID
+    const ids = batch.map((goodsNo) => goodsNo.replace('CMG', ''))
+
+    const params = {
+      csrfToken,
+      ids: JSON.stringify(ids)
+    }
+
+    updateFn(`正在启用商品主数据，第 ${currentBatchNum}/${totalBatches} 批，数量: ${batch.length}`)
+
+    const result = await requestJdApi({
+      method: 'POST',
+      url: '/goods/batchOnGoods.do',
+      data: qs.stringify(params),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://o.jdl.com/goToMainIframe.do'
+      }
+    })
+
+    results.push(result)
+
+    if (i + batchSize < goodsNos.length) {
+      updateFn(`批次 ${currentBatchNum} 处理完成，等待 ${delay / 1000} 秒...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  updateFn('所有商品主数据启用操作已完成。')
+  return { success: true, results }
 }
 
 /**
