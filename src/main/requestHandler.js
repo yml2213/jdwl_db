@@ -31,13 +31,6 @@ async function logRequest(message) {
   }
 }
 
-// 创建axios实例
-const axiosInstance = axios.create({
-  timeout: 120000, // 修改为120秒超时，以处理大文件上传
-  validateStatus: (status) => status >= 200 && status < 300, // 定义有效的状态码
-  maxContentLength: 100 * 1024 * 1024, // 100MB的最大请求内容限制
-  maxBodyLength: 100 * 1024 * 1024 // 100MB的最大请求体限制
-})
 
 /**
  * 发送HTTP请求

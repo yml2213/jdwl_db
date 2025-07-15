@@ -74,6 +74,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
       items: skuLifecycles, // 传递整个生命周期对象数组
       batchSize: BATCH_SIZE,
       delay: BATCH_DELAY,
+      delayBetweenBatches: BATCH_DELAY, // 添加成功批次之间的等待时间
       batchFn,
       log: (logData) => updateFn(typeof logData === 'string' ? { message: logData } : logData),
       isRunning: cancellationToken
