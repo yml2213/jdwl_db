@@ -8,7 +8,7 @@
         v-if="log && typeof log === 'object'"
         :class="`log-entry log-${log.type || 'info'}`"
       >
-        <span class="log-time">[{{ log.time || new Date().toLocaleTimeString() }}]</span>
+        <span class="log-time">[{{ log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString() }}]</span>
         <span class="log-message">{{ log.message || JSON.stringify(log) }}</span>
       </div>
       <div v-else-if="log" class="log-entry log-info">

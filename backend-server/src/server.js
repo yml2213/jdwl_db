@@ -365,14 +365,23 @@ const handleWebSocketMessage = async (ws, message) => {
 
             if (typeof data === 'string') {
                 // 如果传入的是字符串，包装成标准日志对象
-                messageObject = { event: 'log', message: data, type: 'info' };
+                messageObject = { event: 'log', message: data, type: 'info', timestamp: new Date().toISOString() };
             } else if (typeof data === 'object' && data !== null) {
-                // 如果是对象，确保它有 event 属性
-                messageObject = { event: 'log', ...data }; // 默认 event 是 'log'
+                // 如果是对象，确保它有 event 属性和 timestamp
+                messageObject = { 
+                    event: 'log', 
+                    timestamp: new Date().toISOString(),
+                    ...data 
+                }; // 默认 event 是 'log'，timestamp 会被 data 中的值覆盖（如果有）
             } else {
                 // 对于其他意外类型，记录一个警告
                 console.warn(`[UpdateFn] Received data of unexpected type: ${typeof data}`);
-                messageObject = { event: 'log', message: `警告: 收到意外的数据类型 ${typeof data}`, type: 'warn' };
+                messageObject = { 
+                    event: 'log', 
+                    message: `警告: 收到意外的数据类型 ${typeof data}`, 
+                    type: 'warn',
+                    timestamp: new Date().toISOString()
+                };
             }
 
             // 最后，为所有消息统一添加 taskId 并发送

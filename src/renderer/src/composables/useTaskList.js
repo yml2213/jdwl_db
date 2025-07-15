@@ -34,9 +34,13 @@ export function useTaskList() {
     switch (event) {
       case 'log':
         // 后端重构后, 日志内容在 `message` 属性中, 它被 ...rest 操作符捕获
-        // 所以我们应该从 `rest.message` 而不是 `data` 中获取日志
+        // 保存完整的日志对象，包括timestamp等字段
         if (rest.message) {
-          task.logs.push(rest.message);
+          task.logs.push({
+            message: rest.message,
+            type: rest.type || 'info',
+            timestamp: rest.timestamp
+          });
         } else if (data) {
           // 保留旧的逻辑以防万一
           task.logs.push(typeof data === 'object' ? JSON.stringify(data) : data);

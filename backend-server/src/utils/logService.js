@@ -9,7 +9,7 @@ const rootLogger = pino({
         target: 'pino-pretty',
         options: {
             colorize: true,
-            translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
+            translateTime: 'SYS:yyyy-mm-dd HH:mm:ss',
             ignore: 'pid,hostname,taskId' // 在控制台输出中忽略这些字段
         }
     }
