@@ -22,7 +22,7 @@ const workflows = {
                 sequential: true,
                 tasks: [
                     { name: 'importStoreProducts', source: 'initial' },
-                    { type: 'delay', delay: 60000 } // 等待1分钟
+                    { type: 'delay', delay: 2 * 60 * 1000 } // 等待2分钟
                 ]
             },
             {
@@ -108,4 +108,4 @@ export const taskDependencies = {
     enableInventoryAllocation: 'getProductData',
     addInventory: 'getProductData',
     enableJpSearch: 'getProductData',
-}; 
+} 
