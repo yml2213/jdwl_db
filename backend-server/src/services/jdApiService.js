@@ -342,6 +342,154 @@ async function fetchShopGoodsPage(skuBatch, status, sessionData, start, length) 
   })
 }
 
+
+
+
+/**
+ * 启用商品主数据 https://o.jdl.com/goods/batchOnGoods.do
+ * @param {string[]} goodsNos - 商品主数据goodsNo数组（CMG开头的完整编号）
+ * @param {object} sessionData - 完整的会话对象
+ * @param {function} updateFn - 进度更新函数
+ * @param {object} cancellationToken - 取消令牌
+ * @returns {Promise<object>} - 操作结果
+ */
+export async function enableStoreProducts_bak(
+  goodsNos,
+  sessionData,
+  updateFn = () => { },
+  cancellationToken
+) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const batchSize = 100
+  const delay = 1500 // 1.5 seconds
+
+  const results = []
+  const totalBatches = Math.ceil(goodsNos.length / batchSize)
+
+  for (let i = 0; i < goodsNos.length; i += batchSize) {
+    if (cancellationToken && !cancellationToken.value) {
+      const message = '用户取消了操作'
+      updateFn(message)
+      throw new Error(message)
+    }
+
+    const batch = goodsNos.slice(i, i + batchSize)
+    const currentBatchNum = i / batchSize + 1
+
+    // 去掉CMG前缀，获取纯数字ID
+    const ids = batch.map((goodsNo) => goodsNo.replace('CMG', ''))
+
+    const params = {
+      csrfToken,
+      ids: JSON.stringify(ids)
+    }
+
+    updateFn(`正在启用商品主数据，第 ${currentBatchNum}/${totalBatches} 批，数量: ${batch.length}`)
+
+    const result = await requestJdApi({
+      method: 'POST',
+      url: '/goods/batchOnGoods.do',
+      data: qs.stringify(params),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Cookie: cookieString,
+        Referer: 'https://o.jdl.com/goToMainIframe.do'
+      }
+    })
+
+    results.push(result)
+
+    if (i + batchSize < goodsNos.length) {
+      updateFn(`批次 ${currentBatchNum} 处理完成，等待 ${delay / 1000} 秒...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  updateFn('所有商品主数据启用操作已完成。')
+  return { success: true, results }
+}
+
+
+/**
+ * 库存分配查询商品详情  https://o.jdl.com/goodsStockConfig/queryGoodsStockConfigList.do?rand=0.6811919097765907
+ * @param {string[]} skuBatch - 一批SKU
+ * @param {string} status - 商品状态: '1' for enabled, '2' for disabled, '' for all.
+ * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
+ * @param {number} start - 分页起始位置
+ * @param {number} length - 分页大小`
+ * @returns {Promise<{aaData: object[], iTotalRecords: number}>}
+ */
+export async function goodsStockConfig(skuBatch, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  // 注意：此处从 context 中获取 department 和 store，确保与调用者（如 getProductDetails）一致
+  const { department, store } = sessionData
+
+  const url = `/goodsStockConfig/queryGoodsStockConfigList.do?rand=${Math.random()}`
+
+  const aoDataArray = [
+    { name: sEcho, value: 8 },
+    { name: iColumns, value: 8 },
+    { name: sColumns, value: ",,,,,,,,," },
+    { name: iDisplayStart, value: 0 },
+    { name: iDisplayLength, value: 100 },
+    { name: mDataProp_0, value: 0 },
+    { name: bSortable_0, value: false },
+    { name: mDataProp_1, value: 1 },
+    { name: bSortable_1, value: false },
+    { name: mDataProp_2, value: deptName },
+    { name: bSortable_2, value: true },
+    { name: mDataProp_3, value: goodsNo },
+    { name: bSortable_3, value: true },
+    { name: mDataProp_4, value: sellerGoodsSign },
+    { name: bSortable_4, value: true },
+    { name: mDataProp_5, value: goodsName },
+    { name: bSortable_5, value: true },
+    { name: mDataProp_6, value: updateUser },
+    { name: bSortable_6, value: true },
+    { name: mDataProp_7, value: remark },
+    { name: bSortable_7, value: true },
+    { name: iSortCol_0, value: 3 },
+    { name: sSortDir_0, value: desc },
+    { name: iSortingCols, value: 1 }
+  ]
+  // deptId
+  const data_obj = {
+    csrfToken: csrfToken,
+    sellerId: department?.sellerId || '',
+    deptId: department?.id || '',
+    goodsNo: '',
+    sellerGoodsSign: skuBatch.join(','),
+    isRatio: 2,
+    goodsName: '',
+    shopId: '',
+    aoData: JSON.stringify(aoDataArray)
+  }
+
+
+  const data = qs.stringify(data_obj)
+
+  console.log(
+    `[jdApiService] 库存分配查询商品详情, Status: '${status}', SKUs: ${skuBatch.length}`
+  )
+
+  return await requestJdApi({
+    method: 'POST',
+    url,
+    data,
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      Origin: 'https://o.jdl.com',
+      Referer: 'https://o.jdl.com/goToMainIframe.do',
+      Cookie: cookieString
+    }
+  })
+}
+
+
 /**
  * 查询指定SKU列表中所有已停用的商品
  * 7.2 优化  新方案查询  getProductData.task.js 查询
@@ -1777,7 +1925,7 @@ export async function enableStoreShopGoods(
 
     const batch = shopGoodsNos.slice(i, i + batchSize)
     const currentBatchNum = i / batchSize + 1
-    
+
     // 去掉CSG前缀，获取纯数字ID数组
     const ids = batch.map((csg) => csg.replace('CSG', ''))
 
