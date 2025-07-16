@@ -25,9 +25,13 @@ const form = ref({
 // 店铺和仓库管理
 const {
   shopsList,
+  warehousesList,
   isLoadingShops,
+  isLoadingWarehouses,
   shopLoadError,
+  warehouseLoadError,
   selectedStore,
+  selectedWarehouse,
   loadShops,
   persistSelectedShop,
   selectedVendor,
@@ -50,6 +54,10 @@ const {
 // --- 计算属性 ---
 const currentShopInfo = computed(() =>
   shopsList.value.find((shop) => shop.shopNo === selectedStore.value)
+)
+
+const currentWarehouseInfo = computed(() =>
+  warehousesList.value.find((w) => w.warehouseNo === selectedWarehouse.value)
 )
 
 // --- 方法 ---
@@ -89,13 +97,17 @@ const handleAddTask = () => {
       return alert('请输入至少一个SKU')
     }
   }
+  if (form.value.options.returnToVendor && !currentWarehouseInfo.value) {
+    return alert('请选择一个仓库以继续退供应商库存操作。')
+  }
 
   const commonData = {
     scope: form.value.mode,
     skus,
     store: currentShopInfo.value,
     vendor: selectedVendor.value,
-    department: selectedDepartment.value
+    department: selectedDepartment.value,
+    warehouse: currentWarehouseInfo.value
   }
 
   const skuDisplayName = isWholeStore
@@ -192,7 +204,7 @@ const handleAddTask = () => {
     sku: skuDisplayName,
     name: taskName,
     store: currentShopInfo.value,
-    warehouse: { warehouseName: 'N/A' },
+    warehouse: currentWarehouseInfo.value || { warehouseName: 'N/A' },
     executionData: {
       initialContext: { ...commonData },
       stages: stages
@@ -225,26 +237,34 @@ onMounted(() => {
 
 <template>
   <div class="inventory-clearance-container">
+    <!-- 操作区域 -->
     <ClearStorageOperationArea
       :form="form"
       :shops-list="shopsList"
+      :warehouses-list="warehousesList"
       :is-loading-shops="isLoadingShops"
+      :is-loading-warehouses="isLoadingWarehouses"
       :shop-load-error="shopLoadError"
+      :warehouse-load-error="warehouseLoadError"
       :selected-store="selectedStore"
+      :selected-warehouse="selectedWarehouse"
       @update:form="handleFormUpdate"
       @update:selected-store="handleStoreUpdate"
+      @update:selected-warehouse="selectedWarehouse = $event"
       @add-task="handleAddTask"
     />
+
+    <!-- 任务和日志区域 -->
     <TaskArea
       v-model:active-tab="activeTab"
       :task-list="taskList"
       :logs="activeTaskLogs"
       :is-any-task-running="false"
-      @execute-tasks="runAllTasks"
-      @clear-tasks="clearAllTasks"
+      @run-all-tasks="runAllTasks"
+      @clear-all-tasks="clearAllTasks"
       @delete-task="deleteTask"
       @execute-one="executeTask"
-      @select-task="setSelectedTask"
+      @set-selected-task="setSelectedTask"
     />
   </div>
 </template>
@@ -252,7 +272,7 @@ onMounted(() => {
 <style scoped>
 .inventory-clearance-container {
   display: flex;
-  height: 100%;
-  background-color: #ffffff;
+  height: calc(100vh - 120px); /* Adjust based on your app's header/footer height */
+  background-color: #f0f2f5;
 }
 </style>

@@ -7,29 +7,26 @@
           <label class="radio-label">
             <input
               type="radio"
-              :checked="form.mode === 'sku'"
               value="sku"
+              :checked="form.mode === 'sku'"
               @change="updateMode('sku')"
             />
-            按SKU
+            <span>按SKU</span>
           </label>
           <label class="radio-label">
             <input
               type="radio"
-              :checked="form.mode === 'whole_store'"
               value="whole_store"
+              :checked="form.mode === 'whole_store'"
               @change="updateMode('whole_store')"
             />
-            按整店
+            <span>按整店</span>
           </label>
         </div>
       </div>
 
       <div v-if="form.mode === 'sku'" class="form-group sku-input-container">
-        <div class="sku-header">
-          <label class="form-label">输入SKU</label>
-          <FileUploader @file-change="handleFileChange" />
-        </div>
+        <label class="form-label">输入SKU</label>
         <div class="textarea-wrapper">
           <textarea
             :value="form.sku"
@@ -50,7 +47,7 @@
               :checked="form.options.clearStockAllocation"
               @change="updateOption('clearStockAllocation', $event.target.checked)"
             />
-            库存分配清零
+            <span>库存分配清零</span>
           </label>
           <label class="checkbox-label">
             <input
@@ -58,7 +55,7 @@
               :checked="form.options.cancelJpSearch"
               @change="updateOption('cancelJpSearch', $event.target.checked)"
             />
-            取消京配打标
+            <span>取消京配打标</span>
           </label>
           <label class="checkbox-label">
             <input
@@ -66,7 +63,7 @@
               :checked="form.options.disableStoreProducts"
               @change="updateOption('disableStoreProducts', $event.target.checked)"
             />
-            停用店铺商品
+            <span>停用店铺商品</span>
           </label>
           <label class="checkbox-label">
             <input
@@ -74,7 +71,7 @@
               :checked="form.options.disableProductMasterData"
               @change="updateOption('disableProductMasterData', $event.target.checked)"
             />
-            停用商品主数据
+            <span>停用商品主数据</span>
           </label>
           <label class="checkbox-label">
             <input
@@ -82,7 +79,7 @@
               :checked="form.options.returnToVendor"
               @change="updateOption('returnToVendor', $event.target.checked)"
             />
-            退供应商库存
+            <span>退供应商库存</span>
           </label>
         </div>
       </div>
@@ -96,6 +93,16 @@
           :error="props.shopLoadError"
         />
       </div>
+
+      <div v-if="form.options.returnToVendor" class="form-group">
+        <WarehouseSelector
+          :model-value="selectedWarehouse"
+          @update:model-value="$emit('update:selectedWarehouse', $event)"
+          :warehouses="props.warehousesList"
+          :loading="props.isLoadingWarehouses"
+          :error="props.warehouseLoadError"
+        />
+      </div>
     </div>
 
     <div class="form-actions">
@@ -105,18 +112,28 @@
 </template>
 
 <script setup>
+import { defineProps, defineEmits } from 'vue'
 import StoreSelector from './StoreSelector.vue'
-import FileUploader from './FileUploader.vue'
+import WarehouseSelector from './WarehouseSelector.vue'
 
 const props = defineProps({
   form: Object,
   shopsList: Array,
+  warehousesList: Array,
   isLoadingShops: Boolean,
+  isLoadingWarehouses: Boolean,
   shopLoadError: String,
-  selectedStore: String
+  warehouseLoadError: String,
+  selectedStore: String,
+  selectedWarehouse: String
 })
 
-const emit = defineEmits(['update:form', 'update:selectedStore', 'addTask'])
+const emit = defineEmits([
+  'update:form',
+  'update:selectedStore',
+  'update:selectedWarehouse',
+  'addTask'
+])
 
 const updateMode = (newMode) => {
   emit('update:form', { ...props.form, mode: newMode })
@@ -135,16 +152,6 @@ const updateOption = (optionName, value) => {
     ...props.form,
     options: { ...props.form.options, [optionName]: value }
   })
-}
-
-const handleFileChange = (file) => {
-  if (file && file.name.endsWith('.txt')) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      emit('update:form', { ...props.form, sku: e.target.result })
-    }
-    reader.readAsText(file)
-  }
 }
 </script>
 
@@ -196,15 +203,13 @@ const handleFileChange = (file) => {
   color: #333;
 }
 
-.sku-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+.sku-input-container .form-label {
+  margin-bottom: 0;
 }
 
 .textarea-wrapper {
   position: relative;
+  margin-top: 10px;
 }
 
 .sku-textarea {

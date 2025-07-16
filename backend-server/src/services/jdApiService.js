@@ -2448,13 +2448,14 @@ export async function batchSaveSetting(shopGoodsMapStr, goodsIdListStr, goodsSto
  * @returns {Promise<object>}
  */
 export async function getReturnableStock(goodsNoList, deptId, warehouseNo, sessionData) {
-  const { csrfToken, jdCookies } = sessionData
+  const { csrfToken, cookieString } = getAuthInfo(sessionData)
+
   const url = 'https://o.jdl.com/rtsValue/getDeptGoods.do'
 
   const payload = {
     csrfToken: csrfToken,
     pageNum: 1,
-    numLength: 9999, // Assuming we want all results
+    numLength: 500, // Assuming we want all results
     deptId: deptId,
     waresId: warehouseNo,
     rtsStockStatusId: 1, // 良品
@@ -2464,7 +2465,7 @@ export async function getReturnableStock(goodsNoList, deptId, warehouseNo, sessi
 
   const headers = {
     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-    Cookie: jdCookies,
+    Cookie: cookieString,
     'X-Requested-With': 'XMLHttpRequest',
     Origin: 'https://o.jdl.com',
     Referer: 'https://o.jdl.com/goToMainIframe.do'
