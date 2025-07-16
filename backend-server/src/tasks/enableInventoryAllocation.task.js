@@ -62,7 +62,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
         return acc
       }, {})
 
-      console.log('shopGoodsMap---->', shopGoodsMap)
+      // console.log('shopGoodsMap---->', shopGoodsMap)
 
       const shopGoodsMapStr = JSON.stringify(shopGoodsMap)
 
