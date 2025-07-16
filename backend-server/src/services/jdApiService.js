@@ -2438,3 +2438,86 @@ export async function batchSaveSetting(shopGoodsMapStr, goodsIdListStr, goodsSto
     }
   })
 }
+
+/**
+ * 查询商品的可用退货库存
+ * @param {string[]} goodsNoList - CMG编码列表
+ * @param {string} deptId - 事业部ID (不含CBU)
+ * @param {string} warehouseNo - 仓库ID
+ * @param {object} sessionData - 会话数据
+ * @returns {Promise<object>}
+ */
+export async function getReturnableStock(goodsNoList, deptId, warehouseNo, sessionData) {
+  const { csrfToken, jdCookies } = sessionData
+  const url = 'https://o.jdl.com/rtsValue/getDeptGoods.do'
+
+  const payload = {
+    csrfToken: csrfToken,
+    pageNum: 1,
+    numLength: 9999, // Assuming we want all results
+    deptId: deptId,
+    waresId: warehouseNo,
+    rtsStockStatusId: 1, // 良品
+    goodsNoStr: goodsNoList.join(','),
+    goodsLevelNo: ''
+  }
+
+  const headers = {
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    Cookie: jdCookies,
+    'X-Requested-With': 'XMLHttpRequest',
+    Origin: 'https://o.jdl.com',
+    Referer: 'https://o.jdl.com/goToMainIframe.do'
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: new URLSearchParams(payload).toString()
+    })
+
+    if (!response.ok) {
+      throw new Error(`API请求失败，状态码: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('getReturnableStock API error:', error)
+    throw new Error(`查询可退货库存时出错: ${error.message}`)
+  }
+}
+
+/**
+ * 执行退供应商库存操作
+ * @param {object} payload - 创建退货单的完整payload
+ * @param {object} sessionData - 会话数据
+ * @returns {Promise<object>}
+ */
+export async function returnToVendor(payload, sessionData) {
+  const { jdCookies } = sessionData
+  const url = 'https://o.jdl.com/rtsMain/addRtsOrder.do'
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Cookie: jdCookies,
+    'X-Requested-With': 'XMLHttpRequest',
+    Origin: 'https://o.jdl.com',
+    Referer: 'https://o.jdl.com/goToMainIframe.do'
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      throw new Error(`API请求失败，状态码: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('returnToVendor API error:', error)
+    throw new Error(`执行退供应商库存时出错: ${error.message}`)
+  }
+}

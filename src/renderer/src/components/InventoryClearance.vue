@@ -16,7 +16,8 @@ const form = ref({
     clearStockAllocation: true,
     cancelJpSearch: false,
     disableStoreProducts: false,
-    disableProductMasterData: false
+    disableProductMasterData: false,
+    returnToVendor: false
   }
 })
 
@@ -69,13 +70,12 @@ const handleStoreUpdate = (newStore) => {
 
 const handleAddTask = () => {
   if (!currentShopInfo.value) return alert('请选择店铺')
-  if (
-    !form.value.options.clearStockAllocation &&
-    !form.value.options.cancelJpSearch &&
-    !form.value.options.disableStoreProducts &&
-    !form.value.options.disableProductMasterData
-  )
+
+  // 动态检查是否有任何功能选项被选中
+  const hasSelectedOption = Object.values(form.value.options).some((isSelected) => isSelected)
+  if (!hasSelectedOption) {
     return alert('请至少选择一个功能选项')
+  }
 
   const isWholeStore = form.value.mode === 'whole_store'
   let skus = []
@@ -170,6 +170,16 @@ const handleAddTask = () => {
       tasks: [{ name: 'cancelJpSearch', context: {}, source }]
     })
     selectedTaskNames.push('取消京配打标')
+  }
+
+  // 阶段 5. 退供应商库存
+  if (form.value.options.returnToVendor) {
+    const source = taskDependencies.returnToVendor || 'initial'
+    stages.push({
+      name: '退供应商库存阶段',
+      tasks: [{ name: 'returnToVendor', context: {}, source }]
+    })
+    selectedTaskNames.push('退供应商库存')
   }
 
   // 创建一个综合任务，包含所有选中的子任务，每个子任务为独立的stage确保顺序执行

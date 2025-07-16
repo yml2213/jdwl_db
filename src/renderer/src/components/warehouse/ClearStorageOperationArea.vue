@@ -76,6 +76,14 @@
             />
             停用商品主数据
           </label>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="form.options.returnToVendor"
+              @change="updateOption('returnToVendor', $event.target.checked)"
+            />
+            退供应商库存
+          </label>
         </div>
       </div>
 

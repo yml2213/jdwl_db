@@ -110,4 +110,5 @@ export const taskDependencies = {
     enableJpSearch: 'getProductData',
     cancelJpSearch: 'getProductData',
     clearStockAllocation: 'getProductData',
+    returnToVendor: 'getProductData',
 } 

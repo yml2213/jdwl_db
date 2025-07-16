@@ -16,6 +16,7 @@ import clearStockAllocation from '../tasks/clearStockAllocation.task.js'
 import cancelJpSearch from '../tasks/cancelJpSearch.task.js'
 import disableStoreProducts from '../tasks/disableStoreProducts.task.js'
 import disableProductMasterData from '../tasks/disableProductMasterData.task.js'
+import returnToVendor from '../tasks/returnToVendor.task.js'
 
 const taskModules = [
     getProductDataTask,
@@ -30,7 +31,8 @@ const taskModules = [
     clearStockAllocation,
     cancelJpSearch,
     disableStoreProducts,
-    disableProductMasterData
+    disableProductMasterData,
+    returnToVendor
 ]
 
 /**
@@ -119,15 +121,15 @@ function isCancelled(taskId) {
  * @param {WebSocket} ws - 已关闭的WebSocket连接实例。
  */
 function cleanup(ws) {
-    let cleanedCount = 0;
+    let cleanedCount = 0
     for (const [taskId, taskInfo] of runningTasks.entries()) {
         if (taskInfo.ws === ws) {
-            cancelTask(taskId);
-            cleanedCount++;
+            cancelTask(taskId)
+            cleanedCount++
         }
     }
     if (cleanedCount > 0) {
-        console.log(`[任务管理器] 清理了与已关闭连接相关的 ${cleanedCount} 个任务。`);
+        console.log(`[任务管理器] 清理了与已关闭连接相关的 ${cleanedCount} 个任务。`)
     }
 }
 
