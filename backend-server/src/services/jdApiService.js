@@ -1131,6 +1131,104 @@ export async function queryClsNoByOrderNo(orderNo, year, sessionData) {
 }
 
 /**
+ * 1. 根据订单号查询 是否有退货入库单
+ */
+export async function queryRtwByOrderNo(orderNo, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+  const { departmentInfo } = sessionData
+
+  const aoData = [
+    { name: 'sEcho', value: 11 },
+    { name: 'iColumns', value: 12 },
+    { name: 'sColumns', value: ',,,,,,,,,,,' },
+    { name: 'iDisplayStart', value: 0 },
+    { name: 'iDisplayLength', value: 10 },
+    { name: 'mDataProp_0', value: 0 },
+    { name: 'bSortable_0', value: false },
+    { name: 'mDataProp_1', value: 1 },
+    { name: 'bSortable_1', value: false },
+    { name: 'mDataProp_2', value: 'rtwNo' },
+    { name: 'bSortable_2', value: false },
+    { name: 'mDataProp_3', value: 'statusName' },
+    { name: 'bSortable_3', value: false },
+    { name: 'mDataProp_4', value: 'sourceName' },
+    { name: 'bSortable_4', value: false },
+    { name: 'mDataProp_5', value: 'outRtwNo' },
+    { name: 'bSortable_5', value: false },
+    { name: 'mDataProp_6', value: 'sellerRtwNo1' },
+    { name: 'bSortable_6', value: false },
+    { name: 'mDataProp_7', value: 'outstoreNo' },
+    { name: 'bSortable_7', value: false },
+    { name: 'mDataProp_8', value: 'deptName' },
+    { name: 'bSortable_8', value: false },
+    { name: 'mDataProp_9', value: 'warehouseName' },
+    { name: 'bSortable_9', value: false },
+    { name: 'mDataProp_10', value: 'createTime' },
+    { name: 'bSortable_10', value: true },
+    { name: 'mDataProp_11', value: 'warehouseShelvesDate' },
+    { name: 'bSortable_11', value: true },
+    { name: 'iSortCol_0', value: 8 },
+    { name: 'sSortDir_0', value: 'desc' },
+    { name: 'iSortingCols', value: 1 }
+  ]
+
+  const data = {
+    csrfToken,
+    isB2B: 0,
+    outstoreNo: orderNo,
+    aoData: JSON.stringify(aoData)
+  }
+
+  const response = await requestJdApi({
+    method: 'POST',
+    url: `rtw/queryRtwList.do?rand=${Math.random()}`,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do'
+    },
+    data: qs.stringify(data)
+  })
+
+  return response.aaData
+}
+
+/**
+ * 2. 如果有，则直接 执行 transferRtw  下发订单
+ */
+export async function transferRtw(rtwList, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+
+  const rtwIdArray = rtwList[0].id
+  const rtwNoArray = rtwList[0].rtwNo
+  const rtwOutRtwNo = rtwList[0].outRtwNo
+
+  const data = {
+    csrfToken: csrfToken,
+    rtwIdArray: rtwIdArray,
+    rtwNoArray: rtwNoArray,
+    rtwOutRtwNo: rtwOutRtwNo
+  }
+
+  const response = await requestJdApi({
+    method: 'POST',
+    url: `/rtw/transferRtw.do`,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do'
+    },
+    data: qs.stringify(data)
+  })
+
+
+
+  return response
+}
+
+
+/**
  * Step 2: Query order details by CLS number.
  * https://o.jdl.com/rtw/getOrder.do?rand=0.25937037832834453
  */
