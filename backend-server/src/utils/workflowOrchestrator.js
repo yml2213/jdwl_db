@@ -74,6 +74,110 @@ export async function executeWorkflow({
                         continue
                     }
 
+                    if (taskInfo.type === 'waitForCompletion') {
+                        const {
+                            sourceTask,
+                            pollingTask,
+                            description,
+                            maxRetries = 20,
+                            retryDelay = 15000,
+                            name: taskName
+                        } = taskInfo
+
+                        const pollingHandler = taskHandlers[pollingTask]
+                        if (!pollingHandler || typeof pollingHandler.execute !== 'function') {
+                            const errorMsg = `未找到轮询任务处理器: ${pollingTask}`
+                            updateFn({ message: errorMsg, type: 'error' })
+                            return { success: false, message: errorMsg }
+                        }
+
+                        const skusForSource = allSkus.filter(
+                            (sku) => sku.completedTasks.has(sourceTask) && sku.status !== 'failed'
+                        )
+                        const expectedCount = skusForSource.length
+
+                        if (expectedCount === 0) {
+                            updateFn({ message: `${description}: 没有需要等待的SKU，跳过。`, type: 'info' })
+                            continue
+                        }
+
+                        let attempt = 0
+                        let completed = false
+                        let finalResult = null
+
+                        while (attempt < maxRetries && !completed && cancellationToken.value) {
+                            attempt++
+                            updateFn({
+                                message: `${description}: [尝试 ${attempt}/${maxRetries}]`,
+                                type: 'info'
+                            })
+
+                            try {
+                                const result = await pollingHandler.execute(
+                                    {
+                                        ...initialContext,
+                                        skus: skusForSource,
+                                        updateFn
+                                    },
+                                    sessionData,
+                                    cancellationToken
+                                )
+
+                                if (result.success && Array.isArray(result.data)) {
+                                    const currentCount = result.data.length
+                                    updateFn({
+                                        message: `${description}: 当前进度 ${currentCount} / ${expectedCount}`,
+                                        type: 'info'
+                                    })
+
+                                    if (currentCount >= expectedCount) {
+                                        completed = true
+                                        finalResult = result
+                                        updateFn({
+                                            message: `${description}: 数据同步完成。`,
+                                            type: 'success'
+                                        })
+                                    }
+                                } else {
+                                    updateFn({
+                                        message: `${description}: 轮询调用失败: ${result.message}`,
+                                        type: 'warn'
+                                    })
+                                }
+                            } catch (e) {
+                                updateFn({
+                                    message: `${description}: 轮询期间发生异常: ${e.message}`,
+                                    type: 'error'
+                                })
+                            }
+
+                            if (!completed && cancellationToken.value && attempt < maxRetries) {
+                                await new Promise((resolve) => setTimeout(resolve, retryDelay))
+                            }
+                        }
+
+                        if (completed) {
+                            if (finalResult && Array.isArray(finalResult.data)) {
+                                finalResult.data.forEach((updatedSkuData) => {
+                                    if (updatedSkuData && updatedSkuData.sku) {
+                                        const lifecycle = skuLifecycles[updatedSkuData.sku]
+                                        if (lifecycle) {
+                                            Object.assign(lifecycle.data, updatedSkuData)
+                                            lifecycle.completedTasks.add(taskName)
+                                        }
+                                    }
+                                })
+                            }
+                        } else {
+                            const errorMsg = `任务 [${description}] 在达到最大尝试次数后仍未完成，工作流终止。`
+                            updateFn({ message: errorMsg, type: 'error' })
+                            skusForSource.forEach((sku) => (sku.status = 'failed'))
+                            return { success: false, message: errorMsg }
+                        }
+
+                        continue
+                    }
+
                     const handler = taskHandlers[taskInfo.name]
                     if (!handler || typeof handler.execute !== 'function') {
                         const errorMsg = `未找到任务处理器: ${taskInfo.name}`

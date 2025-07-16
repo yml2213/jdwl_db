@@ -63,10 +63,7 @@ defineProps({
       checking: false,
       enabling: false,
       checkError: '',
-      enableError: '',
-      currentBatch: 0,
-      totalBatches: 0,
-      progress: '初始化...'
+      enableError: ''
     })
   },
   activeTab: String,

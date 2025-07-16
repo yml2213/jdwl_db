@@ -3,8 +3,7 @@
     <div v-if="checking" class="status-checking">
       <div class="spinner"></div>
       <div>
-        <div>正在检查商品状态 (批次 {{ currentBatch }}/{{ totalBatches }})...</div>
-        <div class="progress-text">{{ progress }}</div>
+        <div>正在检查商品状态...</div>
       </div>
     </div>
 
@@ -84,18 +83,7 @@ const props = defineProps({
     type: String,
     default: ''
   },
-  currentBatch: {
-    type: Number,
-    default: 0
-  },
-  totalBatches: {
-    type: Number,
-    default: 0
-  },
-  progress: {
-    type: String,
-    default: '初始化...'
-  }
+
 })
 
 const emit = defineEmits(['enable-products'])

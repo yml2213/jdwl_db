@@ -18,30 +18,31 @@ const workflows = {
         name: '入仓打标',
         stages: [
             {
-                name: '阶段一：商品导入 (串行)',
+                name: '阶段一：商品导入与验证',
                 sequential: true,
                 tasks: [
                     { name: 'importStoreProducts', source: 'initial' },
-                    { type: 'delay', delay: 2 * 60 * 1000 } // 等待2分钟
+                    {
+                        type: 'waitForCompletion',
+                        name: 'productDataReady',
+                        sourceTask: 'importStoreProducts',
+                        pollingTask: 'getProductData',
+                        description: '等待商品数据同步完成',
+                        maxRetries: 50, // 50次尝试
+                        retryDelay: 10000 // 10秒延迟
+                    }
                 ]
             },
             {
-                name: '阶段二：商品处理 (并行)',
+                name: '阶段二：商品处理与激活 (并行)',
                 tasks: [
-                    { name: 'getProductData', source: 'importStoreProducts' },
-                    { name: 'enableStoreProducts', source: 'importStoreProducts' }
+                    { name: 'enableStoreProducts', source: 'importStoreProducts' },
+                    { name: 'importLogisticsAttributes', source: 'productDataReady' },
+                    { name: 'enableInventoryAllocation', source: 'productDataReady' }
                 ]
             },
             {
-                name: '阶段三：核心流程 (并行管道)',
-                tasks: [
-                    // 这两个任务都依赖 'getProductData' 的输出，可以并行启动
-                    { name: 'importLogisticsAttributes', source: 'getProductData' },
-                    { name: 'enableInventoryAllocation', source: 'getProductData' }
-                ]
-            },
-            {
-                name: '阶段四：依赖性收尾 (串行)',
+                name: '阶段三：依赖性收尾 (并行)',
                 tasks: [
                     // 这个任务依赖 'importLogisticsAttributes'
                     { name: 'addInventory', source: 'importLogisticsAttributes' },
