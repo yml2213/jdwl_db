@@ -1,26 +1,23 @@
 /**
  * 后端任务： 库存分配清零
  * 支持两种模式：
- * 1. 上传Excel文件，清零指定SKU的库存。
+ * 1. 调用API，清零指定SKU的库存。 (依赖 getProductData 任务)
  * 2. 调用API，清零整个店铺的库存。
  */
-import * as XLSX from 'xlsx'
 import * as jdApiService from '../services/jdApiService.js'
 import { executeInBatches } from '../utils/batchProcessor.js'
-import { saveExcelFile } from '../utils/fileUtils.js'
 
 // 配置常量
-const BATCH_SIZE = 2000
-const BATCH_DELAY = 5 * 60 * 1000 // 5分钟
-const TEMP_DIR_NAME = '库存分配清零'
+const API_BATCH_SIZE = 100
+const API_BATCH_DELAY = 1500
 
 
 async function execute(context, sessionData) {
-  const { skus, store, department, scope, updateFn } = context
+  const { skus: skuLifecycles, store, department, scope, updateFn } = context
 
   updateFn('库存分配清零任务开始...')
   updateFn(`操作范围: ${scope === 'whole_store' ? '整店' : '指定SKU'}`)
-  updateFn(`输入SKU数量: ${skus?.length || 'N/A'}`)
+  updateFn(`输入SKU数量: ${skuLifecycles?.length || 'N/A'}`)
   updateFn(`店铺: ${store?.shopName}`)
   updateFn(`事业部: ${department?.name}`)
 
@@ -48,43 +45,102 @@ async function execute(context, sessionData) {
   }
 
   // Specific SKUs mode
-  if (!skus || skus.length === 0) {
+  if (!skuLifecycles || skuLifecycles.length === 0) {
     throw new Error('SKU列表为空，无法执行按SKU清零的操作。')
   }
 
-  updateFn(`[Task: clearStockAllocation] 指定SKU库存清零模式，总SKU数量: ${skus.length}`)
+  const productsWithData = skuLifecycles.filter((p) => p.data)
+  if (productsWithData.length !== skuLifecycles.length) {
+    updateFn(
+      `警告: ${skuLifecycles.length - productsWithData.length} 个SKU缺少详细商品数据，将被跳过。`,
+      'warning'
+    )
+  }
 
-  const batchFn = async (skuBatch) => {
+  if (productsWithData.length === 0) {
+    throw new Error('没有包含有效商品数据的SKU，任务无法继续。')
+  }
+
+  updateFn(`[Task: clearStockAllocation] 指定SKU库存清零模式，有效SKU数量: ${productsWithData.length}`)
+
+  const batchFn = async (batchOfLifecycles) => {
     try {
-      updateFn(`正在为 ${skuBatch.length} 个SKU创建批处理文件...`)
-      const fileBuffer = createExcelFile(skuBatch, department, store)
+      const skus = batchOfLifecycles.map((item) => item.sku)
+      updateFn(`正在处理批次, SKUs: ${skus.length} 个`)
 
-      await saveExcelFile(fileBuffer, {
-        dirName: TEMP_DIR_NAME,
-        store: store,
-        extension: 'xlsx'
-      })
-      updateFn(`批处理文件已保存: ${TEMP_DIR_NAME}`)
+      const goodsIdList = batchOfLifecycles
+        .map((item) => item.data.goodsNo?.replace('CMG', ''))
+        .filter(Boolean)
 
-      const result = await jdApiService.uploadInventoryAllocationFile(fileBuffer, sessionData, updateFn)
-      updateFn(`响应结果: ${JSON.stringify(result)}`)
+      if (goodsIdList.length !== batchOfLifecycles.length) {
+        updateFn('批次中部分商品缺少goodsNo，该批次可能不完整。', 'warning')
+      }
+      if (goodsIdList.length === 0) {
+        return { success: true, message: '批次中所有商品都缺少goodsNo，已跳过。' }
+      }
 
-      if (result && (result.resultCode == 1 || result.resultCode == 2)) {
-        return { success: true, message: `批处理成功处理 ${skuBatch.length} 个SKU。` }
+      const goodsIdListStr = JSON.stringify(goodsIdList)
+
+      const shopGoodsMap = batchOfLifecycles.reduce((acc, item) => {
+        if (!item.data || !item.data.goodsNo) return acc
+        const goodsId = item.data.goodsNo.replace('CMG', '')
+        const key = `${goodsId}_${store.id}`
+
+        acc[key] = {
+          id: item.data.id, // CSG ID
+          shopId: store.id,
+          shopNo: store.shopNo,
+          shopName: store.shopName,
+          sellerId: department.sellerId,
+          sellerNo: department.sellerNo,
+          sellerName: department.sellerName,
+          deptId: department.deptNo.replace('CBU', ''),
+          deptNo: department.deptNo,
+          deptName: department.name,
+          goodsId: goodsId,
+          goodsNo: item.data.goodsNo
+        }
+        return acc
+      }, {})
+      const shopGoodsMapStr = JSON.stringify(shopGoodsMap)
+
+      // 核心改动：库存比例设置为0
+      const goodsStockConfigsStr = JSON.stringify([
+        {
+          shopId: String(store.id),
+          percent: '0',
+          vmiPercent: '0',
+          stockWay: '1'
+        }
+      ])
+
+      const response = await jdApiService.batchSaveSetting(
+        shopGoodsMapStr,
+        goodsIdListStr,
+        goodsStockConfigsStr,
+        sessionData
+      )
+
+      if (response && response.success) {
+        const msg = `批处理成功，为 ${batchOfLifecycles.length} 个商品清零库存分配。`
+        updateFn(msg, 'success')
+        return { success: true, message: msg }
       } else {
-        const errorMessage = result?.resultMessage || JSON.stringify(result) || '上传失败'
+        const errorMessage = (response && response.message) || JSON.stringify(response)
+        updateFn(`批处理失败: ${errorMessage}`, 'error')
         return { success: false, message: errorMessage }
       }
     } catch (error) {
-      updateFn(`批处理执行时发生严重错误: ${error.message}`, 'error')
-      return { success: false, message: `批处理失败: ${error.message}` }
+      const errorMessage = `批处理时发生严重错误: ${error.message}`
+      updateFn(errorMessage, 'error')
+      return { success: false, message: errorMessage }
     }
   }
 
   const batchResults = await executeInBatches({
-    items: skus,
-    batchSize: BATCH_SIZE,
-    delay: BATCH_DELAY,
+    items: productsWithData,
+    batchSize: API_BATCH_SIZE,
+    delay: API_BATCH_DELAY,
     batchFn,
     log: (message, level = 'info') => updateFn(`[批处理]: ${message}`, level),
     isRunning: { value: true }
@@ -99,33 +155,6 @@ async function execute(context, sessionData) {
   return { success: true, message: finalMessage }
 }
 
-
-function createExcelFile(skuList, department, store) {
-  const headers = [
-    '事业部编码',
-    '主商品编码',
-    '商家商品标识',
-    '店铺编码',
-    '库存管理方式',
-    '库存比例/数值',
-    '仓库编号'
-  ]
-  const introRow = [
-    'CBU开头的事业部编码',
-    'CMG开头的商品编码，主商品编码与商家商品标识至少填写一个',
-    '商家自定义的商品编码，主商品编码与商家商品标识至少填写一个',
-    'CSP开头的店铺编码',
-    '纯数值，1-独占，2-共享，3-固定值',
-    '库存方式为独占或共享时，此处填写大于等于0的正整数，所有独占（或共享）比例之和不能大于100库存方为固定值时，填写正整数，不能大于当前商品的库存总数',
-    '可空，只有在库存管理方式为3-固定值时，读取仓库编码，若为空则按全部仓库执行'
-  ]
-  const rows = skuList.map((item) => [department.deptNo, '', item.sku, store.shopNo, 1, 0, '']) // 核心：库存比例为0
-  const excelData = [headers, introRow, ...rows]
-  const worksheet = XLSX.utils.aoa_to_sheet(excelData)
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'GoodsStockConfig')
-  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' })
-}
 export default {
   name: 'clearStockAllocation',
   description: '库存分配清零',

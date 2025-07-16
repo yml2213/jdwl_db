@@ -29,7 +29,7 @@ async function execute(context, sessionData, cancellationToken = { value: true }
   const batchFn = async (batchOfLifecycles) => {
     try {
       const skus = batchOfLifecycles.map((item) => item.sku)
-      updateFn({ message: `正在处理批次, SKUs: ${skus.join(',')}` })
+      updateFn({ message: `正在处理批次, SKUs: ${skus.length} 个` })
 
       // 1. 直接从 context 中构建所有需要的参数
       const goodsIdList = batchOfLifecycles.map((item) => item.data.goodsNo.replace('CMG', ''))

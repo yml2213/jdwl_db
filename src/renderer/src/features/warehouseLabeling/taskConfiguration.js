@@ -108,4 +108,6 @@ export const taskDependencies = {
     enableInventoryAllocation: 'getProductData',
     addInventory: 'getProductData',
     enableJpSearch: 'getProductData',
+    cancelJpSearch: 'getProductData',
+    clearStockAllocation: 'getProductData',
 } 
