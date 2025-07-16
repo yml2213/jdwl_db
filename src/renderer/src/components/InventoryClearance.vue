@@ -48,7 +48,8 @@ const {
   clearAllTasks,
   deleteTask,
   setSelectedTask,
-  activeTaskLogs
+  activeTaskLogs,
+  isRunning
 } = useTaskList()
 
 // --- 计算属性 ---
@@ -259,9 +260,9 @@ onMounted(() => {
       v-model:active-tab="activeTab"
       :task-list="taskList"
       :logs="activeTaskLogs"
-      :is-any-task-running="false"
-      @run-all-tasks="runAllTasks"
-      @clear-all-tasks="clearAllTasks"
+      :is-running="isRunning"
+      @execute-tasks="runAllTasks"
+      @clear-tasks="clearAllTasks"
       @delete-task="deleteTask"
       @execute-one="executeTask"
       @set-selected-task="setSelectedTask"
