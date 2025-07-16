@@ -413,53 +413,53 @@ export async function enableStoreProducts_bak(
 
 /**
  * 库存分配查询商品详情  https://o.jdl.com/goodsStockConfig/queryGoodsStockConfigList.do?rand=0.6811919097765907
- * @param {string[]} skuBatch - 一批SKU
+ * @param {string[]} skus - 一批SKU
  * @param {string} status - 商品状态: '1' for enabled, '2' for disabled, '' for all.
  * @param {object} sessionData - 包含认证和店铺信息的完整会话对象
  * @param {number} start - 分页起始位置
  * @param {number} length - 分页大小`
  * @returns {Promise<{aaData: object[], iTotalRecords: number}>}
  */
-export async function goodsStockConfig(skuBatch, sessionData) {
+export async function goodsStockConfig(context, skus, sessionData) {
   const { cookieString, csrfToken } = getAuthInfo(sessionData)
   // 注意：此处从 context 中获取 department 和 store，确保与调用者（如 getProductDetails）一致
-  const { department, store } = sessionData
+  const { department, store } = context
 
   const url = `/goodsStockConfig/queryGoodsStockConfigList.do?rand=${Math.random()}`
 
   const aoDataArray = [
-    { name: sEcho, value: 8 },
-    { name: iColumns, value: 8 },
-    { name: sColumns, value: ",,,,,,,,," },
-    { name: iDisplayStart, value: 0 },
-    { name: iDisplayLength, value: 100 },
-    { name: mDataProp_0, value: 0 },
-    { name: bSortable_0, value: false },
-    { name: mDataProp_1, value: 1 },
-    { name: bSortable_1, value: false },
-    { name: mDataProp_2, value: deptName },
-    { name: bSortable_2, value: true },
-    { name: mDataProp_3, value: goodsNo },
-    { name: bSortable_3, value: true },
-    { name: mDataProp_4, value: sellerGoodsSign },
-    { name: bSortable_4, value: true },
-    { name: mDataProp_5, value: goodsName },
-    { name: bSortable_5, value: true },
-    { name: mDataProp_6, value: updateUser },
-    { name: bSortable_6, value: true },
-    { name: mDataProp_7, value: remark },
-    { name: bSortable_7, value: true },
-    { name: iSortCol_0, value: 3 },
-    { name: sSortDir_0, value: desc },
-    { name: iSortingCols, value: 1 }
+    { name: 'sEcho', value: 8 },
+    { name: 'iColumns', value: 8 },
+    { name: 'sColumns', value: ',,,,,,,,,' },
+    { name: 'iDisplayStart', value: 0 },
+    { name: 'iDisplayLength', value: 100 },
+    { name: 'mDataProp_0', value: 0 },
+    { name: 'bSortable_0', value: false },
+    { name: 'mDataProp_1', value: 1 },
+    { name: 'bSortable_1', value: false },
+    { name: 'mDataProp_2', value: 'deptName' },
+    { name: 'bSortable_2', value: true },
+    { name: 'mDataProp_3', value: 'goodsNo' },
+    { name: 'bSortable_3', value: true },
+    { name: 'mDataProp_4', value: 'sellerGoodsSign' },
+    { name: 'bSortable_4', value: true },
+    { name: 'mDataProp_5', value: 'goodsName' },
+    { name: 'bSortable_5', value: true },
+    { name: 'mDataProp_6', value: 'updateUser' },
+    { name: 'bSortable_6', value: true },
+    { name: 'mDataProp_7', value: 'remark' },
+    { name: 'bSortable_7', value: true },
+    { name: 'iSortCol_0', value: 3 },
+    { name: 'sSortDir_0', value: 'desc' },
+    { name: 'iSortingCols', value: 1 }
   ]
-  // deptId
+
   const data_obj = {
     csrfToken: csrfToken,
     sellerId: department?.sellerId || '',
-    deptId: department?.id || '',
+    deptId: department?.deptNo.split('CBU')[1] || '',
     goodsNo: '',
-    sellerGoodsSign: skuBatch.join(','),
+    sellerGoodsSign: skus.join(','),
     isRatio: 2,
     goodsName: '',
     shopId: '',
@@ -470,7 +470,7 @@ export async function goodsStockConfig(skuBatch, sessionData) {
   const data = qs.stringify(data_obj)
 
   console.log(
-    `[jdApiService] 库存分配查询商品详情, Status: '${status}', SKUs: ${skuBatch.length}`
+    `[jdApiService] 库存分配查询商品详情, SKUs: ${skus.length}`
   )
 
   return await requestJdApi({
@@ -2308,4 +2308,35 @@ export async function disableProductMasterData(
 
   updateFn('所有商品主数据停用操作已完成。')
   return { success: true, results }
+}
+
+/**
+ * 批量保存库存分配设置
+ * @param {string} shopGoodsMapStr - 商品信息Map的JSON字符串
+ * @param {string} goodsIdListStr - 商品ID列表的JSON字符串
+ * @param {string} goodsStockConfigsStr - 库存配置的JSON字符串
+ * @param {object} sessionData - 完整的会话对象
+ * @returns {Promise<object>}
+ */
+export async function batchSaveSetting(shopGoodsMapStr, goodsIdListStr, goodsStockConfigsStr, sessionData) {
+  const { cookieString, csrfToken } = getAuthInfo(sessionData)
+
+  const data = qs.stringify({
+    csrfToken,
+    shopGoodsMapStr,
+    goodsIdListStr,
+    goodsStockConfigsStr
+  })
+
+  return await requestJdApi({
+    method: 'POST',
+    url: '/goodsStockConfig/batchSaveSetting.do',
+    data,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookieString,
+      Referer: 'https://o.jdl.com/goToMainIframe.do',
+      Origin: 'https://o.jdl.com'
+    }
+  })
 }
