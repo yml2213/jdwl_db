@@ -63,24 +63,32 @@ async function execute(context, sessionData) {
 
     // 从 context 或 默认值构造退货单的其它信息
     // 注意：地址等信息当前为硬编码，未来可能需要从配置或更详细的 context 中获取
+    //   "deptNo": "CBU22010232593780",
+    //   "supplierNo": "CMS4418047117122",
+    //   "warehouseNo": "800014897",
+    //   "extractionWay": "1",
+    //   "remark": "",
+    //   "rtsStockStatus": "1",
+    //   "rtsItems": [
+    //     {
+    //       "goodsNo": "CMG4422340065821",
+    //       "applyOutQty": "3000"
+    //     }
+    //   ]
+    // }
     const returnPayload = {
         deptNo: department.deptNo,
         supplierNo: vendor.supplierNo,
         warehouseNo: warehouse.warehouseNo,
         extractionWay: '1',
-        remark: '自动化退供应商库存',
+        remark: '',
         rtsStockStatus: '1',
-        consigneeName: department.name || '收货人姓名',
-        consigneeAddress: vendor.address || '收货人地址', // 优先使用供应商地址
-        phone: vendor.phone || '13800138000', // 优先使用供应商电话
-        email: vendor.email || '',
-        province: '福建', // 硬编码，需要注意
-        city: '莆田市', // 硬编码
-        county: '鲤南镇', // 硬编码
         rtsItems: itemsToReturn
     }
 
     const result = await jdApiService.returnToVendor(returnPayload, sessionData)
+
+    console.log('returnToVendor result---->', result)
 
     if (result && result.resultCode === 1) {
         const successMsg = `退货单创建成功: ${result.resultData}，共处理 ${itemsToReturn.length} 个商品。`

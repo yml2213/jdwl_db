@@ -2495,12 +2495,12 @@ export async function getReturnableStock(goodsNoList, deptId, warehouseNo, sessi
  * @returns {Promise<object>}
  */
 export async function returnToVendor(payload, sessionData) {
-  const { jdCookies } = sessionData
+  const { cookieString } = getAuthInfo(sessionData)
   const url = 'https://o.jdl.com/rtsMain/addRtsOrder.do'
 
   const headers = {
     'Content-Type': 'application/json',
-    Cookie: jdCookies,
+    Cookie: cookieString,
     'X-Requested-With': 'XMLHttpRequest',
     Origin: 'https://o.jdl.com',
     Referer: 'https://o.jdl.com/goToMainIframe.do'
