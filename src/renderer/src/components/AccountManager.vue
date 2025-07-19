@@ -72,7 +72,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
 import { getAllCookies } from '../utils/cookieHelper'
-import { createSession, updateSelection, logout as logoutApi } from '../services/apiService'
+import {
+  createSession,
+  updateSelection,
+  logout as logoutApi,
+  checkSubscriptionStatus
+} from '../services/apiService'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
@@ -205,68 +210,7 @@ const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
   }
 }
 
-// 加载订阅信息 - 简化版本，直接通过用户名和当前会话信息获取
-const loadSubscriptionInfo = async () => {
-  console.log('=== 开始加载订阅信息 ===')
-
-  subscriptionLoading.value = true
-  try {
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-
-    if (!pinCookie?.value) {
-      console.error('❌ 无法获取用户信息')
-      return
-    }
-
-    // 尝试从已保存的选择中获取部门信息
-    let deptId = null
-    if (selectedDepartment.value?.deptNo) {
-      deptId = selectedDepartment.value.deptNo.replace('CBU', '')
-    } else {
-      // 如果没有保存的选择，尝试从会话上下文获取
-      if (sessionContext.value?.departmentInfo?.deptNo) {
-        deptId = sessionContext.value.departmentInfo.deptNo.replace('CBU', '')
-      }
-    }
-
-    if (!deptId) {
-      console.log('⚠️ 暂时无法获取部门信息，等待用户选择')
-      return
-    }
-
-    const username = decodeURIComponent(pinCookie.value)
-    const uniqueKey = `${username}-${deptId}`
-
-    console.log('生成的uniqueKey:', uniqueKey)
-    console.log('正在调用订阅状态检查接口...')
-
-    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
-    console.log('订阅状态检查结果:', subscriptionResult)
-
-    if (subscriptionResult && subscriptionResult.success) {
-      subscriptionInfo.value = subscriptionResult
-      console.log('✅ 订阅信息已加载:', subscriptionInfo.value)
-    } else {
-      console.log('⚠️ 订阅状态检查返回失败或无效结果')
-      subscriptionInfo.value = subscriptionResult // 仍然保存结果，用于显示错误状态
-    }
-  } catch (error) {
-    console.error('❌ 加载订阅信息失败:', error)
-    // 不显示错误通知，避免干扰用户体验
-  } finally {
-    subscriptionLoading.value = false
-    console.log('=== 订阅信息加载结束 ===')
-  }
-}
-
-// 保留原有的刷新函数，供手动刷新使用
-const refreshSubscriptionStatus = async () => {
-  await loadSubscriptionInfo()
-  if (subscriptionInfo.value?.success) {
-    showNotification('刷新成功', '订阅状态已更新', 'success')
-  }
-}
+// 订阅信息显示已移至App.vue，这里不再需要加载订阅信息的函数
 
 // 续费订阅
 const renewSubscription = async () => {
@@ -400,8 +344,7 @@ const handleDepartmentSelected = async (department) => {
     // 立即进行卡密验证
     await performSubscriptionCheck(vendorInfo, departmentInfo)
 
-    // 加载订阅信息到界面显示
-    await loadSubscriptionInfo()
+    // 订阅信息加载已移至App.vue
 
     // 使用后端返回的最新、最完整的上下文来完成登录流程
     emit('login-success', response.context)
@@ -482,8 +425,7 @@ const initialize = async () => {
     await updateUsername()
     console.log('✅ 用户已登录，直接加载订阅信息')
 
-    // 直接尝试加载订阅信息，不需要复杂判断
-    await loadSubscriptionInfo()
+    // 订阅信息加载已移至App.vue
 
     // 如果没有选择数据，打开选择弹窗
     if (!hasSelectedData.value && !hasSelected.value) {

@@ -10,12 +10,9 @@ import {
   logout as logoutApi,
   checkSubscriptionStatus
 } from './services/apiService'
-import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
-  clearAppSettings,
-  getSelectedDepartment,
-  getSelectedVendor
+  getSelectedDepartment
 } from './utils/storageHelper'
 import { getAllCookies } from '@/utils/cookieHelper'
 import webSocketService from './services/webSocketService'
