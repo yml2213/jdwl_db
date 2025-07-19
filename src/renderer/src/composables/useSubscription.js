@@ -3,7 +3,7 @@ import { checkSubscriptionStatus } from '../services/apiService'
 import { getAllCookies } from '@/utils/cookieHelper'
 import { getSelectedDepartment } from '../utils/storageHelper'
 
-export function useSubscription(sessionContext) {
+export function useSubscription(sessionContext, handleLogout) {
   const subscriptionInfo = ref(null)
   const subscriptionLoading = ref(false)
   let pollingInterval = null
@@ -136,6 +136,21 @@ export function useSubscription(sessionContext) {
     }
   }
 
+  const checkSubscriptionOnLoad = async () => {
+    await loadSubscriptionInfo()
+    if (!subscriptionInfo.value?.data?.currentStatus?.isValid) {
+      const shouldRenew = confirm('您的订阅已过期或无效。是否立即续费？')
+      if (shouldRenew) {
+        renewSubscription()
+      } else {
+        if (handleLogout) {
+          alert('订阅无效，将退出登录。')
+          handleLogout()
+        }
+      }
+    }
+  }
+
   return {
     subscriptionInfo,
     subscriptionLoading,
@@ -143,6 +158,7 @@ export function useSubscription(sessionContext) {
     loadSubscriptionInfo,
     renewSubscription,
     startPolling,
-    stopPolling
+    stopPolling,
+    checkSubscriptionOnLoad
   }
 }

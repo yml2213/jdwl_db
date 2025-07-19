@@ -15,54 +15,6 @@ const sessionContext = ref(null)
 provide('sessionContext', sessionContext)
 const accountManagerRef = ref(null)
 
-// --- 订阅状态管理 ---
-const {
-  subscriptionInfo,
-  subscriptionLoading,
-  remainingDays,
-  loadSubscriptionInfo,
-  renewSubscription
-} = useSubscription(sessionContext)
-
-// --- Authorization & Initialization Flow ---
-const initializeApp = async () => {
-  appState.value = 'loading'
-  try {
-    // 1. 始终从服务器获取会话状态.
-    const status = await getSessionStatus()
-    if (status.loggedIn && status.context) {
-      console.log('会话恢复成功 (来自后端)')
-      sessionContext.value = status.context
-      appState.value = 'main'
-
-      // 进入主界面后立即加载订阅信息
-      await loadSubscriptionInfo()
-      return
-    }
-  } catch (error) {
-    console.error('自动恢复或创建会话失败:', error)
-  }
-
-  // 2. 如果服务器没有会话，则要求用户登录.
-  console.log('无法自动恢复会话，请手动登录。')
-  sessionContext.value = null
-  appState.value = 'login'
-}
-
-const onLoginSuccess = async (context) => {
-  if (context) {
-    console.log('登录和会话创建完全成功，进入主应用。')
-    sessionContext.value = context
-    appState.value = 'main'
-
-    // 登录成功后立即加载订阅信息
-    await loadSubscriptionInfo()
-  } else {
-    console.error('onLoginSuccess被调用，但没有有效的会话上下文。')
-    appState.value = 'login'
-  }
-}
-
 const handleLogout = async () => {
   console.log('正在执行前端登出操作...')
 
@@ -132,6 +84,42 @@ const handleLogout = async () => {
   }, 500)
 }
 
+// --- 订阅状态管理 ---
+const {
+  subscriptionInfo,
+  subscriptionLoading,
+  remainingDays,
+  loadSubscriptionInfo,
+  renewSubscription,
+  checkSubscriptionOnLoad
+} = useSubscription(sessionContext, handleLogout)
+
+// --- Authorization & Initialization Flow ---
+const initializeApp = async () => {
+  appState.value = 'loading'
+  try {
+    // 1. 始终从服务器获取会话状态.
+    const status = await getSessionStatus()
+    if (status.loggedIn && status.context) {
+      console.log('会话恢复成功 (来自后端)')
+      sessionContext.value = status.context
+      appState.value = 'main'
+
+      // 进入主界面后立即加载订阅信息
+      await checkSubscriptionOnLoad()
+      return
+    }
+  } catch (error) {
+    console.error('自动恢复或创建会话失败:', error)
+  }
+
+  // 2. 如果服务器没有会话，则要求用户登录.
+  console.log('无法自动恢复会话，请手动登录。')
+  sessionContext.value = null
+  appState.value = 'login'
+}
+
+
 // --- Lifecycle Hooks ---
 onMounted(() => {
   console.log('App.vue onMounted: 应用已挂载')
@@ -140,6 +128,17 @@ onMounted(() => {
 
   // Listen for successful login from the main process
   if (window.electron && window.electron.ipcRenderer) {
+    window.electron.ipcRenderer.on('subscription-invalid', () => {
+      console.log('App.vue: 收到来自主进程的 subscription-invalid 信号。')
+      const shouldRenew = confirm('您的订阅已过期或无效。是否立即续费？')
+      if (shouldRenew) {
+        renewSubscription()
+      } else {
+        alert('订阅无效，将退出登录。')
+        handleLogout()
+      }
+    })
+
     window.electron.ipcRenderer.on('login-successful', (event, cookies) => {
       console.log('App.vue: 收到来自主进程的 login-successful 信号。')
 

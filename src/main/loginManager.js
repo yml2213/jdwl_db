@@ -2,6 +2,7 @@ import { BrowserWindow, session, ipcMain } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import { validateAuthKey, loadAllAuthKeys, setupSubscriptionChecker } from './authManager'
 
 // 存储路径
 const userDataPath = app.getPath('userData')
@@ -136,9 +137,26 @@ async function handleLoginSuccess(cookies, mainWindow) {
     loginWindow = null
   }
   if (mainWindow && saved) {
-    // 关键改动：将保存好的cookies直接发送给前端
     const savedCookies = await loadCookiesFromFile()
-    mainWindow.webContents.send('login-successful', savedCookies)
+    const pin = savedCookies.find(c => c.name === 'pin').value
+    if (pin) {
+      console.log('开始首次订阅检查...')
+      const allKeys = await loadAllAuthKeys()
+      const storedKey = allKeys[pin]
+      const isValid = await validateAuthKey(storedKey, mainWindow)
+      if (isValid) {
+        console.log('订阅有效，启动定时检查器')
+        setupSubscriptionChecker(mainWindow, pin)
+        mainWindow.webContents.send('login-successful', savedCookies)
+      } else {
+        console.log('订阅无效或过期')
+        // 即使订阅无效，也先让用户进入，由前端处理后续逻辑
+        mainWindow.webContents.send('login-successful', savedCookies)
+      }
+    } else {
+       // pin 不存在，先登录
+       mainWindow.webContents.send('login-successful', savedCookies)
+    }
   }
 }
 

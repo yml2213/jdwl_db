@@ -92,23 +92,28 @@ async function saveAllAuthKeys(keys) {
 }
 
 // 验证卡密有效性
-async function validateAuthKey(key) {
+async function validateAuthKey(key, mainWindow) {
   if (!key) return false
   try {
     const response = await axios.get(`http://localhost:3000/subscription/status?uniqueKey=${key}`)
-    return response.data.success && response.data.data.currentStatus.isValid
+    const isValid = response.data.success && response.data.data.currentStatus.isValid
+    if (!isValid) {
+      mainWindow.webContents.send('subscription-invalid')
+    }
+    return isValid
   } catch (error) {
     console.error(`验证卡密失败 for key ${key}:`, error.message)
+    mainWindow.webContents.send('subscription-invalid')
     return false
   }
 }
 
 // 检查授权状态（核心逻辑）
-async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
+async function handleSubscriptionCheck(uniqueKey, mainWindow, icon) {
   const allKeys = await loadAllAuthKeys()
   const storedKey = allKeys[uniqueKey]
 
-  const isValid = await validateAuthKey(storedKey)
+  const isValid = await validateAuthKey(storedKey, mainWindow)
   if (isValid) {
     // 如果已经有效，通知前端，不需要打开窗口
     mainWindow.webContents.send('subscription-already-valid')
@@ -129,12 +134,43 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
 }
 
 
+let subscriptionInterval = null
+
+// 设置并启动订阅检查器
+function setupSubscriptionChecker(mainWindow, uniqueKey) {
+  if (subscriptionInterval) {
+    clearInterval(subscriptionInterval)
+  }
+
+  const check = async () => {
+    console.log('定时检查订阅状态...')
+    const allKeys = await loadAllAuthKeys()
+    const storedKey = allKeys[uniqueKey]
+    if (storedKey) {
+      await validateAuthKey(storedKey, mainWindow)
+    }
+  }
+
+  // 立即执行一次
+  check()
+
+  // 然后每一小时执行一次
+  subscriptionInterval = setInterval(check, 3600000) // 1 hour
+}
+
+
+
 // --- IPC Handlers ---
 
 function setupAuthHandlers(mainWindow, icon) {
+  ipcMain.on('start-subscription-checker', (event, { uniqueKey }) => {
+    console.log(`Starting subscription checker for ${uniqueKey}`)
+    setupSubscriptionChecker(mainWindow, uniqueKey)
+  })
+
   ipcMain.on('check-auth-status', async (event, { uniqueKey }) => {
     const window = BrowserWindow.fromWebContents(event.sender) || mainWindow
-    await checkAuthWithKey(uniqueKey, window, icon)
+    await handleSubscriptionCheck(uniqueKey, window, icon)
   })
 
   ipcMain.on('subscription-successful', () => {
@@ -144,5 +180,8 @@ function setupAuthHandlers(mainWindow, icon) {
 }
 
 export {
-  setupAuthHandlers
+  setupAuthHandlers,
+  validateAuthKey,
+  loadAllAuthKeys,
+  setupSubscriptionChecker
 }
