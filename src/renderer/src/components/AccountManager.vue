@@ -36,8 +36,8 @@
               </div>
             </div>
             <div v-else-if="!hasSelected" class="no-data">
-              <p>尚未选择供应商和事业部</p>
-              <button class="select-btn" @click="startSelection">选择供应商和事业部</button>
+              <p>尚未选择事业部</p>
+              <button class="select-btn" @click="startSelection">选择事业部</button>
             </div>
             <div class="logout-section">
               <button class="logout-btn" @click="logout">退出登录</button>
@@ -51,13 +51,11 @@
     <div v-if="showSelectionModal" class="selection-modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>选择供应商和事业部（只能选择一次）</h3>
+          <h3>选择事业部（只能选择一次）</h3>
           <button class="close-btn" @click="closeSelectionModal">&times;</button>
         </div>
         <div class="modal-body">
-          <VendorSelector @vendor-selected="handleVendorSelected" />
           <DepartmentSelector
-            :vendor-name="tempVendorName"
             @department-selected="handleDepartmentSelected"
           />
         </div>
@@ -76,7 +74,8 @@ import {
   createSession,
   updateSelection,
   logout as logoutApi,
-  checkSubscriptionStatus
+  checkSubscriptionStatus,
+  getVendorList
 } from '../services/apiService'
 import {
   saveSelectedVendor,
@@ -87,7 +86,6 @@ import {
   markAsSelected,
   clearSelections
 } from '../utils/storageHelper'
-import VendorSelector from './VendorSelector.vue'
 import DepartmentSelector from './DepartmentSelector.vue'
 
 defineProps({
@@ -108,8 +106,8 @@ const isLoggedIn = computed(() => sessionContext.value && sessionContext.value.u
 const username = ref('')
 // 选择弹窗显示状态
 const showSelectionModal = ref(false)
-// 临时存储选择的供应商名称
-const tempVendorName = ref('')
+// 临时存储所有供应商列表
+const allVendors = ref([])
 // 是否已经选择
 const hasSelected = ref(false)
 
@@ -245,68 +243,67 @@ const startSelection = () => {
 // 关闭选择弹窗
 const closeSelectionModal = () => {
   showSelectionModal.value = false
-  tempVendorName.value = ''
-}
-
-// 处理供应商选择
-const handleVendorSelected = (vendor) => {
-  console.log('选择的供应商:', vendor)
-  // 暂存供应商名称，用于传递给事业部选择器
-  tempVendorName.value = vendor.name
-
-  // 保存完整的供应商对象，确保包含正确的id属性
-  const vendorData = {
-    id: vendor.id,
-    name: vendor.name,
-    supplierNo: vendor.id // 保持supplierNo兼容性
-  }
-  saveSelectedVendor(vendorData)
 }
 
 // 处理事业部选择
 const handleDepartmentSelected = async (department) => {
-  console.log('选择的事业部:', department)
-  saveSelectedDepartment(department)
+  console.log('选择的事业部:', department);
 
-  // 更新界面显示
-  const vendorInfo = getSelectedVendor()
-  const departmentInfo = getSelectedDepartment()
-  selectedVendor.value = vendorInfo
-  selectedDepartment.value = departmentInfo
+  // 1. 从选择的事业部信息中获取供应商名称
+  const vendorNameToMatch = department.sellerName;
+  if (!vendorNameToMatch) {
+    alert('错误：选择的事业部信息不完整，缺少供应商名称。');
+    return;
+  }
 
-  // 标记用户已经完成选择
-  hasSelected.value = true
-  markAsSelected()
+  // 2. 在预加载的供应商列表中查找匹配的供应商
+  const matchedVendor = allVendors.value.find(v => v.name === vendorNameToMatch);
 
-  // 关键改动：将选择结果更新到后端
+  if (!matchedVendor) {
+    alert(`错误：未能在供应商列表中找到与“${vendorNameToMatch}”匹配的供应商。`);
+    return;
+  }
+  
+  console.log('成功匹配供应商:', matchedVendor);
+
+  // 3. 保存选择的部门和匹配到的供应商
+  saveSelectedDepartment(department);
+  saveSelectedVendor(matchedVendor);
+  
+  // 更新UI
+  selectedVendor.value = matchedVendor;
+  selectedDepartment.value = department;
+  
+  // 标记用户已完成选择
+  hasSelected.value = true;
+  markAsSelected();
+
+  // 4. 将选择结果更新到后端
   try {
     const selectionData = {
-      supplierInfo: vendorInfo,
-      departmentInfo: departmentInfo
-    }
-    const response = await updateSelection(selectionData)
+      supplierInfo: matchedVendor,
+      departmentInfo: department
+    };
+    const response = await updateSelection(selectionData);
     if (!response.success) {
-      throw new Error(response.message || '更新后端选择失败')
+      throw new Error(response.message || '更新后端选择失败');
     }
 
-    console.log('选择已成功更新到后端。开始进行卡密验证...')
+    console.log('选择已成功更新到后端。开始进行卡密验证...');
 
     // 立即进行卡密验证
-    await performSubscriptionCheck(vendorInfo, departmentInfo)
-
-    // 订阅信息加载已移至App.vue
+    await performSubscriptionCheck(matchedVendor, department);
 
     // 使用后端返回的最新、最完整的上下文来完成登录流程
-    emit('login-success', response.context)
+    emit('login-success', response.context);
   } catch (error) {
-    console.error('更新后端选择失败:', error)
-    alert(`关键步骤失败：无法保存您的选择。错误: ${error.message}`)
-    // 可选：执行登出逻辑
-    logout()
+    console.error('更新后端选择失败:', error);
+    alert(`关键步骤失败：无法保存您的选择。错误: ${error.message}`);
+    logout();
   }
 
   // 关闭选择弹窗
-  closeSelectionModal()
+  closeSelectionModal();
 }
 
 const handleLoginSuccess = async (allCookies) => {
@@ -357,8 +354,20 @@ const handleLoginSuccess = async (allCookies) => {
     // 更新本地的会话上下文，以便后续API调用（如getVendorList）能使用
     sessionContext.value = response.context
 
-    // 步骤3: 打开选择弹窗
-    startSelection()
+    // 步骤3: 获取供应商列表并打开选择弹窗
+    try {
+      const vendors = await getVendorList();
+      if (vendors && vendors.length > 0) {
+        allVendors.value = vendors;
+        startSelection();
+      } else {
+        throw new Error('未能获取到供应商列表');
+      }
+    } catch (error) {
+      console.error('获取供应商列表失败:', error);
+      alert(`无法继续，因为: ${error.message}`);
+      logout();
+    }
   } catch (error) {
     console.error('登录流程失败 (步骤1/2):', error)
     alert(`登录流程中断: ${error.message}`)

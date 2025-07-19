@@ -1,8 +1,7 @@
 <template>
   <div class="department-selector">
     <h4>选择事业部</h4>
-    <div v-if="!vendorName" class="info-message">请先选择一个供应商</div>
-    <div v-else>
+    <div>
       <div v-if="isLoading" class="loading">正在加载事业部...</div>
       <div v-else-if="error" class="error-message">
         {{ error }} <button @click="fetchDepartments" class="retry-btn">重试</button>
@@ -18,15 +17,9 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
-import { getDepartmentsByVendor } from '../services/apiService'
+import { ref, onMounted } from 'vue'
+import { getDepartmentList } from '../services/apiService'
 
-const props = defineProps({
-  vendorName: {
-    type: String,
-    required: true
-  }
-})
 const emit = defineEmits(['department-selected'])
 
 const departments = ref([])
@@ -35,19 +28,15 @@ const isLoading = ref(false)
 const error = ref(null)
 
 const fetchDepartments = async () => {
-  if (!props.vendorName) {
-    departments.value = []
-    return
-  }
   isLoading.value = true
   error.value = null
   try {
-    const data = await getDepartmentsByVendor(props.vendorName)
+    const data = await getDepartmentList()
     if (data && data.length > 0) {
       departments.value = data
     } else {
       departments.value = []
-      error.value = '未能获取到该供应商的事业部列表。'
+      error.value = '未能获取到事业部列表，请检查网络或重新登录后重试。'
     }
   } catch (err) {
     console.error('获取事业部列表失败:', err)
@@ -64,13 +53,8 @@ const onDepartmentSelect = () => {
   }
 }
 
-watch(() => props.vendorName, (newName) => {
-  selectedDepartmentId.value = ''
-  departments.value = []
-  error.value = null
-  if (newName) {
-    fetchDepartments()
-  }
+onMounted(() => {
+  fetchDepartments()
 })
 </script>
 

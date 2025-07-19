@@ -204,10 +204,15 @@ export async function getVendorList() {
  * @param {string} vendorName - 供应商名称
  * @returns {Promise<Array>} 事业部列表
  */
-export async function getDepartmentsByVendor(vendorName) {
+/**
+ * 从后端获取所有事业部列表
+ * @returns {Promise<Array>} 事业部列表
+ */
+export async function getDepartmentList() {
+  // 假设后端 /api/departments 在没有提供 vendorName 时会返回所有部门
   return await fetchApi('/api/departments', {
     method: 'POST',
-    body: { vendorName }
+    body: {} // 发送空对象
   });
 }
 

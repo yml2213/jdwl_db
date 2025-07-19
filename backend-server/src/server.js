@@ -123,15 +123,14 @@ app.get('/api/vendors', requireAuth, async (req, res) => {
 
 // 新增：获取事业部列表
 app.post('/api/departments', requireAuth, async (req, res) => {
-    const { vendorName } = req.body
-    if (!vendorName) {
-        return res.status(400).json({ error: 'BadRequest', message: '缺少 vendorName 参数' })
-    }
+    const { vendorName } = req.body // vendorName 现在是可选的
     try {
+        // 如果提供了 vendorName，则按原来的逻辑筛选
+        // 如果未提供，则获取所有事业部
         const departments = await jdApiService.getDepartmentList(vendorName, req.session)
         res.json(departments)
     } catch (error) {
-        console.error(`获取"${vendorName}"的事业部列表失败:`, error)
+        console.error(`获取事业部列表失败 (vendor: ${vendorName || '所有'}):`, error)
         if (error.message === 'NotLogin') {
             res.status(401).json({ error: 'NotLogin', message: '会话无效或已过期' })
         } else {
