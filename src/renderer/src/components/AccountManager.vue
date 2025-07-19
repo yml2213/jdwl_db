@@ -9,6 +9,50 @@
     </div>
     <div v-else class="user-info">
       <span class="user-text">当前账号：{{ username }}</span>
+      
+      <!-- 调试信息 -->
+      <div v-if="isLoggedIn" class="debug-info" style="color: yellow; font-size: 12px;">
+        调试: hasSelected={{ hasSelected }}, hasSelectedData={{ hasSelectedData }}, 
+        subscriptionInfo={{ subscriptionInfo ? 'exists' : 'null' }}
+      </div>
+      
+      <!-- 订阅状态显示 -->
+      <div v-if="subscriptionInfo && subscriptionInfo.data.currentStatus.isValid" class="subscription-status">
+        <div class="subscription-info">
+          <span class="subscription-text">
+            订阅剩余：{{ remainingDays }}天
+          </span>
+          <span class="subscription-expire">
+            ({{ subscriptionInfo.data.validUntilFormatted }})
+          </span>
+        </div>
+        <div class="subscription-actions">
+          <button 
+            class="refresh-btn" 
+            @click="refreshSubscriptionStatus" 
+            :disabled="subscriptionLoading"
+            title="刷新订阅状态"
+          >
+            {{ subscriptionLoading ? '⟳' : '🔄' }}
+          </button>
+          <button 
+            class="renew-btn" 
+            @click="renewSubscription"
+            title="续费订阅"
+          >
+            续费
+          </button>
+        </div>
+      </div>
+      
+      <!-- 如果没有订阅信息但有选择数据，显示加载或错误状态 -->
+      <div v-else-if="hasSelectedData && !subscriptionInfo" class="subscription-loading">
+        <span style="color: orange;">正在加载订阅信息...</span>
+        <button class="refresh-btn" @click="refreshSubscriptionStatus" :disabled="subscriptionLoading">
+          {{ subscriptionLoading ? '⟳' : '🔄' }}
+        </button>
+      </div>
+      
       <div class="dropdown">
         <button class="user-btn">账号管理</button>
         <div class="dropdown-content">
@@ -114,9 +158,22 @@ const hasSelected = ref(false)
 const selectedVendor = ref(null)
 const selectedDepartment = ref(null)
 
+// 订阅状态数据
+const subscriptionInfo = ref(null)
+const subscriptionLoading = ref(false)
+
 // 是否有选择数据
 const hasSelectedData = computed(() => {
   return selectedVendor.value && selectedDepartment.value
+})
+
+// 计算剩余天数
+const remainingDays = computed(() => {
+  if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0
+  const validUntil = subscriptionInfo.value.data.currentStatus.validUntil
+  const now = Date.now()
+  const diff = validUntil - now
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
 })
 
 // 从cookie中获取用户名 (从pin获取)
@@ -159,7 +216,8 @@ const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
     const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
 
     if (subscriptionResult.success && subscriptionResult.data.currentStatus.isValid) {
-      // 订阅有效
+      // 订阅有效，保存订阅信息
+      subscriptionInfo.value = subscriptionResult
       console.log('订阅验证成功，用户可以正常使用功能')
       const validUntil = subscriptionResult.data.validUntilFormatted
       showNotification(
@@ -203,6 +261,68 @@ const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
     } else {
       showNotification('订阅检查失败', `验证过程中出现错误: ${error.message}`, 'error')
     }
+  }
+}
+
+// 刷新订阅状态
+const refreshSubscriptionStatus = async () => {
+  if (!selectedVendor.value || !selectedDepartment.value) {
+    showNotification('刷新失败', '缺少用户信息', 'error')
+    return
+  }
+
+  subscriptionLoading.value = true
+  try {
+    const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+    if (!pinCookie?.value || !selectedDepartment.value.deptNo) {
+      throw new Error('无法获取用户信息')
+    }
+
+    const username = decodeURIComponent(pinCookie.value)
+    const deptId = selectedDepartment.value.deptNo.replace('CBU', '')
+    const uniqueKey = `${username}-${deptId}`
+
+    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
+    
+    if (subscriptionResult.success) {
+      subscriptionInfo.value = subscriptionResult
+      showNotification('刷新成功', '订阅状态已更新', 'success')
+    } else {
+      showNotification('刷新失败', '无法获取订阅状态', 'error')
+    }
+  } catch (error) {
+    console.error('刷新订阅状态失败:', error)
+    showNotification('刷新失败', error.message, 'error')
+  } finally {
+    subscriptionLoading.value = false
+  }
+}
+
+// 续费订阅
+const renewSubscription = async () => {
+  if (!selectedVendor.value || !selectedDepartment.value) {
+    showNotification('续费失败', '缺少用户信息', 'error')
+    return
+  }
+
+  try {
+    const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+    if (!pinCookie?.value || !selectedDepartment.value.deptNo) {
+      throw new Error('无法获取用户信息')
+    }
+
+    const username = decodeURIComponent(pinCookie.value)
+    const deptId = selectedDepartment.value.deptNo.replace('CBU', '')
+    const uniqueKey = `${username}-${deptId}`
+
+    // 调用主进程打开购买页面进行续费
+    await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
+    showNotification('续费页面已打开', '请在新窗口中完成续费', 'info')
+  } catch (error) {
+    console.error('打开续费页面失败:', error)
+    showNotification('续费失败', error.message, 'error')
   }
 }
 
@@ -386,6 +506,22 @@ const initialize = async () => {
   loadSavedSelections()
   if (isLoggedIn.value) {
     await updateUsername() // 这里不需要传cookies，它会自己去获取
+    
+    console.log('初始化检查 - hasSelectedData:', hasSelectedData.value)
+    console.log('初始化检查 - selectedVendor:', selectedVendor.value)
+    console.log('初始化检查 - selectedDepartment:', selectedDepartment.value)
+    
+    // 如果用户已经选择了供应商和事业部，自动加载订阅状态
+    if (hasSelectedData.value) {
+      console.log('用户已有选择数据，开始加载订阅状态...')
+      await refreshSubscriptionStatus()
+    } else {
+      console.log('用户尚未选择供应商和事业部，需要进行选择')
+      // 如果用户还没有选择，自动打开选择弹窗
+      if (!hasSelected.value) {
+        startSelection()
+      }
+    }
   }
 }
 
@@ -425,6 +561,89 @@ onUnmounted(() => {
 .user-text {
   color: white;
   font-size: 14px;
+}
+
+/* 订阅状态样式 */
+.subscription-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.subscription-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subscription-text {
+  color: #4caf50;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.subscription-expire {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+.subscription-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.refresh-btn,
+.renew-btn {
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+}
+
+.refresh-btn {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: rotate(180deg);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.renew-btn {
+  background-color: #ff9800;
+  color: white;
+  font-weight: 500;
+}
+
+.renew-btn:hover {
+  background-color: #f57c00;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .login-btn,
