@@ -151,7 +151,7 @@ class PaymentService {
    * @param {string} [orderInfo.body] - 订单描述
    * @returns {Promise<string>} 支付URL
    */
-  async generatePaymentUrl(orderInfo) {
+  async generatePaymentUrl(orderInfo, req) {
     try {
       // 确保服务已初始化
       await this.initialize();
@@ -160,7 +160,7 @@ class PaymentService {
       this._validateOrderInfo(orderInfo);
 
       // 构建支付参数
-      const paymentParams = this._buildPaymentParams(orderInfo);
+      const paymentParams = this._buildPaymentParams(orderInfo, req);
 
       // 生成签名
       const signature = this.signatureService.generateSignature(
@@ -186,7 +186,7 @@ class PaymentService {
    * @returns {Object} 支付参数
    * @private
    */
-  _buildPaymentParams(orderInfo) {
+  _buildPaymentParams(orderInfo, req) {
     const timestamp = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     
     // 构建业务参数
@@ -213,10 +213,14 @@ class PaymentService {
     // 添加回调地址（如果配置了）
     if (this.config.getNotifyUrl()) {
       params.notify_url = this.config.getNotifyUrl();
+    } else if (req) {
+      params.notify_url = `${req.protocol}://${req.get('host')}/alipay/notify`;
     }
 
     if (this.config.getReturnUrl()) {
       params.return_url = this.config.getReturnUrl();
+    } else if (req) {
+      params.return_url = `${req.protocol}://${req.get('host')}/alipay/return`;
     }
 
     return params;
@@ -251,13 +255,13 @@ class PaymentService {
    * @param {Object} orderInfo - 订单信息
    * @returns {Promise<{order: Order, paymentUrl: string}>} 订单和支付URL
    */
-  async createPaymentAndGenerateUrl(orderInfo) {
+  async createPaymentAndGenerateUrl(orderInfo, req) {
     try {
       // 创建订单
       const order = await this.createPayment(orderInfo);
 
       // 生成支付URL
-      const paymentUrl = await this.generatePaymentUrl(orderInfo);
+      const paymentUrl = await this.generatePaymentUrl(orderInfo, req);
 
       return {
         order,

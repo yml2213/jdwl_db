@@ -33,9 +33,6 @@ class PaymentConfig {
     // 根据环境设置网关地址
     this.setGatewayUrl();
     
-    // 设置回调地址
-    this.notifyUrl = process.env.NOTIFY_URL;
-    this.returnUrl = process.env.RETURN_URL;
   }
 
   /**

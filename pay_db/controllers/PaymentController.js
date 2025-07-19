@@ -80,7 +80,7 @@ class PaymentController {
       };
 
       console.log('发起支付请求:', orderInfo);
-      const result = await this.paymentService.createPaymentAndGenerateUrl(orderInfo);
+      const result = await this.paymentService.createPaymentAndGenerateUrl(orderInfo, req);
       console.log('支付订单创建成功:', result.order.id);
       res.redirect(result.paymentUrl);
     } catch (error) {
