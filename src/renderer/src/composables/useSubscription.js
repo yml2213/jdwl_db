@@ -99,13 +99,15 @@ export function useSubscription(sessionContext, handleLogout) {
     }
   }
 
-  const renewSubscription = async () => {
+  const renewSubscription = () => {
+  return new Promise(async (resolve) => {
     try {
       const cookies = await getAllCookies()
       const pinCookie = cookies?.find((c) => c.name === 'pin')
 
       if (!pinCookie?.value) {
         alert('无法获取用户信息')
+        resolve(false)
         return
       }
 
@@ -121,11 +123,29 @@ export function useSubscription(sessionContext, handleLogout) {
 
       if (!deptId) {
         alert('无法获取部门信息')
+        resolve(false)
         return
       }
 
       const username = decodeURIComponent(pinCookie.value)
       const uniqueKey = `${username}-${deptId}`
+
+      const onSubscriptionSuccess = () => {
+        console.log('续费成功，停止轮询')
+        stopPolling()
+        window.electron.ipcRenderer.removeListener('purchase-window-closed', onWindowClosed)
+        resolve(true)
+      }
+
+      const onWindowClosed = () => {
+        console.log('支付窗口关闭，但未收到成功信号')
+        stopPolling()
+        window.electron.ipcRenderer.removeListener('subscription-successful', onSubscriptionSuccess)
+        resolve(false)
+      }
+
+      window.electron.ipcRenderer.once('subscription-successful', onSubscriptionSuccess)
+      window.electron.ipcRenderer.once('purchase-window-closed', onWindowClosed)
 
       window.electron.ipcRenderer.send('check-auth-status', { uniqueKey })
       startPolling()
@@ -133,22 +153,33 @@ export function useSubscription(sessionContext, handleLogout) {
     } catch (error) {
       console.error('打开续费页面失败:', error)
       alert('续费失败: ' + error.message)
+      resolve(false)
     }
-  }
+  })
+}
 
   const checkSubscriptionOnLoad = async () => {
     await loadSubscriptionInfo()
     if (!subscriptionInfo.value?.data?.currentStatus?.isValid) {
       const shouldRenew = confirm('您的订阅已过期或无效。是否立即续费？')
       if (shouldRenew) {
-        renewSubscription()
+        const renewed = await renewSubscription()
+        if (!renewed) {
+          if (handleLogout) {
+            alert('订阅无效，将退出登录。')
+            handleLogout()
+          }
+          return false // Indicate failure
+        }
       } else {
         if (handleLogout) {
           alert('订阅无效，将退出登录。')
           handleLogout()
         }
+        return false // Indicate failure
       }
     }
+    return true // Indicate success
   }
 
   return {

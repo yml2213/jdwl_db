@@ -130,6 +130,7 @@ async function handleSubscriptionCheck(uniqueKey, mainWindow, icon) {
   purchaseWindow.on('closed', () => {
     purchaseWindow = null
     console.log('支付窗口已关闭。')
+    mainWindow.webContents.send('purchase-window-closed')
   })
 }
 

@@ -98,29 +98,45 @@ const {
 const initializeApp = async () => {
   appState.value = 'loading'
   try {
-    // 1. 始终从服务器获取会话状态.
     const status = await getSessionStatus()
     if (status.loggedIn && status.context) {
       console.log('会话恢复成功 (来自后端)')
       sessionContext.value = status.context
-      appState.value = 'main'
-
-      // 进入主界面后立即加载订阅信息
-      await checkSubscriptionOnLoad()
-      return
+      const subscriptionValid = await checkSubscriptionOnLoad()
+      if (subscriptionValid) {
+        appState.value = 'main'
+      } else {
+        // 如果订阅无效且用户选择不续费，则停留在登录页面
+        appState.value = 'login'
+      }
+    } else {
+      appState.value = 'login'
     }
   } catch (error) {
     console.error('自动恢复或创建会话失败:', error)
+    appState.value = 'login'
   }
-
-  // 2. 如果服务器没有会话，则要求用户登录.
-  console.log('无法自动恢复会话，请手动登录。')
-  sessionContext.value = null
-  appState.value = 'login'
 }
 
 
 // --- Lifecycle Hooks ---
+const onLoginSuccess = async (context) => {
+  if (context) {
+    console.log('登录和会话创建完全成功，进入主应用。')
+    sessionContext.value = context
+    const subscriptionValid = await checkSubscriptionOnLoad()
+    if (subscriptionValid) {
+      appState.value = 'main'
+    } else {
+      // 如果订阅无效且用户选择不续费，则停留在登录页面
+      appState.value = 'login'
+    }
+  } else {
+    console.error('onLoginSuccess被调用，但没有有效的会话上下文。')
+    appState.value = 'login'
+  }
+}
+
 onMounted(() => {
   console.log('App.vue onMounted: 应用已挂载')
   webSocketService.connect()
