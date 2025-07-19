@@ -29,7 +29,7 @@ class Application {
     // this.app.use(helmet({
     //   contentSecurityPolicy: false
     // }));
-    
+
     // CORS 配置
     this.app.use(cors({
       origin: process.env.CORS_ORIGIN || '*',

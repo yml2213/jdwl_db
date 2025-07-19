@@ -1,6 +1,7 @@
 import { getAllCookies } from '../utils/cookieHelper'
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:2333'
+export const PAYMENT_API_BASE_URL = import.meta.env.VITE_PAYMENT_API_URL || 'http://localhost:3000'
 
 /**
  * 安全序列化对象，移除无法克隆的元素
@@ -339,18 +340,13 @@ export async function logout() {
  */
 export const checkSubscriptionStatus = async (uniqueKey) => {
   try {
-    const response = await fetch(`http://localhost:3000/subscription/status?uniqueKey=${encodeURIComponent(uniqueKey)}`)
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-    
-    const result = await response.json()
-    return result
+    const endpoint = `${PAYMENT_API_BASE_URL}/subscription/status?uniqueKey=${encodeURIComponent(uniqueKey)}`;
+    const result = await fetchApi(endpoint, { method: 'GET' });
+    return result;
   } catch (error) {
-    console.error('检查订阅状态失败:', error)
-    throw error
+    console.error('检查订阅状态失败:', error);
+    throw error;
   }
-}
+};
 
 

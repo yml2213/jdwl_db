@@ -3,6 +3,8 @@ import { join } from 'path'
 import fs from 'fs/promises'
 import axios from 'axios'
 
+const PAYMENT_API_BASE_URL = process.env.VITE_PAYMENT_API_URL || 'http://localhost:3000'
+
 let purchaseWindow = null // 全局变量，用于持有支付窗口的引用
 
 const closePurchaseWindow = () => {
@@ -95,7 +97,7 @@ async function saveAllAuthKeys(keys) {
 async function validateAuthKey(key, mainWindow) {
   if (!key) return false
   try {
-    const response = await axios.get(`http://localhost:3000/subscription/status?uniqueKey=${key}`)
+    const response = await axios.get(`${PAYMENT_API_BASE_URL}/subscription/status?uniqueKey=${key}`)
     const isValid = response.data.success && response.data.data.currentStatus.isValid
     if (!isValid) {
       mainWindow.webContents.send('subscription-invalid')
@@ -120,7 +122,7 @@ async function handleSubscriptionCheck(uniqueKey, mainWindow, icon) {
     return
   }
 
-  const purchaseUrl = `http://localhost:3000/CreateOrder?uniqueKey=${uniqueKey}&Timestamp=${Date.now()}`
+  const purchaseUrl = `${PAYMENT_API_BASE_URL}/CreateOrder?uniqueKey=${uniqueKey}&Timestamp=${Date.now()}`
   // 如果已经有窗口，先关闭
   if (purchaseWindow && !purchaseWindow.isDestroyed()) {
     purchaseWindow.close()
