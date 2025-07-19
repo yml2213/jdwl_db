@@ -15,7 +15,7 @@ export const getAllCookies = async () => {
     const cookies = await window.api.getCookies()
 
     if (cookies && Array.isArray(cookies)) {
-      console.log(`成功从存储获取到 ${cookies.length} 个cookies`)
+      // console.log(`成功从存储获取到 ${cookies.length} 个cookies`)
 
       // 检查是否包含必要的cookie
       const missingCookies = requiredCookies.filter(
@@ -25,7 +25,7 @@ export const getAllCookies = async () => {
       if (missingCookies.length > 0) {
         console.warn(`警告: 缺少以下必要的cookies: ${missingCookies.join(', ')}`)
       } else {
-        console.log('已获取所有必要的cookies')
+        // console.log('已获取所有必要的cookies')
       }
 
       return cookies

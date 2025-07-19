@@ -243,6 +243,7 @@ const handleDepartmentSelected = async (department) => {
   } catch (error) {
     console.error('配置事业部失败:', error)
     selectionError.value = error.message
+    hasSelected.value = false // 确保在出错时重置状态
     loginStep.value = 'selecting' // Return to selection screen on error
   }
 }

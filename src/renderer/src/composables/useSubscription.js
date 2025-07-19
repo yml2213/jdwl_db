@@ -1,4 +1,3 @@
-
 import { ref, computed } from 'vue'
 import { checkSubscriptionStatus } from '../services/apiService'
 import { getAllCookies } from '@/utils/cookieHelper'
@@ -13,25 +12,29 @@ export function useSubscription(sessionContext) {
     if (pollingInterval) {
       clearInterval(pollingInterval)
       pollingInterval = null
-      console.log('Subscription polling stopped.')
+      console.log('👋 [Subscription] 轮询已停止。')
     }
   }
 
   const startPolling = () => {
-    if (pollingInterval) return // Already polling
-
-    console.log('Starting subscription polling.')
+    if (pollingInterval) return
+    console.log('🚀 [Subscription] 开始轮询订阅状态...')
     pollingInterval = setInterval(async () => {
-      console.log('Polling for subscription status...')
-      await loadSubscriptionInfo()
-      if (subscriptionInfo.value?.data?.currentStatus?.isValid) {
+      await loadSubscriptionInfo(true) // true表示是轮询调用
+      const isValid = subscriptionInfo.value?.data?.currentStatus?.isValid
+      if (isValid) {
+        console.log('✅ [Subscription] 轮询检测到有效订阅！')
         stopPolling()
-        console.log('Subscription is valid, polling stopped.')
       }
-    }, 3000) // Poll every 3 seconds
+    }, 3000)
 
-    // Stop polling after 10 minutes to avoid infinite loops
-    setTimeout(stopPolling, 600000)
+    // 10分钟后自动停止，防止意外的无限轮询
+    setTimeout(() => {
+      if (pollingInterval) {
+        console.warn('[Subscription] 轮询超时，自动停止。')
+        stopPolling()
+      }
+    }, 600000)
   }
 
   const remainingDays = computed(() => {
@@ -42,15 +45,17 @@ export function useSubscription(sessionContext) {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
   })
 
-  const loadSubscriptionInfo = async () => {
-    console.log('=== useSubscription: 开始加载订阅信息 ===')
-    subscriptionLoading.value = true
+  const loadSubscriptionInfo = async (isPolling = false) => {
+    if (!isPolling) {
+      console.log('=== useSubscription: 开始加载订阅信息 ===')
+      subscriptionLoading.value = true
+    }
     try {
       const cookies = await getAllCookies()
       const pinCookie = cookies?.find((c) => c.name === 'pin')
 
       if (!pinCookie?.value) {
-        console.error('❌ 无法获取用户信息')
+        if (!isPolling) console.error('❌ 无法获取用户信息')
         return
       }
 
@@ -65,31 +70,32 @@ export function useSubscription(sessionContext) {
       }
 
       if (!deptId) {
-        console.log('⚠️ 暂时无法获取部门信息')
+        if (!isPolling) console.log('⚠️ 暂时无法获取部门信息')
         return
       }
 
       const username = decodeURIComponent(pinCookie.value)
       const uniqueKey = `${username}-${deptId}`
 
-      console.log('useSubscription: 生成的uniqueKey:', uniqueKey)
-      console.log('useSubscription: 正在调用订阅状态检查接口...')
-
       const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
-      console.log('useSubscription: 订阅状态检查结果:', subscriptionResult)
 
       if (subscriptionResult && subscriptionResult.success) {
         subscriptionInfo.value = subscriptionResult
-        console.log('✅ useSubscription: 订阅信息已加载:', subscriptionInfo.value)
+        if (!isPolling) console.log('✅ useSubscription: 订阅信息已加载')
       } else {
-        console.log('⚠️ useSubscription: 订阅状态检查返回失败或无效结果')
         subscriptionInfo.value = subscriptionResult
+        if (!isPolling) console.log('⚠️ useSubscription: 订阅状态检查返回失败或无效结果')
       }
     } catch (error) {
-      console.error('❌ useSubscription: 加载订阅信息失败:', error)
+      // 在轮询时，我们预期会收到404错误，所以只在非轮询或遇到非404错误时打印
+      if (!isPolling || (error.message && !error.message.includes('404'))) {
+        console.error('❌ useSubscription: 加载订阅信息失败:', error)
+      }
     } finally {
-      subscriptionLoading.value = false
-      console.log('=== useSubscription: 订阅信息加载结束 ===')
+      if (!isPolling) {
+        subscriptionLoading.value = false
+        console.log('=== useSubscription: 订阅信息加载结束 ===')
+      }
     }
   }
 
