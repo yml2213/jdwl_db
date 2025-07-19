@@ -26,7 +26,13 @@ router.get('/CreateOrder', async (req, res) => {
 
     // 检查用户订阅状态
     const subscriptionStatus = await userSubscriptionService.checkUserSubscription(uniqueKey);
-    const totalAmount = amount ? parseFloat(amount) : 0.01;
+    // 从环境变量读取价格，增加安全校验
+    let subscriptionAmount = parseFloat(process.env.SUBSCRIPTION_AMOUNT);
+    if (isNaN(subscriptionAmount) || subscriptionAmount <= 0) {
+      console.warn(`环境变量 SUBSCRIPTION_AMOUNT 配置无效 ("${process.env.SUBSCRIPTION_AMOUNT}")，将使用默认值 300。`);
+      subscriptionAmount = 300;
+    }
+    const totalAmount = amount ? parseFloat(amount) : subscriptionAmount;
     
     let orderInfo;
     let isNewUser = false;
