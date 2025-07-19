@@ -7,6 +7,32 @@ import { getSelectedDepartment } from '../utils/storageHelper'
 export function useSubscription(sessionContext) {
   const subscriptionInfo = ref(null)
   const subscriptionLoading = ref(false)
+  let pollingInterval = null
+
+  const stopPolling = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+      pollingInterval = null
+      console.log('Subscription polling stopped.')
+    }
+  }
+
+  const startPolling = () => {
+    if (pollingInterval) return // Already polling
+
+    console.log('Starting subscription polling.')
+    pollingInterval = setInterval(async () => {
+      console.log('Polling for subscription status...')
+      await loadSubscriptionInfo()
+      if (subscriptionInfo.value?.data?.currentStatus?.isValid) {
+        stopPolling()
+        console.log('Subscription is valid, polling stopped.')
+      }
+    }, 3000) // Poll every 3 seconds
+
+    // Stop polling after 10 minutes to avoid infinite loops
+    setTimeout(stopPolling, 600000)
+  }
 
   const remainingDays = computed(() => {
     if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0
@@ -96,6 +122,7 @@ export function useSubscription(sessionContext) {
       const uniqueKey = `${username}-${deptId}`
 
       await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
+      startPolling()
       console.log('续费页面已打开')
     } catch (error) {
       console.error('打开续费页面失败:', error)
@@ -108,6 +135,8 @@ export function useSubscription(sessionContext) {
     subscriptionLoading,
     remainingDays,
     loadSubscriptionInfo,
-    renewSubscription
+    renewSubscription,
+    startPolling,
+    stopPolling
   }
 }

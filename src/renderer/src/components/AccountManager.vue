@@ -68,7 +68,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, inject } from 'vue'
+import { ref, onMounted, computed, inject, watch } from 'vue'
+import { useSubscription } from '../composables/useSubscription'
 import { getAllCookies } from '../utils/cookieHelper'
 import {
   createSession,
@@ -89,6 +90,14 @@ import DepartmentSelector from './DepartmentSelector.vue'
 
 const emit = defineEmits(['login-success', 'logout'])
 const sessionContext = inject('sessionContext')
+const {
+  subscriptionInfo,
+  subscriptionLoading,
+  loadSubscriptionInfo,
+  renewSubscription,
+  startPolling,
+  stopPolling
+} = useSubscription(sessionContext)
 
 // --- State Management for Login Flow ---
 const loginStep = ref('initial') // 'initial', 'loading', 'selecting'
@@ -166,34 +175,23 @@ const handleLoginSuccess = async (allCookies) => {
   }
 }
 
-const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
-  try {
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-    if (!pinCookie?.value || !departmentInfo.deptNo) {
-      throw new Error('无法获取用户信息或部门信息')
-    }
+watch(subscriptionInfo, (newInfo) => {
+  if (newInfo?.success && newInfo?.data?.currentStatus?.isValid) {
+    console.log('订阅状态更新，现在有效，将完成登录。')
+    stopPolling() // 确保轮询已停止
+    emit('login-success', newInfo.context || sessionContext.value)
+  }
+})
 
-    const username = decodeURIComponent(pinCookie.value)
-    const deptId = departmentInfo.deptNo.replace('CBU', '')
-    const uniqueKey = `${username}-${deptId}`
-
-    console.log(`开始验证订阅状态，uniqueKey: ${uniqueKey}`)
-
-    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
-
-    if (subscriptionResult.success && subscriptionResult.data.currentStatus.isValid) {
-      console.log('订阅验证成功')
-      return true
-    } else {
-      const message = subscriptionResult.data?.currentStatus?.message || '未找到有效订阅'
-      selectionError.value = `${message}，请订阅后重试。`
-      await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
-      return false
-    }
-  } catch (error) {
-    console.error('订阅检查失败:', error)
-    selectionError.value = `订阅检查失败: ${error.message}`
+const performSubscriptionCheck = async () => {
+  await loadSubscriptionInfo()
+  if (subscriptionInfo.value?.success && subscriptionInfo.value?.data?.currentStatus?.isValid) {
+    console.log('订阅验证成功')
+    return true
+  } else {
+    const message = subscriptionInfo.value?.data?.currentStatus?.message || '未找到有效订阅'
+    selectionError.value = `${message}，请订阅后重试。`
+    renewSubscription() // This will open the renewal page and start polling
     return false
   }
 }
@@ -223,7 +221,7 @@ const handleDepartmentSelected = async (department) => {
     if (!response.success) throw new Error(response.message || '更新后端选择失败')
 
     console.log('选择已成功更新到后端。正在验证订阅...')
-    const isSubscribed = await performSubscriptionCheck(matchedVendor, department)
+    const isSubscribed = await performSubscriptionCheck()
 
     if (isSubscribed) {
         emit('login-success', response.context)
