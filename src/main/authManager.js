@@ -31,7 +31,9 @@ function createPaymentWindow(url, parentWindow, icon) {
       webSecurity: false, // 禁用web安全以允许支付宝页面加载
       allowRunningInsecureContent: true,
       experimentalFeatures: true,
-      partition: 'persist:payment' // 使用独立的session分区
+      partition: 'persist:payment', // 使用独立的session分区
+      insecure: true, // 仅用于开发调试，忽略证书错误
+      ignoreCertificateErrors: true // 仅用于开发调试
     }
   })
 
