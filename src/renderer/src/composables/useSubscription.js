@@ -17,13 +17,15 @@ export function useSubscription(sessionContext, handleLogout) {
     }
   }
 
-  const startPolling = (onSuccess) => {
+  const startPolling = (onSuccess, initialTimestamp = 0) => {
     if (pollingInterval) return
     console.log('🚀 [Subscription] 开始轮询订阅状态...')
     pollingInterval = setInterval(async () => {
       await loadSubscriptionInfo(true) // true表示是轮询调用
-      const isValid = subscriptionInfo.value?.data?.currentStatus?.isValid
-      if (isValid) {
+      const currentValidUntil = subscriptionInfo.value?.data?.currentStatus?.validUntil || 0;
+      const isNowValid = currentValidUntil > initialTimestamp;
+
+      if (isNowValid) {
         console.log('✅ [Subscription] 轮询检测到有效订阅！')
         stopPolling()
         if (onSuccess) {
@@ -159,7 +161,8 @@ export function useSubscription(sessionContext, handleLogout) {
       window.electron.ipcRenderer.once('purchase-window-closed', onWindowClosed)
 
       window.electron.ipcRenderer.send('check-auth-status', { uniqueKey })
-      startPolling(onSubscriptionSuccess)
+      const initialValidUntil = subscriptionInfo.value?.data?.currentStatus?.validUntil || 0;
+      startPolling(onSubscriptionSuccess, initialValidUntil)
       console.log('续费页面打开请求已发送')
     } catch (error) {
       console.error('打开续费页面失败:', error)
