@@ -3,6 +3,15 @@ import { join } from 'path'
 import fs from 'fs/promises'
 import axios from 'axios'
 
+let purchaseWindow = null // 全局变量，用于持有支付窗口的引用
+
+const closePurchaseWindow = () => {
+  if (purchaseWindow && !purchaseWindow.isDestroyed()) {
+    purchaseWindow.close()
+  }
+  purchaseWindow = null
+}
+
 const AUTH_FILE_PATH = join(app.getPath('userData'), 'auth-keys.json')
 
 // 创建支付窗口的通用函数
@@ -104,13 +113,8 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
     return { success: true }
   }
 
-  // 如果没有有效的卡密，则直接打开购买页面
   const purchaseUrl = `http://localhost:3000/CreateOrder?uniqueKey=${uniqueKey}&Timestamp=${Date.now()}`
-  let purchaseWindow = createPaymentWindow(purchaseUrl, mainWindow, icon)
-
-  purchaseWindow.on('ready-to-show', () => {
-    purchaseWindow.show()
-  })
+  purchaseWindow = createPaymentWindow(purchaseUrl, mainWindow, icon)
 
   return new Promise((resolve) => {
     purchaseWindow.on('closed', async () => {
@@ -121,7 +125,6 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
       const newKey = updatedKeys[uniqueKey]
       const isNewKeyValid = await validateAuthKey(newKey)
 
-      // 如果新密钥仍然无效，直接返回失败，不再打开手动输入窗口
       if (!isNewKeyValid) {
         console.log('购买页面关闭后，订阅状态仍然无效')
         resolve({ success: false })
@@ -144,5 +147,8 @@ ipcMain.handle('check-auth-status', async (event, { uniqueKey }) => {
   return await checkAuthWithKey(uniqueKey, mainWindow, iconPath)
 })
 
-// 手动输入卡密的IPC处理器已移除
+ipcMain.on('subscription-successful', () => {
+  console.log('收到订阅成功信号，正在关闭支付窗口...')
+  closePurchaseWindow()
+})
 

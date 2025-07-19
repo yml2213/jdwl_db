@@ -179,6 +179,7 @@ watch(subscriptionInfo, (newInfo) => {
   if (newInfo?.success && newInfo?.data?.currentStatus?.isValid) {
     console.log('订阅状态更新，现在有效，将完成登录。')
     stopPolling() // 确保轮询已停止
+    window.electron.ipcRenderer.send('subscription-successful')
     emit('login-success', newInfo.context || sessionContext.value)
   }
 })
