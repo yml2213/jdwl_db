@@ -7,15 +7,13 @@ import ReturnStorage from './components/ReturnStorage.vue'
 import {
   getSessionStatus,
   createSession,
-  logout as logoutApi,
-  checkSubscriptionStatus
+  logout as logoutApi
 } from './services/apiService'
 import {
-  clearSelections,
-  getSelectedDepartment
+  clearSelections
 } from './utils/storageHelper'
-import { getAllCookies } from '@/utils/cookieHelper'
 import webSocketService from './services/webSocketService'
+import { useSubscription } from './composables/useSubscription'
 
 // --- State Management ---
 const isDev = ref(process.env.NODE_ENV === 'development')
@@ -25,109 +23,13 @@ provide('sessionContext', sessionContext)
 const accountManagerRef = ref(null)
 
 // --- 订阅状态管理 ---
-const subscriptionInfo = ref(null)
-const subscriptionLoading = ref(false)
-
-// 计算剩余天数
-const remainingDays = computed(() => {
-  if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0
-  const validUntil = subscriptionInfo.value.data.currentStatus.validUntil
-  const now = Date.now()
-  const diff = validUntil - now
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
-})
-
-// --- 订阅信息管理 ---
-const loadSubscriptionInfo = async () => {
-  console.log('=== App.vue: 开始加载订阅信息 ===')
-
-  subscriptionLoading.value = true
-  try {
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-
-    if (!pinCookie?.value) {
-      console.error('❌ 无法获取用户信息')
-      return
-    }
-
-    // 尝试从会话上下文获取部门信息
-    let deptId = null
-    if (sessionContext.value?.departmentInfo?.deptNo) {
-      deptId = sessionContext.value.departmentInfo.deptNo.replace('CBU', '')
-    } else {
-      // 尝试从本地存储获取
-      const savedDepartment = getSelectedDepartment()
-      if (savedDepartment?.deptNo) {
-        deptId = savedDepartment.deptNo.replace('CBU', '')
-      }
-    }
-
-    if (!deptId) {
-      console.log('⚠️ 暂时无法获取部门信息')
-      return
-    }
-
-    const username = decodeURIComponent(pinCookie.value)
-    const uniqueKey = `${username}-${deptId}`
-
-    console.log('App.vue: 生成的uniqueKey:', uniqueKey)
-    console.log('App.vue: 正在调用订阅状态检查接口...')
-
-    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
-    console.log('App.vue: 订阅状态检查结果:', subscriptionResult)
-
-    if (subscriptionResult && subscriptionResult.success) {
-      subscriptionInfo.value = subscriptionResult
-      console.log('✅ App.vue: 订阅信息已加载:', subscriptionInfo.value)
-    } else {
-      console.log('⚠️ App.vue: 订阅状态检查返回失败或无效结果')
-      subscriptionInfo.value = subscriptionResult // 仍然保存结果，用于显示错误状态
-    }
-  } catch (error) {
-    console.error('❌ App.vue: 加载订阅信息失败:', error)
-  } finally {
-    subscriptionLoading.value = false
-    console.log('=== App.vue: 订阅信息加载结束 ===')
-  }
-}
-
-const renewSubscription = async () => {
-  try {
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-
-    if (!pinCookie?.value) {
-      alert('无法获取用户信息')
-      return
-    }
-
-    let deptId = null
-    if (sessionContext.value?.departmentInfo?.deptNo) {
-      deptId = sessionContext.value.departmentInfo.deptNo.replace('CBU', '')
-    } else {
-      const savedDepartment = getSelectedDepartment()
-      if (savedDepartment?.deptNo) {
-        deptId = savedDepartment.deptNo.replace('CBU', '')
-      }
-    }
-
-    if (!deptId) {
-      alert('无法获取部门信息')
-      return
-    }
-
-    const username = decodeURIComponent(pinCookie.value)
-    const uniqueKey = `${username}-${deptId}`
-
-    // 调用主进程打开购买页面进行续费
-    await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
-    console.log('续费页面已打开')
-  } catch (error) {
-    console.error('打开续费页面失败:', error)
-    alert('续费失败: ' + error.message)
-  }
-}
+const {
+  subscriptionInfo,
+  subscriptionLoading,
+  remainingDays,
+  loadSubscriptionInfo,
+  renewSubscription
+} = useSubscription(sessionContext)
 
 // --- Authorization & Initialization Flow ---
 const initializeApp = async () => {
