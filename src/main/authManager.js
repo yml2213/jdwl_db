@@ -4,7 +4,6 @@ import fs from 'fs/promises'
 import axios from 'axios'
 
 const AUTH_FILE_PATH = join(app.getPath('userData'), 'auth-keys.json')
-let authWindow = null
 
 // 创建支付窗口的通用函数
 function createPaymentWindow(url, parentWindow, icon) {
@@ -122,13 +121,10 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
       const newKey = updatedKeys[uniqueKey]
       const isNewKeyValid = await validateAuthKey(newKey)
 
-      // 如果新密钥仍然无效，则需要一个后备方案，例如再次打开授权窗口或显示错误
+      // 如果新密钥仍然无效，直接返回失败，不再打开手动输入窗口
       if (!isNewKeyValid) {
-        await createAuthWindow(uniqueKey, mainWindow, icon) // 作为后备，打开手动输入卡密的窗口
-        const finalKeys = await loadAllAuthKeys()
-        const finalKey = finalKeys[uniqueKey]
-        const isFinalKeyValid = await validateAuthKey(finalKey)
-        resolve({ success: isFinalKeyValid })
+        console.log('购买页面关闭后，订阅状态仍然无效')
+        resolve({ success: false })
       } else {
         resolve({ success: true })
       }
@@ -136,45 +132,7 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
   })
 }
 
-// 创建授权窗口
-function createAuthWindow(uniqueKey, mainWindow, icon) {
-  return new Promise((resolve) => {
-    if (authWindow) {
-      authWindow.focus()
-      return resolve()
-    }
-
-    authWindow = new BrowserWindow({
-      parent: mainWindow,
-      modal: true,
-      width: 400,
-      height: 250,
-      show: false,
-      autoHideMenuBar: true,
-      frame: false,
-      resizable: false,
-      ...(process.platform === 'linux' ? { icon } : {}),
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        sandbox: false,
-        contextIsolation: true,
-        nodeIntegration: false
-      }
-    })
-
-    authWindow.loadFile(join(__dirname, '../renderer/auth.html'))
-
-    authWindow.on('ready-to-show', () => {
-      authWindow.show()
-      authWindow.webContents.send('set-unique-key', uniqueKey)
-    })
-
-    authWindow.on('closed', () => {
-      authWindow = null
-      resolve()
-    })
-  })
-}
+// 手动输入卡密窗口已移除
 
 // --- IPC Handlers ---
 
@@ -186,27 +144,5 @@ ipcMain.handle('check-auth-status', async (event, { uniqueKey }) => {
   return await checkAuthWithKey(uniqueKey, mainWindow, iconPath)
 })
 
-// auth.html页面调用此handler来验证和保存输入的卡密
-ipcMain.handle('validate-and-save-key', async (event, { uniqueKey, key }) => {
-  const isValid = await validateAuthKey(key)
-  if (isValid) {
-    const allKeys = await loadAllAuthKeys()
-    allKeys[uniqueKey] = key
-    await saveAllAuthKeys(allKeys)
-    if (authWindow) {
-      authWindow.close()
-    }
-    return { success: true }
-  } else {
-    return { success: false, message: '无效的卡密或已过期' }
-  }
-})
-
-// auth.html页面调用此handler来打开购买页面
-ipcMain.on('open-purchase-page', (event, { uniqueKey }) => {
-  const purchaseUrl = `http://localhost:3000/CreateOrder?uniqueKey=${uniqueKey}&Timestamp=${Date.now()}`
-  const mainWindow = BrowserWindow.fromWebContents(event.sender)
-  const iconPath = join(__dirname, '../../resources/icon.png')
-  createPaymentWindow(purchaseUrl, mainWindow, iconPath)
-})
+// 手动输入卡密的IPC处理器已移除
 
