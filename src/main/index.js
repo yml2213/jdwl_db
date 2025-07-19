@@ -3,11 +3,12 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { setupLoginHandlers, createLoginWindow, isLoggedIn, loadCookies } from './loginManager'
-// import { checkAuth, createAuthWindow } from './authManager'
+import { setupAuthHandlers } from './authManager'
 
 import { setupRequestHandlers } from './requestHandler'
+// 导入以注册IPC事件
 import { setupFileHandlers } from './fileHandler'
-import './authManager' // 导入以注册IPC事件
+// import './authManager'
 import fs from 'fs'
 
 function createWindow() {
@@ -77,6 +78,9 @@ function createWindow() {
     // 3. 设置登录处理器
     console.log('设置登录处理器...')
     setupLoginHandlers(mainWindow)
+
+    console.log('设置认证处理器...')
+    setupAuthHandlers(mainWindow, icon)
 
     // 右键菜单
     ipcMain.on('show-context-menu', (event) => {

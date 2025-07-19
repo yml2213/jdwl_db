@@ -121,9 +121,9 @@ export function useSubscription(sessionContext) {
       const username = decodeURIComponent(pinCookie.value)
       const uniqueKey = `${username}-${deptId}`
 
-      await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
+      window.electron.ipcRenderer.send('check-auth-status', { uniqueKey })
       startPolling()
-      console.log('续费页面已打开')
+      console.log('续费页面打开请求已发送')
     } catch (error) {
       console.error('打开续费页面失败:', error)
       alert('续费失败: ' + error.message)

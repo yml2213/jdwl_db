@@ -97,8 +97,6 @@ async function validateAuthKey(key) {
     return response.data.success && response.data.data.currentStatus.isValid
   } catch (error) {
     console.error(`验证卡密失败 for key ${key}:`, error.message)
-    // 根据实际需要，你可以决定在API请求失败时返回true还是false
-    // 如果网络问题应允许通过，则返回true；否则返回false
     return false
   }
 }
@@ -110,45 +108,39 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
 
   const isValid = await validateAuthKey(storedKey)
   if (isValid) {
-    return { success: true }
+    // 如果已经有效，通知前端，不需要打开窗口
+    mainWindow.webContents.send('subscription-already-valid')
+    return
   }
 
   const purchaseUrl = `http://localhost:3000/CreateOrder?uniqueKey=${uniqueKey}&Timestamp=${Date.now()}`
+  // 如果已经有窗口，先关闭
+  if (purchaseWindow && !purchaseWindow.isDestroyed()) {
+    purchaseWindow.close()
+  }
   purchaseWindow = createPaymentWindow(purchaseUrl, mainWindow, icon)
 
-  return new Promise((resolve) => {
-    purchaseWindow.on('closed', async () => {
-      purchaseWindow = null
-
-      // 窗口关闭后，重新检查
-      const updatedKeys = await loadAllAuthKeys()
-      const newKey = updatedKeys[uniqueKey]
-      const isNewKeyValid = await validateAuthKey(newKey)
-
-      if (!isNewKeyValid) {
-        console.log('购买页面关闭后，订阅状态仍然无效')
-        resolve({ success: false })
-      } else {
-        resolve({ success: true })
-      }
-    })
+  purchaseWindow.on('closed', () => {
+    purchaseWindow = null
+    console.log('支付窗口已关闭。')
   })
 }
 
-// 手动输入卡密窗口已移除
 
 // --- IPC Handlers ---
 
-// 前端在获取到供应商和部门后，调用此handler
-ipcMain.handle('check-auth-status', async (event, { uniqueKey }) => {
-  const mainWindow = BrowserWindow.fromWebContents(event.sender)
-  // 此处icon可能需要从一个固定的地方获取，或者在启动时缓存
-  const iconPath = join(__dirname, '../../resources/icon.png')
-  return await checkAuthWithKey(uniqueKey, mainWindow, iconPath)
-})
+function setupAuthHandlers(mainWindow, icon) {
+  ipcMain.on('check-auth-status', async (event, { uniqueKey }) => {
+    const window = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    await checkAuthWithKey(uniqueKey, window, icon)
+  })
 
-ipcMain.on('subscription-successful', () => {
-  console.log('收到订阅成功信号，正在关闭支付窗口...')
-  closePurchaseWindow()
-})
+  ipcMain.on('subscription-successful', () => {
+    console.log('收到订阅成功信号，正在关闭支付窗口...')
+    closePurchaseWindow()
+  })
+}
 
+export {
+  setupAuthHandlers
+}
