@@ -73,6 +73,7 @@ import { getAllCookies } from '../utils/cookieHelper'
 import {
   createSession,
   updateSelection,
+  checkSubscriptionStatus,
   getVendorList
 } from '../services/apiService'
 import {
@@ -165,6 +166,38 @@ const handleLoginSuccess = async (allCookies) => {
   }
 }
 
+const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
+  try {
+    const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+    if (!pinCookie?.value || !departmentInfo.deptNo) {
+      throw new Error('无法获取用户信息或部门信息')
+    }
+
+    const username = decodeURIComponent(pinCookie.value)
+    const deptId = departmentInfo.deptNo.replace('CBU', '')
+    const uniqueKey = `${username}-${deptId}`
+
+    console.log(`开始验证订阅状态，uniqueKey: ${uniqueKey}`)
+
+    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
+
+    if (subscriptionResult.success && subscriptionResult.data.currentStatus.isValid) {
+      console.log('订阅验证成功')
+      return true
+    } else {
+      const message = subscriptionResult.data?.currentStatus?.message || '未找到有效订阅'
+      selectionError.value = `${message}，请订阅后重试。`
+      await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
+      return false
+    }
+  } catch (error) {
+    console.error('订阅检查失败:', error)
+    selectionError.value = `订阅检查失败: ${error.message}`
+    return false
+  }
+}
+
 const handleDepartmentSelected = async (department) => {
   loginStep.value = 'loading'
   loadingMessage.value = '正在为您配置事业部...'
@@ -189,8 +222,14 @@ const handleDepartmentSelected = async (department) => {
     const response = await updateSelection(selectionData)
     if (!response.success) throw new Error(response.message || '更新后端选择失败')
 
-    console.log('选择已成功更新到后端。')
-    emit('login-success', response.context)
+    console.log('选择已成功更新到后端。正在验证订阅...')
+    const isSubscribed = await performSubscriptionCheck(matchedVendor, department)
+
+    if (isSubscribed) {
+        emit('login-success', response.context)
+    } else {
+        loginStep.value = 'selecting' // 停留在选择界面
+    }
 
   } catch (error) {
     console.error('配置事业部失败:', error)
