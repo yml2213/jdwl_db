@@ -8,11 +8,13 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  VITE_API_URL: ${{ secrets.VITE_API_URL }}
+  VITE_PAYMENT_API_URL: ${{ secrets.VITE_PAYMENT_API_URL }}
+
 jobs:
   build-mac:
     runs-on: macos-latest
-    env:
-      VITE_API_URL: ${{ secrets.VITE_API_URL }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -58,8 +60,6 @@ jobs:
 
   build-win:
     runs-on: windows-latest
-    env:
-      VITE_API_URL: ${{ secrets.VITE_API_URL }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -118,4 +118,4 @@ jobs:
             mac-build/**
             win-build/**
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
