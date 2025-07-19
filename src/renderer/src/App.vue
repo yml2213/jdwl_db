@@ -4,7 +4,7 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { getSessionStatus, createSession, logout as logoutApi } from './services/apiService'
+import { getSessionStatus, createSession, logout as logoutApi, checkSubscriptionStatus } from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
@@ -22,6 +22,111 @@ const sessionContext = ref(null)
 provide('sessionContext', sessionContext)
 const accountManagerRef = ref(null)
 
+// --- 订阅状态管理 ---
+const subscriptionInfo = ref(null)
+const subscriptionLoading = ref(false)
+
+// 计算剩余天数
+const remainingDays = computed(() => {
+  if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0
+  const validUntil = subscriptionInfo.value.data.currentStatus.validUntil
+  const now = Date.now()
+  const diff = validUntil - now
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+})
+
+// --- 订阅信息管理 ---
+const loadSubscriptionInfo = async () => {
+  console.log('=== App.vue: 开始加载订阅信息 ===')
+  
+  subscriptionLoading.value = true
+  try {
+    const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+    
+    if (!pinCookie?.value) {
+      console.error('❌ 无法获取用户信息')
+      return
+    }
+
+    // 尝试从会话上下文获取部门信息
+    let deptId = null
+    if (sessionContext.value?.departmentInfo?.deptNo) {
+      deptId = sessionContext.value.departmentInfo.deptNo.replace('CBU', '')
+    } else {
+      // 尝试从本地存储获取
+      const savedDepartment = getSelectedDepartment()
+      if (savedDepartment?.deptNo) {
+        deptId = savedDepartment.deptNo.replace('CBU', '')
+      }
+    }
+    
+    if (!deptId) {
+      console.log('⚠️ 暂时无法获取部门信息')
+      return
+    }
+
+    const username = decodeURIComponent(pinCookie.value)
+    const uniqueKey = `${username}-${deptId}`
+    
+    console.log('App.vue: 生成的uniqueKey:', uniqueKey)
+    console.log('App.vue: 正在调用订阅状态检查接口...')
+
+    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
+    console.log('App.vue: 订阅状态检查结果:', subscriptionResult)
+    
+    if (subscriptionResult && subscriptionResult.success) {
+      subscriptionInfo.value = subscriptionResult
+      console.log('✅ App.vue: 订阅信息已加载:', subscriptionInfo.value)
+    } else {
+      console.log('⚠️ App.vue: 订阅状态检查返回失败或无效结果')
+      subscriptionInfo.value = subscriptionResult // 仍然保存结果，用于显示错误状态
+    }
+  } catch (error) {
+    console.error('❌ App.vue: 加载订阅信息失败:', error)
+  } finally {
+    subscriptionLoading.value = false
+    console.log('=== App.vue: 订阅信息加载结束 ===')
+  }
+}
+
+const renewSubscription = async () => {
+  try {
+    const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+    
+    if (!pinCookie?.value) {
+      alert('无法获取用户信息')
+      return
+    }
+
+    let deptId = null
+    if (sessionContext.value?.departmentInfo?.deptNo) {
+      deptId = sessionContext.value.departmentInfo.deptNo.replace('CBU', '')
+    } else {
+      const savedDepartment = getSelectedDepartment()
+      if (savedDepartment?.deptNo) {
+        deptId = savedDepartment.deptNo.replace('CBU', '')
+      }
+    }
+    
+    if (!deptId) {
+      alert('无法获取部门信息')
+      return
+    }
+
+    const username = decodeURIComponent(pinCookie.value)
+    const uniqueKey = `${username}-${deptId}`
+
+    // 调用主进程打开购买页面进行续费
+    await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
+    console.log('续费页面已打开')
+  } catch (error) {
+    console.error('打开续费页面失败:', error)
+    alert('续费失败: ' + error.message)
+  }
+}
+
 // --- Authorization & Initialization Flow ---
 const initializeApp = async () => {
   appState.value = 'loading'
@@ -32,6 +137,9 @@ const initializeApp = async () => {
       console.log('会话恢复成功 (来自后端)')
       sessionContext.value = status.context
       appState.value = 'main'
+      
+      // 进入主界面后立即加载订阅信息
+      await loadSubscriptionInfo()
       return
     }
   } catch (error) {
@@ -44,11 +152,14 @@ const initializeApp = async () => {
   appState.value = 'login'
 }
 
-const onLoginSuccess = (context) => {
+const onLoginSuccess = async (context) => {
   if (context) {
     console.log('登录和会话创建完全成功，进入主应用。')
     sessionContext.value = context
     appState.value = 'main'
+    
+    // 登录成功后立即加载订阅信息
+    await loadSubscriptionInfo()
   } else {
     console.error('onLoginSuccess被调用，但没有有效的会话上下文。')
     appState.value = 'login'
@@ -210,6 +321,48 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
               {{ showDebugPanel ? '隐藏' : '显示' }}调试信息
             </button>
           </div>
+          
+          <!-- 订阅信息显示 -->
+          <div v-if="subscriptionInfo && subscriptionInfo.data && subscriptionInfo.data.currentStatus && subscriptionInfo.data.currentStatus.isValid" class="subscription-status">
+            <div class="subscription-info">
+              <span class="subscription-text">
+                订阅剩余：{{ remainingDays }}天
+              </span>
+              <span class="subscription-expire">
+                ({{ subscriptionInfo.data.validUntilFormatted }})
+              </span>
+            </div>
+            <div class="subscription-actions">
+              <button 
+                class="refresh-btn" 
+                @click="loadSubscriptionInfo" 
+                :disabled="subscriptionLoading"
+                title="刷新订阅状态"
+              >
+                {{ subscriptionLoading ? '⟳' : '🔄' }}
+              </button>
+              <button 
+                class="renew-btn" 
+                @click="renewSubscription"
+                title="续费订阅"
+              >
+                续费
+              </button>
+            </div>
+          </div>
+          
+          <!-- 如果正在加载订阅信息 -->
+          <div v-else-if="subscriptionLoading" class="subscription-loading">
+            <span style="color: orange;">正在加载订阅信息...</span>
+            <button class="refresh-btn" disabled>⟳</button>
+          </div>
+          
+          <!-- 如果订阅无效或加载失败 -->
+          <div v-else-if="subscriptionInfo && (!subscriptionInfo.success || !subscriptionInfo.data?.currentStatus?.isValid)" class="subscription-invalid">
+            <span style="color: #ff6b6b;">订阅无效或已过期</span>
+            <button class="renew-btn" @click="renewSubscription">立即续费</button>
+          </div>
+          
           <span class="username">{{ sessionContext?.supplierInfo?.name || '未登录' }}</span>
           <button @click="handleLogout" class="logout-button">退出登录</button>
         </div>
@@ -397,5 +550,111 @@ h1 {
   padding: 24px;
   background-color: #f0f2f5;
   overflow: auto; /* Allow content to scroll */
+}
+
+/* 订阅状态样式 */
+.subscription-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(76, 175, 80, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  margin-right: 16px;
+}
+
+.subscription-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(255, 165, 0, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  margin-right: 16px;
+}
+
+.subscription-invalid {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(255, 107, 107, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  margin-right: 16px;
+}
+
+.subscription-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subscription-text {
+  color: #4caf50;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.subscription-expire {
+  color: #666;
+  font-size: 11px;
+}
+
+.subscription-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.refresh-btn,
+.renew-btn {
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+}
+
+.refresh-btn {
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #666;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 1);
+  transform: rotate(180deg);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.renew-btn {
+  background-color: #ff9800;
+  color: white;
+  font-weight: 500;
+}
+
+.renew-btn:hover {
+  background-color: #f57c00;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 </style>

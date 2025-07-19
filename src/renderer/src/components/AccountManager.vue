@@ -9,50 +9,9 @@
     </div>
     <div v-else class="user-info">
       <span class="user-text">当前账号：{{ username }}</span>
-      
-      <!-- 调试信息 -->
-      <div v-if="isLoggedIn" class="debug-info" style="color: yellow; font-size: 12px;">
-        调试: hasSelected={{ hasSelected }}, hasSelectedData={{ hasSelectedData }}, 
-        subscriptionInfo={{ subscriptionInfo ? 'exists' : 'null' }}
-      </div>
-      
-      <!-- 订阅状态显示 -->
-      <div v-if="subscriptionInfo && subscriptionInfo.data.currentStatus.isValid" class="subscription-status">
-        <div class="subscription-info">
-          <span class="subscription-text">
-            订阅剩余：{{ remainingDays }}天
-          </span>
-          <span class="subscription-expire">
-            ({{ subscriptionInfo.data.validUntilFormatted }})
-          </span>
-        </div>
-        <div class="subscription-actions">
-          <button 
-            class="refresh-btn" 
-            @click="refreshSubscriptionStatus" 
-            :disabled="subscriptionLoading"
-            title="刷新订阅状态"
-          >
-            {{ subscriptionLoading ? '⟳' : '🔄' }}
-          </button>
-          <button 
-            class="renew-btn" 
-            @click="renewSubscription"
-            title="续费订阅"
-          >
-            续费
-          </button>
-        </div>
-      </div>
-      
-      <!-- 如果没有订阅信息但有选择数据，显示加载或错误状态 -->
-      <div v-else-if="hasSelectedData && !subscriptionInfo" class="subscription-loading">
-        <span style="color: orange;">正在加载订阅信息...</span>
-        <button class="refresh-btn" @click="refreshSubscriptionStatus" :disabled="subscriptionLoading">
-          {{ subscriptionLoading ? '⟳' : '🔄' }}
-        </button>
-      </div>
-      
+
+      <!-- 订阅信息已移至主界面显示 -->
+
       <div class="dropdown">
         <button class="user-btn">账号管理</button>
         <div class="dropdown-content">
@@ -113,12 +72,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
 import { getAllCookies } from '../utils/cookieHelper'
-import {
-  createSession,
-  updateSelection,
-  logout as logoutApi,
-  checkSubscriptionStatus
-} from '../services/apiService'
+import { createSession, updateSelection, logout as logoutApi } from '../services/apiService'
 import {
   saveSelectedVendor,
   saveSelectedDepartment,
@@ -158,22 +112,9 @@ const hasSelected = ref(false)
 const selectedVendor = ref(null)
 const selectedDepartment = ref(null)
 
-// 订阅状态数据
-const subscriptionInfo = ref(null)
-const subscriptionLoading = ref(false)
-
 // 是否有选择数据
 const hasSelectedData = computed(() => {
   return selectedVendor.value && selectedDepartment.value
-})
-
-// 计算剩余天数
-const remainingDays = computed(() => {
-  if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0
-  const validUntil = subscriptionInfo.value.data.currentStatus.validUntil
-  const now = Date.now()
-  const diff = validUntil - now
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
 })
 
 // 从cookie中获取用户名 (从pin获取)
@@ -264,38 +205,66 @@ const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
   }
 }
 
-// 刷新订阅状态
-const refreshSubscriptionStatus = async () => {
-  if (!selectedVendor.value || !selectedDepartment.value) {
-    showNotification('刷新失败', '缺少用户信息', 'error')
-    return
-  }
+// 加载订阅信息 - 简化版本，直接通过用户名和当前会话信息获取
+const loadSubscriptionInfo = async () => {
+  console.log('=== 开始加载订阅信息 ===')
 
   subscriptionLoading.value = true
   try {
     const cookies = await getAllCookies()
     const pinCookie = cookies?.find((c) => c.name === 'pin')
-    if (!pinCookie?.value || !selectedDepartment.value.deptNo) {
-      throw new Error('无法获取用户信息')
+
+    if (!pinCookie?.value) {
+      console.error('❌ 无法获取用户信息')
+      return
+    }
+
+    // 尝试从已保存的选择中获取部门信息
+    let deptId = null
+    if (selectedDepartment.value?.deptNo) {
+      deptId = selectedDepartment.value.deptNo.replace('CBU', '')
+    } else {
+      // 如果没有保存的选择，尝试从会话上下文获取
+      if (sessionContext.value?.departmentInfo?.deptNo) {
+        deptId = sessionContext.value.departmentInfo.deptNo.replace('CBU', '')
+      }
+    }
+
+    if (!deptId) {
+      console.log('⚠️ 暂时无法获取部门信息，等待用户选择')
+      return
     }
 
     const username = decodeURIComponent(pinCookie.value)
-    const deptId = selectedDepartment.value.deptNo.replace('CBU', '')
     const uniqueKey = `${username}-${deptId}`
 
+    console.log('生成的uniqueKey:', uniqueKey)
+    console.log('正在调用订阅状态检查接口...')
+
     const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
-    
-    if (subscriptionResult.success) {
+    console.log('订阅状态检查结果:', subscriptionResult)
+
+    if (subscriptionResult && subscriptionResult.success) {
       subscriptionInfo.value = subscriptionResult
-      showNotification('刷新成功', '订阅状态已更新', 'success')
+      console.log('✅ 订阅信息已加载:', subscriptionInfo.value)
     } else {
-      showNotification('刷新失败', '无法获取订阅状态', 'error')
+      console.log('⚠️ 订阅状态检查返回失败或无效结果')
+      subscriptionInfo.value = subscriptionResult // 仍然保存结果，用于显示错误状态
     }
   } catch (error) {
-    console.error('刷新订阅状态失败:', error)
-    showNotification('刷新失败', error.message, 'error')
+    console.error('❌ 加载订阅信息失败:', error)
+    // 不显示错误通知，避免干扰用户体验
   } finally {
     subscriptionLoading.value = false
+    console.log('=== 订阅信息加载结束 ===')
+  }
+}
+
+// 保留原有的刷新函数，供手动刷新使用
+const refreshSubscriptionStatus = async () => {
+  await loadSubscriptionInfo()
+  if (subscriptionInfo.value?.success) {
+    showNotification('刷新成功', '订阅状态已更新', 'success')
   }
 }
 
@@ -431,6 +400,9 @@ const handleDepartmentSelected = async (department) => {
     // 立即进行卡密验证
     await performSubscriptionCheck(vendorInfo, departmentInfo)
 
+    // 加载订阅信息到界面显示
+    await loadSubscriptionInfo()
+
     // 使用后端返回的最新、最完整的上下文来完成登录流程
     emit('login-success', response.context)
   } catch (error) {
@@ -504,25 +476,22 @@ const handleLoginSuccess = async (allCookies) => {
 const initialize = async () => {
   // This is for when the app is opened and user is already logged in.
   loadSavedSelections()
+  console.log('=== 初始化开始 ===')
+
   if (isLoggedIn.value) {
-    await updateUsername() // 这里不需要传cookies，它会自己去获取
-    
-    console.log('初始化检查 - hasSelectedData:', hasSelectedData.value)
-    console.log('初始化检查 - selectedVendor:', selectedVendor.value)
-    console.log('初始化检查 - selectedDepartment:', selectedDepartment.value)
-    
-    // 如果用户已经选择了供应商和事业部，自动加载订阅状态
-    if (hasSelectedData.value) {
-      console.log('用户已有选择数据，开始加载订阅状态...')
-      await refreshSubscriptionStatus()
-    } else {
-      console.log('用户尚未选择供应商和事业部，需要进行选择')
-      // 如果用户还没有选择，自动打开选择弹窗
-      if (!hasSelected.value) {
-        startSelection()
-      }
+    await updateUsername()
+    console.log('✅ 用户已登录，直接加载订阅信息')
+
+    // 直接尝试加载订阅信息，不需要复杂判断
+    await loadSubscriptionInfo()
+
+    // 如果没有选择数据，打开选择弹窗
+    if (!hasSelectedData.value && !hasSelected.value) {
+      console.log('⚠️ 用户尚未选择供应商和事业部，打开选择弹窗')
+      startSelection()
     }
   }
+  console.log('=== 初始化结束 ===')
 }
 
 // 在所有函数声明后暴露方法
@@ -572,6 +541,26 @@ onUnmounted(() => {
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.subscription-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(255, 165, 0, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 165, 0, 0.3);
+}
+
+.subscription-invalid {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(255, 107, 107, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
 }
 
 .subscription-info {
@@ -630,8 +619,12 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .renew-btn {
