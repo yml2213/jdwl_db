@@ -173,7 +173,27 @@ function updateLogisticsOptions(newLogisticsOptions) {
 
 const manualTaskKeys = getAllManualTaskKeys()
 
-const addTask = () => {
+const addTask = async () => {
+  // --- 0. 卡密验证 ---
+  const vendor = getSelectedVendor()
+  const department = getSelectedDepartment()
+  if (!vendor || !department) {
+    return alert('无法获取供应商或事业部信息，请重新选择。')
+  }
+  const uniqueKey = `${vendor.name}-${department.name}`
+  
+  try {
+    const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
+    if (!authResult.success) {
+      alert('卡密验证失败，请在弹出的窗口中输入有效的卡密或购买。')
+      return // 中止任务添加
+    }
+  } catch (error) {
+    console.error('调用卡密验证时出错:', error)
+    alert('卡密验证服务暂时不可用，请稍后重试。')
+    return
+  }
+  
   // --- 1. 数据校验 ---
   if (!selectedStore.value || !selectedWarehouse.value) {
     return alert('请先选择店铺和仓库！')

@@ -32,11 +32,13 @@
     const validateBtn = document.getElementById('validate-btn');
     const purchaseLink = document.getElementById('purchase-link');
     const errorMessage = document.getElementById('error-message');
-    const deviceIdDisplay = document.getElementById('device-id');
+    const uniqueKeyDisplay = document.getElementById('device-id');
+    let currentUniqueKey = '';
 
-    // 监听主进程发送的设备ID
-    window.electron.ipcRenderer.on('set-device-id', (deviceId) => {
-      deviceIdDisplay.textContent = `设备ID: ${deviceId}`;
+    // 监听主进程发送的uniqueKey
+    window.electron.ipcRenderer.on('set-unique-key', (uniqueKey) => {
+      currentUniqueKey = uniqueKey;
+      uniqueKeyDisplay.textContent = `授权ID: ${uniqueKey}`;
     });
 
     // 验证按钮点击事件
@@ -46,8 +48,12 @@
         errorMessage.textContent = '请输入卡密。';
         return;
       }
+      if (!currentUniqueKey) {
+        errorMessage.textContent = '无法获取授权ID，请关闭后重试。';
+        return;
+      }
       errorMessage.textContent = '';
-      const result = await window.electron.ipcRenderer.invoke('validate-and-save-key', key);
+      const result = await window.electron.ipcRenderer.invoke('validate-and-save-key', { uniqueKey: currentUniqueKey, key });
       if (!result.success) {
         errorMessage.textContent = result.message || '卡密验证失败，请重试。';
       }
@@ -56,7 +62,11 @@
     // 购买链接点击事件
     purchaseLink.addEventListener('click', (e) => {
       e.preventDefault();
-      window.electron.ipcRenderer.send('open-purchase-page');
+      if (!currentUniqueKey) {
+        errorMessage.textContent = '无法获取授权ID，请关闭后重试。';
+        return;
+      }
+      window.electron.ipcRenderer.send('open-purchase-page', { uniqueKey: currentUniqueKey });
     });
   </script>
 </body>

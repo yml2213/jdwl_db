@@ -3,9 +3,11 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { setupLoginHandlers, createLoginWindow, isLoggedIn, loadCookies } from './loginManager'
-import { checkAuth, createAuthWindow } from './authManager'
+// import { checkAuth, createAuthWindow } from './authManager'
+
 import { setupRequestHandlers } from './requestHandler'
 import { setupFileHandlers } from './fileHandler'
+import './authManager' // 导入以注册IPC事件
 import fs from 'fs'
 
 function createWindow() {
@@ -116,15 +118,6 @@ function createWindow() {
 
   // 启动应用
   const startApp = async () => {
-    // 0. 检查卡密授权
-    const isAuthorized = await checkAuth(mainWindow, icon)
-    if (!isAuthorized) {
-      console.log('卡密验证失败，应用即将退出。')
-      app.quit() // 验证失败，退出应用
-      return // 阻止应用继续启动
-    }
-    console.log('卡密验证成功。')
-
     // 1. 先设置IPC处理器
     await setupIPCHandlers()
 
@@ -154,14 +147,43 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-  // 配置CSP
+  // 配置CSP - 优化支付宝访问
   const { session } = require('electron')
+  
+  // 为默认session配置CSP
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.jdl.com https://*.jd.com; connect-src 'self' http://localhost:2333 ws://localhost:2333 http://47.93.132.204:2333 ws://47.93.132.204:2333 https://*.jdl.com https://*.jd.com; worker-src blob: data:;"
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://*.alipay.com https://*.alipayobjects.com https://*.alicdn.com https://*.jdl.com https://*.jd.com http://localhost:* ws://localhost:* http://47.93.132.204:* ws://47.93.132.204:*; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.alipay.com https://*.alipayobjects.com https://*.alicdn.com https://*.jdl.com https://*.jd.com; " +
+          "style-src 'self' 'unsafe-inline' https://*.alipay.com https://*.alipayobjects.com https://*.alicdn.com; " +
+          "img-src 'self' data: blob: https://*.alipay.com https://*.alipayobjects.com https://*.alicdn.com https://*.jdl.com https://*.jd.com; " +
+          "connect-src 'self' https://*.alipay.com https://*.alipayobjects.com https://*.alicdn.com https://*.jdl.com https://*.jd.com http://localhost:* ws://localhost:* http://47.93.132.204:* ws://47.93.132.204:*; " +
+          "frame-src 'self' https://*.alipay.com https://*.alipayobjects.com; " +
+          "worker-src 'self' blob: data:; " +
+          "font-src 'self' data: https://*.alipay.com https://*.alipayobjects.com https://*.alicdn.com;"
+        ]
+      }
+    })
+  })
+
+  // 为支付session配置更宽松的CSP
+  const paymentSession = session.fromPartition('persist:payment')
+  paymentSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+          "script-src * 'unsafe-inline' 'unsafe-eval'; " +
+          "style-src * 'unsafe-inline'; " +
+          "img-src * data: blob:; " +
+          "connect-src *; " +
+          "frame-src *; " +
+          "worker-src * blob: data:; " +
+          "font-src * data:;"
         ]
       }
     })
