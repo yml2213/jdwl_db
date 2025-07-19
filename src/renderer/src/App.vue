@@ -4,7 +4,12 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import { getSessionStatus, createSession, logout as logoutApi, checkSubscriptionStatus } from './services/apiService'
+import {
+  getSessionStatus,
+  createSession,
+  logout as logoutApi,
+  checkSubscriptionStatus
+} from './services/apiService'
 import electronLogo from './assets/electron.svg'
 import {
   clearSelections,
@@ -38,12 +43,12 @@ const remainingDays = computed(() => {
 // --- 订阅信息管理 ---
 const loadSubscriptionInfo = async () => {
   console.log('=== App.vue: 开始加载订阅信息 ===')
-  
+
   subscriptionLoading.value = true
   try {
     const cookies = await getAllCookies()
     const pinCookie = cookies?.find((c) => c.name === 'pin')
-    
+
     if (!pinCookie?.value) {
       console.error('❌ 无法获取用户信息')
       return
@@ -60,7 +65,7 @@ const loadSubscriptionInfo = async () => {
         deptId = savedDepartment.deptNo.replace('CBU', '')
       }
     }
-    
+
     if (!deptId) {
       console.log('⚠️ 暂时无法获取部门信息')
       return
@@ -68,13 +73,13 @@ const loadSubscriptionInfo = async () => {
 
     const username = decodeURIComponent(pinCookie.value)
     const uniqueKey = `${username}-${deptId}`
-    
+
     console.log('App.vue: 生成的uniqueKey:', uniqueKey)
     console.log('App.vue: 正在调用订阅状态检查接口...')
 
     const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
     console.log('App.vue: 订阅状态检查结果:', subscriptionResult)
-    
+
     if (subscriptionResult && subscriptionResult.success) {
       subscriptionInfo.value = subscriptionResult
       console.log('✅ App.vue: 订阅信息已加载:', subscriptionInfo.value)
@@ -94,7 +99,7 @@ const renewSubscription = async () => {
   try {
     const cookies = await getAllCookies()
     const pinCookie = cookies?.find((c) => c.name === 'pin')
-    
+
     if (!pinCookie?.value) {
       alert('无法获取用户信息')
       return
@@ -109,7 +114,7 @@ const renewSubscription = async () => {
         deptId = savedDepartment.deptNo.replace('CBU', '')
       }
     }
-    
+
     if (!deptId) {
       alert('无法获取部门信息')
       return
@@ -137,7 +142,7 @@ const initializeApp = async () => {
       console.log('会话恢复成功 (来自后端)')
       sessionContext.value = status.context
       appState.value = 'main'
-      
+
       // 进入主界面后立即加载订阅信息
       await loadSubscriptionInfo()
       return
@@ -157,7 +162,7 @@ const onLoginSuccess = async (context) => {
     console.log('登录和会话创建完全成功，进入主应用。')
     sessionContext.value = context
     appState.value = 'main'
-    
+
     // 登录成功后立即加载订阅信息
     await loadSubscriptionInfo()
   } else {
@@ -168,7 +173,7 @@ const onLoginSuccess = async (context) => {
 
 const handleLogout = async () => {
   console.log('正在执行前端登出操作...')
-  
+
   try {
     // 1. 调用后端登出接口
     console.log('【调试】App.vue: 调用后端登出接口')
@@ -178,16 +183,16 @@ const handleLogout = async () => {
     console.error('【调试】App.vue: 后端登出失败:', error)
     // 即使后端登出失败，也继续执行前端登出流程
   }
-  
+
   // 2. 清除前端状态
   console.log('【调试】App.vue: 清除会话上下文和本地存储')
   sessionContext.value = null
   clearSelections() // Clear local storage
-  
+
   // 3. 清除所有本地存储
   localStorage.clear()
   sessionStorage.clear()
-  
+
   // 4. 清除所有 IndexedDB 数据库
   try {
     console.log('【调试】App.vue: 清除 IndexedDB 数据库')
@@ -198,22 +203,22 @@ const handleLogout = async () => {
   } catch (error) {
     console.error('【调试】App.vue: 清除 IndexedDB 失败:', error)
   }
-  
+
   // 5. 清除所有缓存（如果可用）
   if (window.caches) {
     try {
       console.log('【调试】App.vue: 清除缓存存储')
       const cacheNames = await window.caches.keys()
-      await Promise.all(cacheNames.map(cacheName => window.caches.delete(cacheName)))
+      await Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName)))
     } catch (error) {
       console.error('【调试】App.vue: 清除缓存失败:', error)
     }
   }
-  
+
   // 6. 更新应用状态
   console.log('【调试】App.vue: 将应用状态设置为 login')
   appState.value = 'login'
-  
+
   // 7. 调用 Electron 清除 Cookies
   if (window.api) {
     console.log('【调试】App.vue: 调用 window.api.clearCookies()')
@@ -226,7 +231,7 @@ const handleLogout = async () => {
   } else {
     console.error('【调试】App.vue: window.api 不存在，无法清除 cookies')
   }
-  
+
   // 8. 重新连接 WebSocket
   console.log('【调试】App.vue: 重新连接 WebSocket')
   webSocketService.close()
@@ -245,10 +250,10 @@ onMounted(() => {
   if (window.electron && window.electron.ipcRenderer) {
     window.electron.ipcRenderer.on('login-successful', (event, cookies) => {
       console.log('App.vue: 收到来自主进程的 login-successful 信号。')
-      
+
       // 确保应用状态为登录状态
       appState.value = 'login'
-      
+
       // 使用 nextTick 确保 AccountManager 组件已经渲染
       nextTick(() => {
         if (accountManagerRef.value) {
@@ -263,14 +268,16 @@ onMounted(() => {
             } else {
               console.error('即使延迟后，AccountManager 组件引用仍不可用')
               // 尝试直接使用 cookies 创建会话
-              createSession(cookies).then(response => {
-                if (response.success) {
-                  console.log('直接创建会话成功，跳过 AccountManager 组件')
-                  onLoginSuccess(response.context)
-                }
-              }).catch(error => {
-                console.error('直接创建会话失败:', error)
-              })
+              createSession(cookies)
+                .then((response) => {
+                  if (response.success) {
+                    console.log('直接创建会话成功，跳过 AccountManager 组件')
+                    onLoginSuccess(response.context)
+                  }
+                })
+                .catch((error) => {
+                  console.error('直接创建会话失败:', error)
+                })
             }
           }, 500)
         }
@@ -314,6 +321,47 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
       <header class="app-header">
         <div class="header-left">
           <h1>京东仓储一体化工具</h1>
+
+          <!-- 订阅信息显示 - 放在标题右侧 -->
+          <div
+            v-if="
+              subscriptionInfo &&
+              subscriptionInfo.data &&
+              subscriptionInfo.data.currentStatus &&
+              subscriptionInfo.data.currentStatus.isValid
+            "
+            class="subscription-status"
+          >
+            <span class="subscription-text">
+              订阅剩余：{{ remainingDays }}天 ({{ subscriptionInfo.data.validUntilFormatted }})
+            </span>
+            <button
+              class="refresh-btn"
+              @click="loadSubscriptionInfo"
+              :disabled="subscriptionLoading"
+              title="刷新订阅状态"
+            >
+              {{ subscriptionLoading ? '⟳' : '🔄' }}
+            </button>
+            <button class="renew-btn" @click="renewSubscription" title="续费订阅">续费</button>
+          </div>
+
+          <!-- 如果正在加载订阅信息 -->
+          <div v-else-if="subscriptionLoading" class="subscription-loading">
+            <span>正在加载订阅信息...</span>
+          </div>
+
+          <!-- 如果订阅无效或加载失败 -->
+          <div
+            v-else-if="
+              subscriptionInfo &&
+              (!subscriptionInfo.success || !subscriptionInfo.data?.currentStatus?.isValid)
+            "
+            class="subscription-invalid"
+          >
+            <span>订阅无效或已过期</span>
+            <button class="renew-btn" @click="renewSubscription">立即续费</button>
+          </div>
         </div>
         <div class="header-right">
           <div class="dev-info-container" v-if="isDev">
@@ -321,48 +369,7 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
               {{ showDebugPanel ? '隐藏' : '显示' }}调试信息
             </button>
           </div>
-          
-          <!-- 订阅信息显示 -->
-          <div v-if="subscriptionInfo && subscriptionInfo.data && subscriptionInfo.data.currentStatus && subscriptionInfo.data.currentStatus.isValid" class="subscription-status">
-            <div class="subscription-info">
-              <span class="subscription-text">
-                订阅剩余：{{ remainingDays }}天
-              </span>
-              <span class="subscription-expire">
-                ({{ subscriptionInfo.data.validUntilFormatted }})
-              </span>
-            </div>
-            <div class="subscription-actions">
-              <button 
-                class="refresh-btn" 
-                @click="loadSubscriptionInfo" 
-                :disabled="subscriptionLoading"
-                title="刷新订阅状态"
-              >
-                {{ subscriptionLoading ? '⟳' : '🔄' }}
-              </button>
-              <button 
-                class="renew-btn" 
-                @click="renewSubscription"
-                title="续费订阅"
-              >
-                续费
-              </button>
-            </div>
-          </div>
-          
-          <!-- 如果正在加载订阅信息 -->
-          <div v-else-if="subscriptionLoading" class="subscription-loading">
-            <span style="color: orange;">正在加载订阅信息...</span>
-            <button class="refresh-btn" disabled>⟳</button>
-          </div>
-          
-          <!-- 如果订阅无效或加载失败 -->
-          <div v-else-if="subscriptionInfo && (!subscriptionInfo.success || !subscriptionInfo.data?.currentStatus?.isValid)" class="subscription-invalid">
-            <span style="color: #ff6b6b;">订阅无效或已过期</span>
-            <button class="renew-btn" @click="renewSubscription">立即续费</button>
-          </div>
-          
+
           <span class="username">{{ sessionContext?.supplierInfo?.name || '未登录' }}</span>
           <button @click="handleLogout" class="logout-button">退出登录</button>
         </div>
@@ -552,87 +559,49 @@ h1 {
   overflow: auto; /* Allow content to scroll */
 }
 
-/* 订阅状态样式 */
+/* 订阅状态样式 - 简洁版本 */
 .subscription-status {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background-color: rgba(76, 175, 80, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(76, 175, 80, 0.3);
-  margin-right: 16px;
+  gap: 8px;
+  margin-left: 20px;
 }
 
 .subscription-loading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background-color: rgba(255, 165, 0, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 165, 0, 0.3);
-  margin-right: 16px;
+  gap: 8px;
+  margin-left: 20px;
 }
 
 .subscription-invalid {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background-color: rgba(255, 107, 107, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 107, 107, 0.3);
-  margin-right: 16px;
-}
-
-.subscription-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+  margin-left: 20px;
 }
 
 .subscription-text {
-  color: #4caf50;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.subscription-expire {
   color: #666;
-  font-size: 11px;
-}
-
-.subscription-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
+  font-size: 14px;
+  font-weight: normal;
 }
 
 .refresh-btn,
 .renew-btn {
-  border: none;
+  border: 1px solid #d9d9d9;
   border-radius: 4px;
+  background-color: #fff;
   cursor: pointer;
   font-size: 12px;
   padding: 4px 8px;
   transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-}
-
-.refresh-btn {
-  background-color: rgba(255, 255, 255, 0.8);
   color: #666;
-  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 1);
-  transform: rotate(180deg);
+  border-color: #40a9ff;
+  color: #40a9ff;
 }
 
 .refresh-btn:disabled {
@@ -642,19 +611,16 @@ h1 {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.renew-btn {
-  background-color: #ff9800;
-  color: white;
-  font-weight: 500;
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .renew-btn:hover {
-  background-color: #f57c00;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border-color: #40a9ff;
+  color: #40a9ff;
 }
 </style>
