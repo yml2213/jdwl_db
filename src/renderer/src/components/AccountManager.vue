@@ -68,13 +68,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import { getAllCookies } from '../utils/cookieHelper'
 import {
   createSession,
   updateSelection,
-  logout as logoutApi,
-  checkSubscriptionStatus,
   getVendorList
 } from '../services/apiService'
 import {

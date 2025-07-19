@@ -34,13 +34,12 @@
 </template>
 
 <script setup>
-import { reactive, watch, ref, onMounted } from 'vue'
+import { reactive, watch, onMounted } from 'vue'
 import OperationArea from './warehouse/OperationArea.vue'
 import TaskArea from './warehouse/TaskArea.vue'
 import { useTaskList } from '../composables/useTaskList'
 import { useShopAndWarehouse } from '../composables/useShopAndWarehouse'
 import {
-  getInitialFormState,
   getAllManualTaskKeys,
   getWorkflows,
   taskDependencies // 导入新的依赖关系定义
@@ -72,9 +71,7 @@ const {
   isLoadingShops,
   shopLoadError,
   isLoadingWarehouses,
-  warehouseLoadError,
-  shopAndWarehouseState,
-  onDepartmentChange
+  warehouseLoadError
 } = useShopAndWarehouse()
 
 // Re-create the useFormLogic composable directly inside the component
@@ -102,7 +99,12 @@ function useFormLogic() {
     grossWeight: '0.1'
   })
 
-  const taskOptions = [
+  return { form, logisticsOptions }
+}
+
+const { form, logisticsOptions } = useFormLogic()
+
+const taskOptions = [
     { key: 'importStoreProducts', label: '导入店铺商品' },
     { key: 'enableStoreProducts', label: '启用店铺商品' },
     { key: 'importLogisticsAttributes', label: '导入物流属性(参数)' },
@@ -111,17 +113,6 @@ function useFormLogic() {
     { key: 'enableJpSearch', label: '启用京配打标生效' },
     { key: 'importProductNames', label: '导入商品简称' }
   ]
-
-  const initialOptionsState = JSON.parse(JSON.stringify(form.options))
-
-  const resetOptions = () => {
-    Object.assign(form.options, initialOptionsState)
-  }
-
-  return { form, logisticsOptions, taskOptions, resetOptions }
-}
-
-const { form, logisticsOptions, taskOptions, resetOptions } = useFormLogic()
 
 const state = reactive({
   activeTab: 'tasks' // 'tasks' or 'logs'
@@ -148,20 +139,20 @@ watch(
 watch(
   () => form.quickSelect,
   (newVal) => {
-    const workflows = getWorkflows();
+    const workflows = getWorkflows()
     if (newVal === 'manual') {
       // 当切换回手动模式时，重置所有选项为未选中
-      const manualOptions = workflows.manual.options;
-      Object.keys(form.options).forEach(key => {
-        form.options[key] = manualOptions[key] || false;
-      });
+      const manualOptions = workflows.manual.options
+      Object.keys(form.options).forEach((key) => {
+        form.options[key] = manualOptions[key] || false
+      })
     } else if (workflows[newVal] && workflows[newVal].options) {
       // 当选择一个工作流时，应用该工作流的预设选项
-      const workflowOptions = workflows[newVal].options;
-      Object.assign(form.options, workflowOptions);
+      const workflowOptions = workflows[newVal].options
+      Object.assign(form.options, workflowOptions)
     }
   }
-);
+)
 
 function updateForm(newFormState) {
   Object.assign(form, newFormState)
@@ -171,8 +162,6 @@ function updateLogisticsOptions(newLogisticsOptions) {
   Object.assign(logisticsOptions, newLogisticsOptions)
 }
 
-const manualTaskKeys = getAllManualTaskKeys()
-
 const addTask = async () => {
   // --- 0. 基本验证 ---
   const vendor = getSelectedVendor()
@@ -180,10 +169,10 @@ const addTask = async () => {
   if (!vendor || !department) {
     return alert('无法获取供应商或事业部信息，请重新选择。')
   }
-  
+
   // 注意：卡密验证现在在用户选择供应商和事业部时就已经完成了
   // 这里只需要进行基本的业务逻辑验证
-  
+
   // --- 1. 数据校验 ---
   if (!selectedStore.value || !selectedWarehouse.value) {
     return alert('请先选择店铺和仓库！')
@@ -194,7 +183,7 @@ const addTask = async () => {
   }
 
   // --- 2. 准备用于显示和后端的SKU ---
-  const skusAsArray = skuInput.split(/[\n,，\\s]+/).filter((s) => s.trim())
+  const skusAsArray = skuInput.split(/[,，\s]+/).filter((s) => s.trim())
   const skuForDisplay =
     skusAsArray.length > 1 ? `批量任务 (${skusAsArray.length}个SKU)` : skusAsArray[0]
 
@@ -250,7 +239,7 @@ const addTask = async () => {
       if (optionKey === 'addInventory') {
         taskContext.inventoryAmount = form.inventoryAmount || 1000;
       }
-      
+
       // 如果任务有依赖，将其 source 指向依赖项
       const source = taskDependencies[optionKey] || 'initial';
       return { name: optionKey, context: taskContext, source };

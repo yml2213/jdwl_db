@@ -4,19 +4,12 @@ import AccountManager from './components/AccountManager.vue'
 import WarehouseLabeling from './components/WarehouseLabeling.vue'
 import InventoryClearance from './components/InventoryClearance.vue'
 import ReturnStorage from './components/ReturnStorage.vue'
-import {
-  getSessionStatus,
-  createSession,
-  logout as logoutApi
-} from './services/apiService'
-import {
-  clearSelections
-} from './utils/storageHelper'
+import { getSessionStatus, logout as logoutApi } from './services/apiService'
+import { clearSelections } from './utils/storageHelper'
 import webSocketService from './services/webSocketService'
 import { useSubscription } from './composables/useSubscription'
 
 // --- State Management ---
-const isDev = ref(process.env.NODE_ENV === 'development')
 const appState = ref('loading') // 'loading', 'login', 'main'
 const sessionContext = ref(null)
 provide('sessionContext', sessionContext)
@@ -166,17 +159,6 @@ onMounted(() => {
               accountManagerRef.value.handleLoginSuccess(cookies)
             } else {
               console.error('即使延迟后，AccountManager 组件引用仍不可用')
-              // 尝试直接使用 cookies 创建会话
-              createSession(cookies)
-                .then((response) => {
-                  if (response.success) {
-                    console.log('直接创建会话成功，跳过 AccountManager 组件')
-                    onLoginSuccess(response.context)
-                  }
-                })
-                .catch((error) => {
-                  console.error('直接创建会话失败:', error)
-                })
             }
           }, 500)
         }
@@ -198,7 +180,6 @@ const tabComponents = {
 }
 const currentComponent = computed(() => tabComponents[activeTab.value])
 const showDebugPanel = ref(false)
-const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
 </script>
 
 <template>
