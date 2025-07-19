@@ -347,56 +347,78 @@
     </div>
 
     <script>
-        function checkPaymentStatus(outTradeNo) {
-            const button = document.querySelector('.button-primary');
-            const originalText = button.textContent;
+        const outTradeNo = '{{outTradeNo}}';
+        const statusText = document.querySelector('.status-text');
+        const queryButton = document.querySelector('.button-primary');
+        const securityInfo = document.querySelector('.security-info');
+
+        let attempts = 0;
+        const maxAttempts = 30; // 30次 * 2秒 = 1分钟超时
+        const pollingInterval = 2000; // 2秒
+        let pollingTimer;
+
+        function stopPolling(message) {
+            if (pollingTimer) {
+                clearInterval(pollingTimer);
+                pollingTimer = null;
+            }
+            statusText.textContent = message;
+            queryButton.disabled = false;
+            queryButton.textContent = '手动查询';
+        }
+
+        function checkStatus() {
+            if (attempts >= maxAttempts) {
+                stopPolling('查询超时，请手动刷新或联系客服。');
+                return;
+            }
             
-            button.disabled = true;
-            button.textContent = '查询中...';
-            
-            fetch('/payment/status/' + outTradeNo)
-                .then(response => response.json())
+            attempts++;
+            statusText.innerHTML = `<div class="status-spinner"></div>正在确认支付结果 (第 ${attempts}/${maxAttempts} 次)...`;
+            queryButton.disabled = true;
+
+            fetch(`/payment/status/${outTradeNo}`)
+                .then(response => {
+                    if (!response.ok) throw new Error(`网络错误: ${response.status}`);
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success && data.order) {
-                        if (data.order.status === 'paid') {
-                            location.reload(); // 刷新页面显示支付成功
-                        } else {
-                            alert('支付状态: ' + data.order.status);
+                        switch (data.order.status) {
+                            case 'paid':
+                                stopPolling('支付成功！页面即将刷新...');
+                                securityInfo.textContent = '✅ 支付已确认！';
+                                setTimeout(() => location.reload(), 1500);
+                                break;
+                            case 'failed':
+                            case 'closed':
+                                stopPolling(`支付失败或已关闭 (状态: ${data.order.status})。`);
+                                securityInfo.textContent = '❌ 支付未完成。';
+                                break;
+                            // 如果状态是 'pending'，则不执行任何操作，等待下一次轮询
                         }
-                    } else {
-                        alert('查询失败: ' + (data.message || '未知错误'));
                     }
                 })
                 .catch(error => {
-                    console.error('查询支付状态失败:', error);
-                    alert('查询失败，请稍后重试');
-                })
-                .finally(() => {
-                    button.disabled = false;
-                    button.textContent = originalText;
+                    console.error('查询支付状态时发生错误:', error);
+                    // 网络等问题，暂时不停止轮询，允许自动重试
                 });
         }
 
-        // 页面加载完成后的初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            // 添加键盘支持
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    checkPaymentStatus('{{outTradeNo}}');
+        document.addEventListener('DOMContentLoaded', () => {
+            queryButton.addEventListener('click', () => {
+                attempts = 0; // 重置计数器
+                checkStatus();
+                // 如果定时器已停止，手动点击后重新启动
+                if (!pollingTimer) {
+                   pollingTimer = setInterval(checkStatus, pollingInterval);
                 }
             });
 
-            // 自动聚焦到查询按钮
-            const queryButton = document.querySelector('.button-primary');
-            if (queryButton) {
-                queryButton.focus();
-            }
+            // 立即开始首次查询，然后启动定时器
+            checkStatus();
+            pollingTimer = setInterval(checkStatus, pollingInterval);
         });
-
-        // 每30秒自动查询一次支付状态
-        setInterval(() => {
-            checkPaymentStatus('{{outTradeNo}}');
-        }, 30000);
     </script>
 </body>
 </html>
