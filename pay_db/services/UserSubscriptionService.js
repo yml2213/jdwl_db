@@ -1,5 +1,11 @@
 const fs = require('fs').promises;
 const path = require('path');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 /**
  * 用户订阅管理服务
@@ -14,17 +20,8 @@ class UserSubscriptionService {
    * @param {number} timestamp 时间戳
    * @returns {string} 格式化后的时间字符串
    */
-  formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    });
+  formatTimestamp(timestamp, tz = 'Asia/Shanghai') {
+    return dayjs(timestamp).tz(tz).format('YYYY-MM-DD HH:mm:ss');
   }
 
   /**
@@ -127,8 +124,8 @@ class UserSubscriptionService {
     
     // 计算新的有效期
     const lastValidUntil = this.getLastValidUntil(user.subscriptions);
-    const startTime = lastValidUntil > now ? lastValidUntil : now;
-    const validUntil = startTime + (duration * 30 * 24 * 60 * 60 * 1000); // 30天/月
+    const startTime = dayjs.utc(lastValidUntil > now ? lastValidUntil : now);
+    const validUntil = startTime.add(duration, 'month').valueOf();
 
     // 创建订阅记录
     const subscription = {
@@ -148,7 +145,7 @@ class UserSubscriptionService {
     user.subscriptions.push(subscription);
     await this.saveUsers(users);
 
-    console.log(`用户 ${uniqueKey} 订阅成功，有效期至: ${new Date(validUntil).toLocaleString()}`);
+    console.log(`用户 ${uniqueKey} 订阅成功，有效期至: ${this.formatTimestamp(validUntil)}`);
     return subscription;
   }
 
