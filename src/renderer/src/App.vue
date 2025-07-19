@@ -263,12 +263,6 @@ const toggleDebugPanel = () => (showDebugPanel.value = !showDebugPanel.value)
           </div>
         </div>
         <div class="header-right">
-          <div class="dev-info-container" v-if="isDev">
-            <button @click="toggleDebugPanel" class="debug-toggle-button">
-              {{ showDebugPanel ? '隐藏' : '显示' }}调试信息
-            </button>
-          </div>
-
           <span class="username">{{ sessionContext?.supplierInfo?.name || '未登录' }}</span>
           <button @click="handleLogout" class="logout-button">退出登录</button>
         </div>

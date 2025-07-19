@@ -1,17 +1,32 @@
 <template>
-  <div class="account-manager" :class="`display-mode-${displayMode}`">
-    <div v-if="!isLoggedIn" class="login-section">
-      <button class="login-btn" @click="openLoginWindow">
+  <div class="account-manager-container">
+    <!-- Step 1: Login Button -->
+    <div v-if="loginStep === 'initial' && !isLoggedIn" class="login-section">
+      <button class="login-btn central-login-btn" @click="openLoginWindow">
         <span class="icon">🔑</span>
         账号登录
-        <span v-if="displayMode === 'central'" class="arrow-icon">→</span>
       </button>
     </div>
-    <div v-else class="user-info">
-      <span class="user-text">当前账号：{{ username }}</span>
 
-      <!-- 订阅信息已移至主界面显示 -->
+    <!-- Step 2: Loading data after login -->
+    <div v-else-if="loginStep === 'loading'" class="loading-section">
+      <div class="spinner"></div>
+      <p>{{ loadingMessage }}</p>
+    </div>
 
+    <!-- Step 3: Department Selection -->
+    <div v-else-if="loginStep === 'selecting'" class="selection-section">
+      <div class="selection-content">
+        <h3>请选择您的事业部</h3>
+        <p>此选择仅需进行一次，后续登录将自动应用。</p>
+        <DepartmentSelector @department-selected="handleDepartmentSelected" />
+        <div v-if="selectionError" class="error-message">{{ selectionError }}</div>
+      </div>
+    </div>
+
+    <!-- Logged In State (Header) -->
+    <div v-if="isLoggedIn" class="user-info-header">
+       <span class="user-text">当前账号：{{ username }}</span>
       <div class="dropdown">
         <button class="user-btn">账号管理</button>
         <div class="dropdown-content">
@@ -35,32 +50,10 @@
                 <p>注意：数据已保存，再次登录时将自动使用。如需更改，请联系管理员。</p>
               </div>
             </div>
-            <div v-else-if="!hasSelected" class="no-data">
-              <p>尚未选择事业部</p>
-              <button class="select-btn" @click="startSelection">选择事业部</button>
-            </div>
             <div class="logout-section">
               <button class="logout-btn" @click="logout">退出登录</button>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 选择供应商和事业部的弹窗 -->
-    <div v-if="showSelectionModal" class="selection-modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>选择事业部（只能选择一次）</h3>
-          <button class="close-btn" @click="closeSelectionModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <DepartmentSelector
-            @department-selected="handleDepartmentSelected"
-          />
-        </div>
-        <div class="modal-footer">
-          <p>请注意：选择后将无法再次更改</p>
         </div>
       </div>
     </div>
@@ -88,230 +81,49 @@ import {
 } from '../utils/storageHelper'
 import DepartmentSelector from './DepartmentSelector.vue'
 
-defineProps({
-  displayMode: {
-    type: String,
-    default: 'header', // 'header' or 'central'
-    validator: (value) => ['header', 'central'].includes(value)
-  }
-})
-
 const emit = defineEmits(['login-success', 'logout'])
 const sessionContext = inject('sessionContext')
 
-// 登录状态
-const isLoggedIn = computed(() => sessionContext.value && sessionContext.value.user)
+// --- State Management for Login Flow ---
+const loginStep = ref('initial') // 'initial', 'loading', 'selecting'
+const loadingMessage = ref('正在验证登录...')
+const selectionError = ref('')
 
-// 用户名
+// --- Component State ---
+const isLoggedIn = computed(() => sessionContext.value && sessionContext.value.user && hasSelected.value)
 const username = ref('')
-// 选择弹窗显示状态
-const showSelectionModal = ref(false)
-// 临时存储所有供应商列表
 const allVendors = ref([])
-// 是否已经选择
 const hasSelected = ref(false)
-
-// 获取已保存的供应商和事业部数据
 const selectedVendor = ref(null)
 const selectedDepartment = ref(null)
+const hasSelectedData = computed(() => selectedVendor.value && selectedDepartment.value)
 
-// 是否有选择数据
-const hasSelectedData = computed(() => {
-  return selectedVendor.value && selectedDepartment.value
-})
+// --- Methods ---
 
-// 从cookie中获取用户名 (从pin获取)
 const updateUsername = async (passedCookies) => {
-  // 优先使用传入的 cookies，如果没有，再从存储中获取
   const cookies = passedCookies || (await getAllCookies())
   if (cookies && Array.isArray(cookies)) {
     const pinCookie = cookies.find((c) => c.name === 'pin')
-    if (pinCookie && pinCookie.value) {
-      try {
-        // pin是URL编码的用户名
-        username.value = decodeURIComponent(pinCookie.value)
-      } catch (error) {
-        console.error('解码用户名失败:', error)
-        username.value = '京东用户'
-      }
-    } else {
-      username.value = '京东用户'
-    }
+    username.value = pinCookie ? decodeURIComponent(pinCookie.value) : '京东用户'
   }
 }
 
-// 执行订阅检查和卡密验证
-const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
-  try {
-    // 获取当前用户名和部门ID来生成正确的 uniqueKey
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-    if (!pinCookie?.value || !departmentInfo.deptNo) {
-      throw new Error('无法获取用户信息或部门信息')
-    }
-
-    const username = decodeURIComponent(pinCookie.value)
-    const deptId = departmentInfo.deptNo.replace('CBU', '')
-    const uniqueKey = `${username}-${deptId}`
-
-    console.log(`开始验证订阅状态，uniqueKey: ${uniqueKey}`)
-
-    // 首先调用订阅状态检查接口
-    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
-
-    if (subscriptionResult.success && subscriptionResult.data.currentStatus.isValid) {
-      // 订阅有效
-      console.log('订阅验证成功，用户可以正常使用功能')
-      const validUntil = subscriptionResult.data.validUntilFormatted
-      showNotification(
-        '订阅验证成功',
-        `您的订阅有效，可以正常使用所有功能。有效期至：${validUntil}`,
-        'success'
-      )
-    } else {
-      // 订阅无效或不存在，引导用户订阅
-      console.log('订阅无效或不存在，将引导用户订阅')
-      const message = subscriptionResult.data?.currentStatus?.message || '未找到有效订阅'
-
-      // 显示订阅状态信息
-      showNotification('需要订阅', `${message}，即将为您打开订阅页面`, 'info')
-
-      // 调用主进程打开购买页面
-      await window.electron.ipcRenderer.invoke('check-auth-status', {
-        uniqueKey
-      })
-      // 主进程会自动打开购买页面
-    }
-  } catch (error) {
-    console.error('订阅检查失败:', error)
-  }
-}
-
-// 显示通知的辅助函数
-const showNotification = (title, message, type = 'info') => {
-  // 这里可以使用 Element Plus 的通知组件或者简单的 alert
-  if (type === 'success') {
-    console.log(`✅ ${title}: ${message}`)
-  } else if (type === 'error') {
-    console.error(`❌ ${title}: ${message}`)
-    alert(`${title}: ${message}`)
-  } else {
-    console.log(`ℹ️ ${title}: ${message}`)
-  }
-}
-
-// 打开登录窗口
 const openLoginWindow = () => {
   window.api.openLoginWindow()
 }
 
-// 退出登录
-const logout = async () => {
-  try {
-    // 1. 先调用后端登出接口，清除后端会话
-    console.log('【调试】调用后端登出接口')
-    await logoutApi()
-    console.log('【调试】后端会话已清除')
-  } catch (error) {
-    console.error('【调试】后端登出失败:', error)
-    // 即使后端登出失败，也继续执行前端登出流程
-  }
-
-  // 2. 清除前端存储
-  console.log('【调试】清除前端存储')
-  localStorage.clear()
-  sessionStorage.clear()
-
-  // 3. 触发登出事件，通知 App.vue 更新状态
-  // App.vue 会负责调用 window.api.clearCookies() 和重连 WebSocket
-  console.log('【调试】触发 logout 事件')
+const logout = () => {
   emit('logout')
 }
 
-// 加载保存的选择
-const loadSavedSelections = () => {
-  selectedVendor.value = getSelectedVendor()
-  selectedDepartment.value = getSelectedDepartment()
-  hasSelected.value = hasUserSelected()
-}
-
-// 开始选择
-const startSelection = () => {
-  showSelectionModal.value = true
-}
-
-// 关闭选择弹窗
-const closeSelectionModal = () => {
-  showSelectionModal.value = false
-}
-
-// 处理事业部选择
-const handleDepartmentSelected = async (department) => {
-  console.log('选择的事业部:', department);
-
-  // 1. 从选择的事业部信息中获取供应商名称
-  const vendorNameToMatch = department.sellerName;
-  if (!vendorNameToMatch) {
-    alert('错误：选择的事业部信息不完整，缺少供应商名称。');
-    return;
-  }
-
-  // 2. 在预加载的供应商列表中查找匹配的供应商
-  const matchedVendor = allVendors.value.find(v => v.name === vendorNameToMatch);
-
-  if (!matchedVendor) {
-    alert(`错误：未能在供应商列表中找到与“${vendorNameToMatch}”匹配的供应商。`);
-    return;
-  }
-  
-  console.log('成功匹配供应商:', matchedVendor);
-
-  // 3. 保存选择的部门和匹配到的供应商
-  saveSelectedDepartment(department);
-  saveSelectedVendor(matchedVendor);
-  
-  // 更新UI
-  selectedVendor.value = matchedVendor;
-  selectedDepartment.value = department;
-  
-  // 标记用户已完成选择
-  hasSelected.value = true;
-  markAsSelected();
-
-  // 4. 将选择结果更新到后端
-  try {
-    const selectionData = {
-      supplierInfo: matchedVendor,
-      departmentInfo: department
-    };
-    const response = await updateSelection(selectionData);
-    if (!response.success) {
-      throw new Error(response.message || '更新后端选择失败');
-    }
-
-    console.log('选择已成功更新到后端。开始进行卡密验证...');
-
-    // 立即进行卡密验证
-    await performSubscriptionCheck(matchedVendor, department);
-
-    // 使用后端返回的最新、最完整的上下文来完成登录流程
-    emit('login-success', response.context);
-  } catch (error) {
-    console.error('更新后端选择失败:', error);
-    alert(`关键步骤失败：无法保存您的选择。错误: ${error.message}`);
-    logout();
-  }
-
-  // 关闭选择弹窗
-  closeSelectionModal();
-}
-
 const handleLoginSuccess = async (allCookies) => {
-  console.log('步骤1: JD登录成功，开始创建后端会话。')
+  console.log('步骤1: JD登录成功，开始处理会话和数据。')
+  loginStep.value = 'loading'
+  loadingMessage.value = '登录成功，正在获取用户信息...'
 
   if (!allCookies || !Array.isArray(allCookies) || allCookies.length === 0) {
-    console.error('登录失败: 接收到的 cookies 无效', allCookies)
     alert('登录失败: 无法获取有效的登录凭据')
+    loginStep.value = 'initial'
     return
   }
 
@@ -319,282 +131,209 @@ const handleLoginSuccess = async (allCookies) => {
   clearSelections()
 
   try {
-    // 步骤1.1: 筛选出必要的Cookie
+    // Create backend session
     const requiredCookieNames = ['pin', 'thor', 'csrfToken', 'flash']
     const essentialCookies = allCookies.filter((c) => requiredCookieNames.includes(c.name))
-
     if (essentialCookies.length < requiredCookieNames.length) {
-      const missing = requiredCookieNames.filter((n) => !essentialCookies.some((c) => c.name === n))
-      throw new Error(`登录凭据不完整，缺少以下Cookie: ${missing.join(', ')}`)
+      throw new Error(`登录凭据不完整，缺少Cookie: ${requiredCookieNames.filter(n => !essentialCookies.some(c => c.name === n)).join(', ')}`)
     }
+    
+    loadingMessage.value = '正在创建后端会话...'
+    const response = await createSession(essentialCookies)
+    if (!response.success) throw new Error(response.message || '创建后端会话失败')
+    sessionContext.value = response.context // Temporarily set context for API calls
 
-    // 步骤1.2: 调用后端创建会话
-    let response
-    let retries = 3
+    // Fetch vendor list
+    loadingMessage.value = '正在获取供应商列表...'
+    const vendors = await getVendorList()
+    if (!vendors || vendors.length === 0) throw new Error('未能获取到供应商列表')
+    allVendors.value = vendors
 
-    while (retries > 0) {
-      try {
-        response = await createSession(essentialCookies)
-        if (response.success) {
-          break
-        } else {
-          throw new Error(response.message || '创建后端会话失败')
-        }
-      } catch (error) {
-        retries--
-        if (retries === 0) {
-          throw error
-        }
-        console.warn(`创建会话失败，剩余重试次数: ${retries}`)
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-      }
-    }
-
-    console.log('步骤2: 后端会话已成功创建，准备选择供应商/事业部。')
-    // 更新本地的会话上下文，以便后续API调用（如getVendorList）能使用
-    sessionContext.value = response.context
-
-    // 步骤3: 获取供应商列表并打开选择弹窗
-    try {
-      const vendors = await getVendorList();
-      if (vendors && vendors.length > 0) {
-        allVendors.value = vendors;
-        startSelection();
-      } else {
-        throw new Error('未能获取到供应商列表');
-      }
-    } catch (error) {
-      console.error('获取供应商列表失败:', error);
-      alert(`无法继续，因为: ${error.message}`);
-      logout();
-    }
+    // Move to selection step
+    loginStep.value = 'selecting'
   } catch (error) {
-    console.error('登录流程失败 (步骤1/2):', error)
+    console.error('登录流程失败:', error)
     alert(`登录流程中断: ${error.message}`)
+    loginStep.value = 'initial'
+    // Optionally logout if session creation failed partially
     logout()
   }
 }
 
-const initialize = async () => {
-  // This is for when the app is opened and user is already logged in.
-  loadSavedSelections()
-  console.log('=== 初始化开始 ===')
+const handleDepartmentSelected = async (department) => {
+  loginStep.value = 'loading'
+  loadingMessage.value = '正在为您配置事业部...'
+  selectionError.value = ''
 
-  if (isLoggedIn.value) {
-    await updateUsername()
-    console.log('✅ 用户已登录，直接加载订阅信息')
+  try {
+    const vendorNameToMatch = department.sellerName
+    if (!vendorNameToMatch) throw new Error('选择的事业部信息不完整，缺少供应商名称。')
 
-    // 订阅信息加载已移至App.vue
+    const matchedVendor = allVendors.value.find(v => v.name === vendorNameToMatch)
+    if (!matchedVendor) throw new Error(`未能在供应商列表中找到与“${vendorNameToMatch}”匹配的供应商。`)
 
-    // 如果没有选择数据，打开选择弹窗
-    if (!hasSelectedData.value && !hasSelected.value) {
-      console.log('⚠️ 用户尚未选择供应商和事业部，打开选择弹窗')
-      startSelection()
-    }
+    console.log('成功匹配供应商:', matchedVendor)
+    saveSelectedDepartment(department)
+    saveSelectedVendor(matchedVendor)
+    selectedVendor.value = matchedVendor
+    selectedDepartment.value = department
+    hasSelected.value = true
+    markAsSelected()
+
+    const selectionData = { supplierInfo: matchedVendor, departmentInfo: department }
+    const response = await updateSelection(selectionData)
+    if (!response.success) throw new Error(response.message || '更新后端选择失败')
+
+    console.log('选择已成功更新到后端。')
+    emit('login-success', response.context)
+
+  } catch (error) {
+    console.error('配置事业部失败:', error)
+    selectionError.value = error.message
+    loginStep.value = 'selecting' // Return to selection screen on error
   }
-  console.log('=== 初始化结束 ===')
 }
 
-// 在所有函数声明后暴露方法
-defineExpose({
-  handleLoginSuccess
-})
+const initialize = async () => {
+  if (isLoggedIn.value) {
+    await updateUsername()
+    loadSavedSelections()
+  }
+}
 
-onMounted(() => {
-  initialize()
-})
+const loadSavedSelections = () => {
+  selectedVendor.value = getSelectedVendor()
+  selectedDepartment.value = getSelectedDepartment()
+  hasSelected.value = hasUserSelected()
+}
 
-onUnmounted(() => {
-  // Clean up the listener when the component is unmounted
-  // window.electron.ipcRenderer.removeAllListeners('login-successful')
-})
+
+defineExpose({ handleLoginSuccess })
+
+onMounted(initialize)
 </script>
 
 <style scoped>
-.account-manager {
+/* Main Container */
+.account-manager-container {
   display: flex;
-  align-items: center;
-  height: 100%;
-}
-
-.login-section,
-.user-info {
-  display: flex;
+  justify-content: center;
   align-items: center;
   width: 100%;
+  height: 100%;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
-.user-info {
-  gap: 15px;
-}
-
-.user-text {
-  color: white;
-  font-size: 14px;
-}
-
-/* 订阅状态样式 */
-.subscription-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.subscription-loading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background-color: rgba(255, 165, 0, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 165, 0, 0.3);
-}
-
-.subscription-invalid {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background-color: rgba(255, 107, 107, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 107, 107, 0.3);
-}
-
-.subscription-info {
+/* Sections */
+.login-section,
+.loading-section,
+.selection-section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.subscription-text {
-  color: #4caf50;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.subscription-expire {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
-}
-
-.subscription-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.refresh-btn,
-.renew-btn {
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 8px;
-  transition: all 0.2s;
-  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 24px;
+  text-align: center;
+  width: 100%;
+  max-width: 400px;
 }
 
-.refresh-btn {
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+.loading-section p {
+  margin-top: 20px;
+  font-size: 1rem;
+  color: #666;
 }
 
-.refresh-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.3);
-  transform: rotate(180deg);
+.selection-content {
+    width: 100%;
+    background: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.selection-content h3 {
+    margin-bottom: 10px;
+    font-size: 1.4rem;
+    color: #333;
+}
+
+.selection-content p {
+    margin-bottom: 20px;
+    color: #666;
+}
+
+.central-login-btn {
+  padding: 15px 30px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #4b91f7 0%, #367af6 100%);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 15px rgba(54, 122, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+.central-login-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(54, 122, 246, 0.4);
+}
+
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.renew-btn {
-  background-color: #ff9800;
-  color: white;
-  font-weight: 500;
-}
-
-.renew-btn:hover {
-  background-color: #f57c00;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.login-btn,
-.logout-btn,
-.user-btn,
-.select-btn {
-  border: none;
+.error-message {
+  color: #d9534f;
+  background-color: #f2dede;
+  border: 1px solid #ebccd1;
+  padding: 10px;
   border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 6px 16px;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.login-btn {
-  background-color: white;
-  color: #2196f3;
-}
-
-.login-btn:hover {
-  background-color: #f0f0f0;
-}
-
-.user-btn {
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.user-btn:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.logout-btn {
-  background-color: #f44336;
-  color: white;
   margin-top: 15px;
 }
 
-.logout-btn:hover {
-  background-color: #e53935;
+/* Header Logged-in view */
+.user-info-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
-.select-btn {
-  background-color: #2196f3;
-  color: white;
-  margin-top: 10px;
+.user-text {
+  color: #333;
+  font-weight: 500;
 }
 
-.select-btn:hover {
-  background-color: #1e88e5;
+.user-btn {
+  padding: 6px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  transition: all 0.3s;
 }
 
-/* 下拉菜单 */
+.user-btn:hover {
+  border-color: #40a9ff;
+  color: #40a9ff;
+}
+
+/* Dropdown */
 .dropdown {
   position: relative;
   display: inline-block;
@@ -606,8 +345,8 @@ onUnmounted(() => {
   right: 0;
   background-color: #f9f9f9;
   min-width: 300px;
-  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
-  z-index: 1;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  z-index: 10;
   border-radius: 4px;
   overflow: hidden;
 }
@@ -620,18 +359,9 @@ onUnmounted(() => {
   padding: 15px;
 }
 
-.user-details h3 {
-  color: #333;
-  font-size: 16px;
-  margin-bottom: 15px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #eee;
-}
-
-.user-details h4 {
-  color: #555;
-  font-size: 14px;
+.user-details h3, .user-details h4 {
   margin: 10px 0;
+  color: #333;
 }
 
 .user-details p {
@@ -641,7 +371,7 @@ onUnmounted(() => {
 }
 
 .user-details strong {
-  color: #2196f3;
+  color: #1890ff;
 }
 
 .logout-section {
@@ -650,10 +380,18 @@ onUnmounted(() => {
   border-top: 1px solid #eee;
 }
 
-.no-data {
-  padding: 10px 0;
-  text-align: center;
-  color: #666;
+.logout-btn {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.logout-btn:hover {
+  background-color: #e53935;
 }
 
 .info-note {
@@ -662,114 +400,7 @@ onUnmounted(() => {
   background-color: #e8f5e9;
   border-radius: 4px;
   border-left: 4px solid #4caf50;
-}
-
-.info-note p {
-  color: #2e7d32;
   font-size: 13px;
-  margin: 0;
-}
-
-/* 弹窗样式 */
-.selection-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background-color: white;
-  border-radius: 8px;
-  width: 90%;
-  min-width: 700px;
-  max-width: 900px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-header h3 {
-  margin: 0;
-  color: #333;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #999;
-}
-
-.close-btn:hover {
-  color: #333;
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-.modal-footer {
-  padding: 15px;
-  border-top: 1px solid #eee;
-  text-align: center;
-  background-color: #f5f5f5;
-}
-
-.modal-footer p {
-  margin: 0;
-  color: #e53935;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-/* Central display mode styles */
-.display-mode-central .login-btn {
-  padding: 15px 30px;
-  font-size: 1.2rem;
-  font-weight: 600;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #4b91f7 0%, #367af6 100%);
-  box-shadow: 0 8px 15px rgba(54, 122, 246, 0.3);
-  transition: all 0.3s ease;
-  border: none;
-  letter-spacing: 1px;
-  width: 100%;
-  color: #fff;
-}
-
-.display-mode-central .login-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 20px rgba(54, 122, 246, 0.4);
-  background: linear-gradient(135deg, #5a9cf8 0%, #478af6 100%);
-}
-
-.display-mode-central .icon {
-  font-size: 1.3rem;
-}
-
-.display-mode-central .arrow-icon {
-  margin-left: 10px;
-  font-size: 1.3rem;
-  transition: transform 0.3s ease;
-}
-
-.display-mode-central .login-btn:hover .arrow-icon {
-  transform: translateX(5px);
+  color: #2e7d32;
 }
 </style>
