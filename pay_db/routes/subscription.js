@@ -532,7 +532,7 @@ function generatePaymentPageHtml(orderInfo) {
     </style>
 </head>
 <body>
-    <form id="paymentForm" action="/payment/initiate" method="post" style="width: 100%; max-width: 600px;">
+    <form id="paymentForm" action="/initiate" method="post" style="width: 100%; max-width: 600px;">
         <div class="container">
             <div class="header">
                 <div class="header-content">
