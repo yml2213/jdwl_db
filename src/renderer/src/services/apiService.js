@@ -327,4 +327,25 @@ export async function logout() {
   }
 }
 
+/**
+ * 检查用户订阅状态
+ * @param {string} uniqueKey 用户唯一标识 (格式: 用户名-部门ID)
+ * @returns {Promise<Object>} 订阅状态信息
+ */
+export const checkSubscriptionStatus = async (uniqueKey) => {
+  try {
+    const response = await fetch(`http://localhost:3000/subscription/status?uniqueKey=${encodeURIComponent(uniqueKey)}`)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const result = await response.json()
+    return result
+  } catch (error) {
+    console.error('检查订阅状态失败:', error)
+    throw error
+  }
+}
+
 

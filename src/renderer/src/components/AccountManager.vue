@@ -1,10 +1,10 @@
 <template>
   <div class="account-manager" :class="`display-mode-${displayMode}`">
     <div v-if="!isLoggedIn" class="login-section">
-      <button @click="openLoginWindow" class="login-btn">
+      <button class="login-btn" @click="openLoginWindow">
         <span class="icon">🔑</span>
         账号登录
-        <span class="arrow-icon" v-if="displayMode === 'central'">→</span>
+        <span v-if="displayMode === 'central'" class="arrow-icon">→</span>
       </button>
     </div>
     <div v-else class="user-info">
@@ -34,10 +34,10 @@
             </div>
             <div v-else-if="!hasSelected" class="no-data">
               <p>尚未选择供应商和事业部</p>
-              <button @click="startSelection" class="select-btn">选择供应商和事业部</button>
+              <button class="select-btn" @click="startSelection">选择供应商和事业部</button>
             </div>
             <div class="logout-section">
-              <button @click="logout" class="logout-btn">退出登录</button>
+              <button class="logout-btn" @click="logout">退出登录</button>
             </div>
           </div>
         </div>
@@ -49,7 +49,7 @@
       <div class="modal-content">
         <div class="modal-header">
           <h3>选择供应商和事业部（只能选择一次）</h3>
-          <button @click="closeSelectionModal" class="close-btn">&times;</button>
+          <button class="close-btn" @click="closeSelectionModal">&times;</button>
         </div>
         <div class="modal-body">
           <VendorSelector @vendor-selected="handleVendorSelected" />
@@ -72,7 +72,8 @@ import { getAllCookies } from '../utils/cookieHelper'
 import {
   createSession,
   updateSelection,
-  logout as logoutApi
+  logout as logoutApi,
+  checkSubscriptionStatus
 } from '../services/apiService'
 import {
   saveSelectedVendor,
@@ -138,6 +139,86 @@ const updateUsername = async (passedCookies) => {
   }
 }
 
+// 执行订阅检查和卡密验证
+const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
+  try {
+    // 获取当前用户名和部门ID来生成正确的 uniqueKey
+    const cookies = await getAllCookies()
+    const pinCookie = cookies?.find((c) => c.name === 'pin')
+    if (!pinCookie?.value || !departmentInfo.deptNo) {
+      throw new Error('无法获取用户信息或部门信息')
+    }
+
+    const username = decodeURIComponent(pinCookie.value)
+    const deptId = departmentInfo.deptNo.replace('CBU', '')
+    const uniqueKey = `${username}-${deptId}`
+
+    console.log(`开始验证订阅状态，uniqueKey: ${uniqueKey}`)
+
+    // 首先调用订阅状态检查接口
+    const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
+
+    if (subscriptionResult.success && subscriptionResult.data.currentStatus.isValid) {
+      // 订阅有效
+      console.log('订阅验证成功，用户可以正常使用功能')
+      const validUntil = subscriptionResult.data.validUntilFormatted
+      showNotification(
+        '订阅验证成功',
+        `您的订阅有效，可以正常使用所有功能。有效期至：${validUntil}`,
+        'success'
+      )
+    } else {
+      // 订阅无效或不存在，引导用户订阅
+      console.log('订阅无效或不存在，将引导用户订阅')
+      const message = subscriptionResult.data?.currentStatus?.message || '未找到有效订阅'
+
+      // 显示订阅状态信息
+      showNotification('需要订阅', `${message}，即将为您打开订阅页面`, 'info')
+
+      // 调用主进程打开购买页面
+      const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', {
+        uniqueKey
+      })
+      // 这里 authResult.success 会是 false，主进程会自动打开购买页面
+    }
+  } catch (error) {
+    console.error('订阅检查失败:', error)
+
+    // 如果是网络错误或支付服务不可用，仍然尝试通过主进程验证
+    if (error.message.includes('fetch') || error.message.includes('HTTP')) {
+      console.log('支付服务不可用，尝试通过本地卡密验证')
+      showNotification('支付服务连接失败', '将尝试通过本地卡密进行验证', 'warning')
+
+      try {
+        const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', {
+          uniqueKey
+        })
+        if (authResult.success) {
+          showNotification('本地验证成功', '您可以正常使用功能', 'success')
+        }
+      } catch (localError) {
+        console.error('本地验证也失败:', localError)
+        showNotification('验证失败', '无法验证您的订阅状态，请检查网络连接', 'error')
+      }
+    } else {
+      showNotification('订阅检查失败', `验证过程中出现错误: ${error.message}`, 'error')
+    }
+  }
+}
+
+// 显示通知的辅助函数
+const showNotification = (title, message, type = 'info') => {
+  // 这里可以使用 Element Plus 的通知组件或者简单的 alert
+  if (type === 'success') {
+    console.log(`✅ ${title}: ${message}`)
+  } else if (type === 'error') {
+    console.error(`❌ ${title}: ${message}`)
+    alert(`${title}: ${message}`)
+  } else {
+    console.log(`ℹ️ ${title}: ${message}`)
+  }
+}
+
 // 打开登录窗口
 const openLoginWindow = () => {
   window.api.openLoginWindow()
@@ -154,12 +235,12 @@ const logout = async () => {
     console.error('【调试】后端登出失败:', error)
     // 即使后端登出失败，也继续执行前端登出流程
   }
-  
+
   // 2. 清除前端存储
   console.log('【调试】清除前端存储')
   localStorage.clear()
   sessionStorage.clear()
-  
+
   // 3. 触发登出事件，通知 App.vue 更新状态
   // App.vue 会负责调用 window.api.clearCookies() 和重连 WebSocket
   console.log('【调试】触发 logout 事件')
@@ -224,11 +305,14 @@ const handleDepartmentSelected = async (department) => {
     if (!response.success) {
       throw new Error(response.message || '更新后端选择失败')
     }
-    
-    console.log('选择已成功更新到后端。流程完成。')
+
+    console.log('选择已成功更新到后端。开始进行卡密验证...')
+
+    // 立即进行卡密验证
+    await performSubscriptionCheck(vendorInfo, departmentInfo)
+
     // 使用后端返回的最新、最完整的上下文来完成登录流程
     emit('login-success', response.context)
-
   } catch (error) {
     console.error('更新后端选择失败:', error)
     alert(`关键步骤失败：无法保存您的选择。错误: ${error.message}`)
@@ -242,30 +326,30 @@ const handleDepartmentSelected = async (department) => {
 
 const handleLoginSuccess = async (allCookies) => {
   console.log('步骤1: JD登录成功，开始创建后端会话。')
-  
+
   if (!allCookies || !Array.isArray(allCookies) || allCookies.length === 0) {
     console.error('登录失败: 接收到的 cookies 无效', allCookies)
     alert('登录失败: 无法获取有效的登录凭据')
     return
   }
-  
+
   await updateUsername(allCookies)
   clearSelections()
 
   try {
     // 步骤1.1: 筛选出必要的Cookie
     const requiredCookieNames = ['pin', 'thor', 'csrfToken', 'flash']
-    const essentialCookies = allCookies.filter(c => requiredCookieNames.includes(c.name))
+    const essentialCookies = allCookies.filter((c) => requiredCookieNames.includes(c.name))
 
     if (essentialCookies.length < requiredCookieNames.length) {
-      const missing = requiredCookieNames.filter(n => !essentialCookies.some(c => c.name === n));
-      throw new Error(`登录凭据不完整，缺少以下Cookie: ${missing.join(', ')}`);
+      const missing = requiredCookieNames.filter((n) => !essentialCookies.some((c) => c.name === n))
+      throw new Error(`登录凭据不完整，缺少以下Cookie: ${missing.join(', ')}`)
     }
 
     // 步骤1.2: 调用后端创建会话
     let response
     let retries = 3
-    
+
     while (retries > 0) {
       try {
         response = await createSession(essentialCookies)
@@ -280,7 +364,7 @@ const handleLoginSuccess = async (allCookies) => {
           throw error
         }
         console.warn(`创建会话失败，剩余重试次数: ${retries}`)
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
     }
 
@@ -290,7 +374,6 @@ const handleLoginSuccess = async (allCookies) => {
 
     // 步骤3: 打开选择弹窗
     startSelection()
-
   } catch (error) {
     console.error('登录流程失败 (步骤1/2):', error)
     alert(`登录流程中断: ${error.message}`)

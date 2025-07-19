@@ -50,7 +50,7 @@ function createPaymentWindow(url, parentWindow, icon) {
   })
 
   paymentWindow.loadURL(url)
-  
+
   paymentWindow.on('ready-to-show', () => {
     paymentWindow.show()
   })
@@ -108,7 +108,7 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
   // 如果没有有效的卡密，则直接打开购买页面
   const purchaseUrl = `http://localhost:3000/CreateOrder?uniqueKey=${uniqueKey}&Timestamp=${Date.now()}`
   let purchaseWindow = createPaymentWindow(purchaseUrl, mainWindow, icon)
-  
+
   purchaseWindow.on('ready-to-show', () => {
     purchaseWindow.show()
   })
@@ -116,12 +116,12 @@ async function checkAuthWithKey(uniqueKey, mainWindow, icon) {
   return new Promise((resolve) => {
     purchaseWindow.on('closed', async () => {
       purchaseWindow = null
-      
+
       // 窗口关闭后，重新检查
       const updatedKeys = await loadAllAuthKeys()
       const newKey = updatedKeys[uniqueKey]
       const isNewKeyValid = await validateAuthKey(newKey)
-      
+
       // 如果新密钥仍然无效，则需要一个后备方案，例如再次打开授权窗口或显示错误
       if (!isNewKeyValid) {
         await createAuthWindow(uniqueKey, mainWindow, icon) // 作为后备，打开手动输入卡密的窗口
@@ -182,7 +182,7 @@ function createAuthWindow(uniqueKey, mainWindow, icon) {
 ipcMain.handle('check-auth-status', async (event, { uniqueKey }) => {
   const mainWindow = BrowserWindow.fromWebContents(event.sender)
   // 此处icon可能需要从一个固定的地方获取，或者在启动时缓存
-  const iconPath = join(__dirname, '../../resources/icon.png') 
+  const iconPath = join(__dirname, '../../resources/icon.png')
   return await checkAuthWithKey(uniqueKey, mainWindow, iconPath)
 })
 

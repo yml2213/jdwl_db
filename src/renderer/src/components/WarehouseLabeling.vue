@@ -51,7 +51,6 @@ import {
   saveWarehouseLabelingForm,
   getWarehouseLabelingForm
 } from '../utils/storageHelper'
-import { getAllCookies } from '../utils/cookieHelper'
 
 const {
   taskList: tasks,
@@ -175,35 +174,15 @@ function updateLogisticsOptions(newLogisticsOptions) {
 const manualTaskKeys = getAllManualTaskKeys()
 
 const addTask = async () => {
-  // --- 0. 卡密验证 ---
+  // --- 0. 基本验证 ---
   const vendor = getSelectedVendor()
   const department = getSelectedDepartment()
   if (!vendor || !department) {
     return alert('无法获取供应商或事业部信息，请重新选择。')
   }
   
-  // 获取当前用户名和部门ID来生成正确的 uniqueKey
-  const cookies = await getAllCookies()
-  const pinCookie = cookies?.find((c) => c.name === 'pin')
-  if (!pinCookie?.value || !department.deptNo) {
-    return alert('无法获取用户信息或部门信息，请重新登录。')
-  }
-  
-  const username = decodeURIComponent(pinCookie.value)
-  const deptId = department.deptNo.replace('CBU', '')
-  const uniqueKey = `${username}-${deptId}`
-  
-  try {
-    const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
-    if (!authResult.success) {
-      alert('卡密验证失败，请在弹出的窗口中输入有效的卡密或购买。')
-      return // 中止任务添加
-    }
-  } catch (error) {
-    console.error('调用卡密验证时出错:', error)
-    alert('卡密验证服务暂时不可用，请稍后重试。')
-    return
-  }
+  // 注意：卡密验证现在在用户选择供应商和事业部时就已经完成了
+  // 这里只需要进行基本的业务逻辑验证
   
   // --- 1. 数据校验 ---
   if (!selectedStore.value || !selectedWarehouse.value) {
