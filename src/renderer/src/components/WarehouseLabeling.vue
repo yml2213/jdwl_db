@@ -51,6 +51,7 @@ import {
   saveWarehouseLabelingForm,
   getWarehouseLabelingForm
 } from '../utils/storageHelper'
+import { getAllCookies } from '../utils/cookieHelper'
 
 const {
   taskList: tasks,
@@ -180,7 +181,17 @@ const addTask = async () => {
   if (!vendor || !department) {
     return alert('无法获取供应商或事业部信息，请重新选择。')
   }
-  const uniqueKey = `${vendor.name}-${department.name}`
+  
+  // 获取当前用户名和部门ID来生成正确的 uniqueKey
+  const cookies = await getAllCookies()
+  const pinCookie = cookies?.find((c) => c.name === 'pin')
+  if (!pinCookie?.value || !department.deptNo) {
+    return alert('无法获取用户信息或部门信息，请重新登录。')
+  }
+  
+  const username = decodeURIComponent(pinCookie.value)
+  const deptId = department.deptNo.replace('CBU', '')
+  const uniqueKey = `${username}-${deptId}`
   
   try {
     const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })

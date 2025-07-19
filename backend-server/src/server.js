@@ -187,14 +187,16 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
 
     // 2. 更新或创建用户 uniqueKey
     const pinCookie = req.session.jdCookies?.find((c) => c.name === 'pin')
-    // console.log('[Debug] Found pinCookie:', pinCookie) // 调试日志
+    console.log('[Debug] Found pinCookie:', pinCookie) // 调试日志
+    console.log('[Debug] departmentInfo:', departmentInfo) // 调试日志
     let uniqueKey = null
     const departmentId = departmentInfo.deptNo?.replace('CBU', '')
+    console.log('[Debug] departmentId after replace:', departmentId) // 调试日志
     if (pinCookie && departmentId) {
         uniqueKey = `${decodeURIComponent(pinCookie.value)}-${departmentId}`
         req.session.user.uniqueKey = uniqueKey
     }
-    // console.log('[Debug] Generated uniqueKey:', uniqueKey) // 调试日志
+    console.log('[Debug] Generated uniqueKey:', uniqueKey) // 调试日志
 
     // 3. 检查并确保方案ID (operationId) 存在
     if (uniqueKey) {
@@ -243,7 +245,8 @@ app.post('/api/update-selection', requireAuth, async (req, res) => {
             cookies: req.session.jdCookies,
             supplierInfo: req.session.supplierInfo,
             departmentInfo: req.session.departmentInfo,
-            operationId: req.session.operationId
+            operationId: req.session.operationId,
+            uniqueKey: req.session.user.uniqueKey
         }
         res.json({ success: true, message: '选择已更新', context })
     })
