@@ -104,6 +104,7 @@ export function useSubscription(sessionContext, handleLogout) {
 
   const renewSubscription = () => {
   return new Promise(async (resolve) => {
+    let isSuccess = false;
     try {
       const cookies = await getAllCookies()
       const pinCookie = cookies?.find((c) => c.name === 'pin')
@@ -134,19 +135,20 @@ export function useSubscription(sessionContext, handleLogout) {
       const uniqueKey = `${username}-${deptId}`
 
       const onSubscriptionSuccess = () => {
-        console.log('续费成功，停止轮询')
-        stopPolling()
-        window.electron.ipcRenderer.send('close-purchase-window')
-        window.electron.ipcRenderer.removeListener('purchase-window-closed', onWindowClosed)
-        resolve(true)
-      }
+        if (isSuccess) return;
+        isSuccess = true;
+        console.log('续费成功，停止轮询');
+        stopPolling();
+        window.electron.ipcRenderer.send('close-purchase-window');
+        resolve(true);
+      };
 
       const onWindowClosed = () => {
-        console.log('支付窗口关闭，但未收到成功信号')
-        stopPolling()
-        window.electron.ipcRenderer.removeListener('subscription-successful', onSubscriptionSuccess)
-        resolve(false)
-      }
+        if (isSuccess) return;
+        console.log('支付窗口关闭，但未收到成功信号');
+        stopPolling();
+        resolve(false);
+      };
 
       window.electron.ipcRenderer.once('subscription-successful', onSubscriptionSuccess)
       window.electron.ipcRenderer.once('purchase-window-closed', onWindowClosed)
