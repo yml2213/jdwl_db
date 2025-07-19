@@ -185,6 +185,7 @@ class UserSubscriptionService {
       isValid: lastValidUntil > now,
       isNewUser: false,
       validUntil: lastValidUntil,
+      validUntilFormatted: this.formatTimestamp(lastValidUntil),
       message: lastValidUntil > now ? '订阅有效' : '订阅已过期'
     };
   }

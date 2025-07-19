@@ -228,7 +228,7 @@ const showDebugPanel = ref(false)
             class="subscription-status"
           >
             <span class="subscription-text">
-              订阅剩余：{{ remainingDays }}天 ({{ subscriptionInfo.data.validUntilFormatted }})
+              订阅剩余：{{ remainingDays }}天 ({{ subscriptionInfo.data.currentStatus.validUntilFormatted }})
             </span>
             <button
               class="refresh-btn"

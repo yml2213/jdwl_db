@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import dayjs from 'dayjs'
 import { checkSubscriptionStatus } from '../services/apiService'
 import { getAllCookies } from '@/utils/cookieHelper'
 import { getSelectedDepartment } from '../utils/storageHelper'
@@ -41,12 +42,16 @@ export function useSubscription(sessionContext, handleLogout) {
   }
 
   const remainingDays = computed(() => {
-    if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0
-    const validUntil = subscriptionInfo.value.data.currentStatus.validUntil
-    const now = Date.now()
-    const diff = validUntil - now
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
-  })
+    if (!subscriptionInfo.value?.data?.currentStatus?.validUntil) return 0;
+    
+    // 使用 dayjs 来处理时区，确保计算准确
+    const validUntil = dayjs(subscriptionInfo.value.data.currentStatus.validUntil);
+    const now = dayjs(); // 当前本地时间
+    
+    // 计算天数差异，向上取整
+    const diff = validUntil.diff(now, 'day', true);
+    return Math.max(0, Math.ceil(diff));
+  });
 
   const loadSubscriptionInfo = async (isPolling = false) => {
     if (!isPolling) {
