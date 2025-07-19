@@ -133,6 +133,7 @@ export function useSubscription(sessionContext, handleLogout) {
       const onSubscriptionSuccess = () => {
         console.log('续费成功，停止轮询')
         stopPolling()
+        window.electron.ipcRenderer.send('close-purchase-window')
         window.electron.ipcRenderer.removeListener('purchase-window-closed', onWindowClosed)
         resolve(true)
       }

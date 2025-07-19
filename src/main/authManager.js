@@ -178,6 +178,11 @@ function setupAuthHandlers(mainWindow, icon) {
     console.log('收到订阅成功信号，正在关闭支付窗口...')
     closePurchaseWindow()
   })
+
+  ipcMain.on('close-purchase-window', () => {
+    console.log('收到关闭支付窗口的请求...')
+    closePurchaseWindow()
+  })
 }
 
 export {
