@@ -2,10 +2,17 @@
   <div class="account-manager-container">
     <!-- Step 1: Login Button -->
     <div v-if="loginStep === 'initial' && !isLoggedIn" class="login-section">
-      <button class="login-btn central-login-btn" @click="openLoginWindow">
-        <span class="icon">🔑</span>
-        账号登录
-      </button>
+      <div class="login-card">
+        <h2>京东仓储一体化工具</h2>
+        <p class="tagline">高效、智能、一体化的仓储管理解决方案</p>
+        <button class="login-btn central-login-btn" @click="openLoginWindow">
+          <span class="icon">🔑</span>
+          使用京东账号登录
+        </button>
+        <p class="login-note">
+          点击登录将打开京东官方登录页面，我们不会保存您的任何密码信息。
+        </p>
+      </div>
     </div>
 
     <!-- Step 2: Loading data after login -->
@@ -238,6 +245,33 @@ onMounted(initialize)
   max-width: 400px;
 }
 
+.login-card {
+  background: #fff;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  width: 100%;
+}
+
+.login-card h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.tagline {
+  font-size: 1rem;
+  color: #666;
+  margin-bottom: 30px;
+}
+
+.login-note {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 20px;
+}
+
 .loading-section p {
   margin-top: 20px;
   font-size: 1rem;
@@ -277,6 +311,8 @@ onMounted(initialize)
   gap: 10px;
   box-shadow: 0 8px 15px rgba(54, 122, 246, 0.3);
   transition: all 0.3s ease;
+  width: 100%;
+  justify-content: center;
 }
 
 .central-login-btn:hover {
