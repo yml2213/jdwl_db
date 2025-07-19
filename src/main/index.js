@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { setupLoginHandlers, createLoginWindow, isLoggedIn, loadCookies } from './loginManager'
+import { checkAuth, createAuthWindow } from './authManager'
 import { setupRequestHandlers } from './requestHandler'
 import { setupFileHandlers } from './fileHandler'
 import fs from 'fs'
@@ -115,6 +116,15 @@ function createWindow() {
 
   // 启动应用
   const startApp = async () => {
+    // 0. 检查卡密授权
+    const isAuthorized = await checkAuth(mainWindow, icon)
+    if (!isAuthorized) {
+      console.log('卡密验证失败，应用即将退出。')
+      app.quit() // 验证失败，退出应用
+      return // 阻止应用继续启动
+    }
+    console.log('卡密验证成功。')
+
     // 1. 先设置IPC处理器
     await setupIPCHandlers()
 
