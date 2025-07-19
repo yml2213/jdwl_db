@@ -1,0 +1,43 @@
+{
+  "name": "pay_db",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "start:production": "NODE_ENV=production node index.js",
+    "start:sandbox": "NODE_ENV=test PAYMENT_ENV=sandbox node index.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:start:production": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop alipay-payment",
+    "pm2:restart": "pm2 restart alipay-payment",
+    "pm2:logs": "pm2 logs alipay-payment",
+    "deploy": "./scripts/deploy.sh",
+    "deploy:production": "./scripts/deploy.sh production",
+    "deploy:sandbox": "./scripts/deploy.sh sandbox",
+    "docker:build": "docker build -t alipay-payment .",
+    "docker:run": "docker-compose up -d",
+    "docker:stop": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "alipay-sdk": "^4.14.0",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "jest": "^30.0.4",
+    "nodemon": "^3.1.10"
+  }
+}

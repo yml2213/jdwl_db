@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❌</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .error-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            max-width: 500px;
+            width: 100%;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .error-header {
+            background: #fafafa;
+            color: #333;
+            padding: 32px 24px;
+            text-align: center;
+            position: relative;
+        }
+
+        .error-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="errorGrain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23errorGrain)"/></svg>');
+        }
+
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            position: relative;
+            z-index: 1;
+            animation: shake 0.8s ease-out;
+        }
+
+        @keyframes shake {
+            0%, 100% {
+                transform: translateX(0);
+            }
+            25% {
+                transform: translateX(-5px);
+            }
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .error-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .error-subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .error-body {
+            padding: 32px 24px;
+        }
+
+        .error-message {
+            background: #fff2f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border: 1px solid #ffccc7;
+            color: #a8071a;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .error-message::before {
+            content: '⚠️';
+            margin-right: 8px;
+            font-size: 16px;
+        }
+
+        .help-section {
+            background: #f6ffed;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border: 1px solid #b7eb8f;
+        }
+
+        .help-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #262626;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }
+
+        .help-title::before {
+            content: '💡';
+            margin-right: 8px;
+        }
+
+        .help-list {
+            color: #52c41a;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .help-list li {
+            margin-bottom: 8px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            border: none;
+            min-width: 120px;
+        }
+
+        .button-primary {
+            background: linear-gradient(135deg, #1890ff, #096dd9);
+            color: white;
+        }
+
+        .button-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(24, 144, 255, 0.3);
+        }
+
+        .button-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #d9d9d9;
+        }
+
+        .button-secondary:hover {
+            background: #e6f7ff;
+            border-color: #91d5ff;
+            color: #1890ff;
+        }
+
+        .security-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+            padding: 12px;
+            background: #fff2f0;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #cf1322;
+        }
+
+        .security-info::before {
+            content: '🔒';
+            margin-right: 6px;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+
+            .error-container {
+                border-radius: 12px;
+            }
+
+            .error-header {
+                padding: 24px 16px;
+            }
+
+            .error-title {
+                font-size: 24px;
+            }
+
+            .error-body {
+                padding: 24px 16px;
+            }
+
+        }
+
+        /* 深色模式支持 */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #cf1322 0%, #ff4d4f 100%);
+            }
+        }
+
+        /* 减少动画模式支持 */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <!-- 错误页面头部 -->
+        <div class="error-header">
+            <div class="error-icon">❌</div>
+            <div class="error-title">{{title}}</div>
+            <div class="error-subtitle">操作未能成功完成</div>
+        </div>
+
+        <!-- 错误页面主体 -->
+        <div class="error-body">
+            <!-- 错误信息 -->
+            <div class="error-message">
+                {{message}}
+            </div>
+
+            <!-- 帮助信息 -->
+            <div class="help-section">
+                <div class="help-title">解决建议</div>
+                <ul class="help-list">
+                    <li>请检查网络连接是否正常</li>
+                    <li>确认订单信息是否正确</li>
+                    <li>稍后重试或联系客服</li>
+                    <li>如问题持续存在，请保存错误信息</li>
+                </ul>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="action-buttons">
+                <a href="/" class="button button-primary">返回首页</a>
+                <button class="button button-secondary" onclick="history.back()">返回上页</button>
+            </div>
+
+            <!-- 安全提示 -->
+            <div class="security-info">
+                如有疑问，请联系客服确认交易状态
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 添加键盘支持
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    window.location.href = '/';
+                } else if (e.key === 'Escape') {
+                    history.back();
+                }
+            });
+
+            // 自动聚焦到返回首页按钮
+            const homeButton = document.querySelector('.button-primary');
+            if (homeButton) {
+                homeButton.focus();
+            }
+        });
+    </script>
+</body>
+</html>
