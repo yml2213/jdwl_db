@@ -162,8 +162,7 @@ const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
     const subscriptionResult = await checkSubscriptionStatus(uniqueKey)
 
     if (subscriptionResult.success && subscriptionResult.data.currentStatus.isValid) {
-      // 订阅有效，保存订阅信息
-      subscriptionInfo.value = subscriptionResult
+      // 订阅有效
       console.log('订阅验证成功，用户可以正常使用功能')
       const validUntil = subscriptionResult.data.validUntilFormatted
       showNotification(
@@ -180,62 +179,13 @@ const performSubscriptionCheck = async (vendorInfo, departmentInfo) => {
       showNotification('需要订阅', `${message}，即将为您打开订阅页面`, 'info')
 
       // 调用主进程打开购买页面
-      const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', {
+      await window.electron.ipcRenderer.invoke('check-auth-status', {
         uniqueKey
       })
-      // 这里 authResult.success 会是 false，主进程会自动打开购买页面
+      // 主进程会自动打开购买页面
     }
   } catch (error) {
     console.error('订阅检查失败:', error)
-
-    // 如果是网络错误或支付服务不可用，仍然尝试通过主进程验证
-    if (error.message.includes('fetch') || error.message.includes('HTTP')) {
-      console.log('支付服务不可用，尝试通过本地卡密验证')
-      showNotification('支付服务连接失败', '将尝试通过本地卡密进行验证', 'warning')
-
-      try {
-        const authResult = await window.electron.ipcRenderer.invoke('check-auth-status', {
-          uniqueKey
-        })
-        if (authResult.success) {
-          showNotification('本地验证成功', '您可以正常使用功能', 'success')
-        }
-      } catch (localError) {
-        console.error('本地验证也失败:', localError)
-        showNotification('验证失败', '无法验证您的订阅状态，请检查网络连接', 'error')
-      }
-    } else {
-      showNotification('订阅检查失败', `验证过程中出现错误: ${error.message}`, 'error')
-    }
-  }
-}
-
-// 订阅信息显示已移至App.vue，这里不再需要加载订阅信息的函数
-
-// 续费订阅
-const renewSubscription = async () => {
-  if (!selectedVendor.value || !selectedDepartment.value) {
-    showNotification('续费失败', '缺少用户信息', 'error')
-    return
-  }
-
-  try {
-    const cookies = await getAllCookies()
-    const pinCookie = cookies?.find((c) => c.name === 'pin')
-    if (!pinCookie?.value || !selectedDepartment.value.deptNo) {
-      throw new Error('无法获取用户信息')
-    }
-
-    const username = decodeURIComponent(pinCookie.value)
-    const deptId = selectedDepartment.value.deptNo.replace('CBU', '')
-    const uniqueKey = `${username}-${deptId}`
-
-    // 调用主进程打开购买页面进行续费
-    await window.electron.ipcRenderer.invoke('check-auth-status', { uniqueKey })
-    showNotification('续费页面已打开', '请在新窗口中完成续费', 'info')
-  } catch (error) {
-    console.error('打开续费页面失败:', error)
-    showNotification('续费失败', error.message, 'error')
   }
 }
 
