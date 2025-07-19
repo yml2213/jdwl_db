@@ -20,6 +20,9 @@ importers:
       axios:
         specifier: ^1.10.0
         version: 1.10.0
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.13
       element-plus:
         specifier: ^2.7.7
         version: 2.10.4(vue@3.5.17(typescript@5.8.3))
@@ -38,9 +41,6 @@ importers:
       node-xlsx:
         specifier: ^0.24.0
         version: 0.24.0
-      npm-run-all:
-        specifier: ^4.1.5
-        version: 4.1.5
       qs:
         specifier: ^6.14.0
         version: 6.14.0
@@ -90,6 +90,9 @@ importers:
       less:
         specifier: ^4.3.0
         version: 4.3.0
+      npm-run-all:
+        specifier: ^4.1.5
+        version: 4.1.5
       prettier:
         specifier: ^3.5.3
         version: 3.6.2
